@@ -70,11 +70,17 @@ void main() {
       );
     }
 
-    void seedBinary(List<int> content) {
-      const fileName = 'libghostty-aarch64-macos.dylib';
+    const binaryName = 'libghostty-aarch64-macos.dylib';
 
+    void seedBinary(List<int> content) {
       Directory('${serverDir.path}/$releaseTag').createSync(recursive: true);
-      File('${serverDir.path}/$releaseTag/$fileName').writeAsBytesSync(content);
+      File(
+        '${serverDir.path}/$releaseTag/$binaryName',
+      ).writeAsBytesSync(content);
+    }
+
+    Map<String, String> hashFor(List<int> content) {
+      return {binaryName: sha256.convert(content).toString()};
     }
 
     test('downloads binary from server to target', () async {
@@ -84,7 +90,10 @@ void main() {
       addTearDown(server.close);
 
       final target = File('${tmpDir.path}/output/lib/target.dylib');
-      await createProvider(hashes: {}, server: server).provide(target);
+      await createProvider(
+        hashes: hashFor(content),
+        server: server,
+      ).provide(target);
 
       expect(target.existsSync(), isTrue);
       expect(target.readAsBytesSync(), equals(content));
@@ -95,7 +104,7 @@ void main() {
       seedBinary(content);
       final server = await TestServer.start(serverDir);
 
-      final provider = createProvider(hashes: {}, server: server);
+      final provider = createProvider(hashes: hashFor(content), server: server);
       final target1 = File('${tmpDir.path}/output1/lib/t.dylib');
       final target2 = File('${tmpDir.path}/output2/lib/t.dylib');
 
@@ -106,16 +115,24 @@ void main() {
       expect(target2.readAsBytesSync(), equals(content));
     });
 
-    test('skips hash validation when no hash registered', () async {
+    test('throws when no hash registered for target', () async {
       final content = [10, 20, 30];
       seedBinary(content);
       final server = await TestServer.start(serverDir);
       addTearDown(server.close);
 
       final target = File('${tmpDir.path}/output/lib/t.dylib');
-      await createProvider(hashes: {}, server: server).provide(target);
 
-      expect(target.existsSync(), isTrue);
+      expect(
+        () => createProvider(hashes: {}, server: server).provide(target),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            contains('No known hash for'),
+          ),
+        ),
+      );
     });
 
     test('passes with correct hash', () async {
@@ -159,30 +176,35 @@ void main() {
     });
 
     test('uses cached file when available', () async {
-      const fileName = 'libghostty-aarch64-macos.dylib';
-
       final cacheDir = Directory('${tmpDir.path}/cache/prebuilt-$releaseTag')
         ..createSync(recursive: true);
       final cachedContent = [0xFF, 0xFF];
-      File('${cacheDir.path}/$fileName').writeAsBytesSync(cachedContent);
+      File('${cacheDir.path}/$binaryName').writeAsBytesSync(cachedContent);
 
       final server = await TestServer.start(serverDir);
       addTearDown(server.close);
 
       final target = File('${tmpDir.path}/output/lib/t.dylib');
 
-      await createProvider(hashes: {}, server: server).provide(target);
+      await createProvider(
+        hashes: hashFor(cachedContent),
+        server: server,
+      ).provide(target);
 
       expect(target.readAsBytesSync(), equals(cachedContent));
     });
 
     test('creates parent directories for target', () async {
-      seedBinary([1]);
+      final content = [1];
+      seedBinary(content);
       final server = await TestServer.start(serverDir);
       addTearDown(server.close);
 
       final target = File('${tmpDir.path}/a/b/c/d/target.dylib');
-      await createProvider(hashes: {}, server: server).provide(target);
+      await createProvider(
+        hashes: hashFor(content),
+        server: server,
+      ).provide(target);
 
       expect(target.existsSync(), isTrue);
     });

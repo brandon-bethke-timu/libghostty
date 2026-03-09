@@ -287,7 +287,13 @@ final class DownloadPrebuilt extends LibraryProvider {
 
   bool _validateHash(File file, String hashKey) {
     final expectedHash = hashes[hashKey];
-    if (expectedHash == null) return true;
+    if (expectedHash == null) {
+      throw Exception(
+        'No known hash for $hashKey. '
+        'This target is not included in this release.\n'
+        'See https://github.com/elias8/libghostty/releases/tag/$releaseTag',
+      );
+    }
 
     final bytes = file.readAsBytesSync();
     final digest = sha256.convert(bytes).toString();
