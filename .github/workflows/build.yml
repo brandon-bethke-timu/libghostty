@@ -48,6 +48,7 @@ jobs:
           - target: aarch64-ios-simulator
             runner: macos-latest
             ext: dylib
+            extra_args: -Dcpu=apple_a17
           - target: x86_64-ios-simulator
             runner: macos-latest
             ext: dylib
@@ -104,7 +105,7 @@ jobs:
           done
       - name: compile
         working-directory: ${{ runner.temp }}/ghostty-src
-        run: zig build lib-vt --release=fast -Dtarget=${{ matrix.target }}
+        run: zig build lib-vt --release=fast -Dtarget=${{ matrix.target }} ${{ matrix.extra_args }}
       - name: prepare artifact
         id: artifact
         run: |
