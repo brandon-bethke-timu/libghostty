@@ -45,6 +45,12 @@ jobs:
           - target: aarch64-ios
             runner: macos-latest
             ext: dylib
+          - target: aarch64-ios-simulator
+            runner: macos-latest
+            ext: dylib
+          - target: x86_64-ios-simulator
+            runner: macos-latest
+            ext: dylib
           - target: x86_64-linux
             runner: ubuntu-latest
             ext: so
