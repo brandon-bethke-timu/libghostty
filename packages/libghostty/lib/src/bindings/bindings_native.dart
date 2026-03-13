@@ -354,6 +354,24 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  String? renderStateGetHyperlink(int handle, int row, int col) {
+    final buf = calloc<ffi.Uint8>(2048);
+    try {
+      final len = native.ghostty_render_state_get_hyperlink(
+        ffi.Pointer.fromAddress(handle),
+        row,
+        col,
+        buf,
+        2048,
+      );
+      if (len <= 0) return null;
+      return utf8.decode(buf.asTypedList(len));
+    } finally {
+      calloc.free(buf);
+    }
+  }
+
+  @override
   int renderStateGetRows(int handle) =>
       native.ghostty_render_state_get_rows(ffi.Pointer.fromAddress(handle));
 
@@ -654,6 +672,24 @@ class NativeBindings implements GhosttyBindings {
       );
       if (count <= 0) return const [];
       return [for (var i = 0; i < count; i++) buf[i]];
+    } finally {
+      calloc.free(buf);
+    }
+  }
+
+  @override
+  String? terminalGetScrollbackHyperlink(int handle, int offset, int col) {
+    final buf = calloc<ffi.Uint8>(2048);
+    try {
+      final len = native.ghostty_terminal_get_scrollback_hyperlink(
+        ffi.Pointer.fromAddress(handle),
+        offset,
+        col,
+        buf,
+        2048,
+      );
+      if (len <= 0) return null;
+      return utf8.decode(buf.asTypedList(len));
     } finally {
       calloc.free(buf);
     }

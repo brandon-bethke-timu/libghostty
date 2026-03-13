@@ -191,5 +191,26 @@ void main() {
       expect(events, contains('bell'));
       expect(terminal.screen.lineAt(1).text, contains('dir/'));
     });
+
+    test('hyperlink via OSC 8', () {
+      // OSC 8 ; params ; uri ST  text  OSC 8 ; ; ST
+      terminal.write(
+        Uint8List.fromList(
+          '\x1b]8;;https://example.com\x1b\\Click\x1b]8;;\x1b\\'.codeUnits,
+        ),
+      );
+
+      final linked = terminal.screen.cellAt(0, 0);
+      expect(linked.content, 'C');
+      expect(linked.hyperlink, 'https://example.com');
+
+      final lastLinked = terminal.screen.cellAt(0, 4);
+      expect(lastLinked.content, 'k');
+      expect(lastLinked.hyperlink, 'https://example.com');
+
+      // Cell after the hyperlink range has no link.
+      final after = terminal.screen.cellAt(0, 5);
+      expect(after.hyperlink, isNull);
+    });
   });
 }

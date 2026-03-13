@@ -12,10 +12,10 @@ index 4f8fef88e..1a4656385 100644
  #ifdef __cplusplus
 diff --git a/include/ghostty/vt/terminal.h b/include/ghostty/vt/terminal.h
 new file mode 100644
-index 000000000..0434d2c49
+index 000000000..bb1c088d7
 --- /dev/null
 +++ b/include/ghostty/vt/terminal.h
-@@ -0,0 +1,734 @@
+@@ -0,0 +1,779 @@
 +/**
 + * @file terminal.h
 + *
@@ -122,6 +122,7 @@ index 000000000..0434d2c49
 +    uint8_t ul_set;           /**< Non-zero if underline color is explicitly set */
 +    uint8_t content_tag;      /**< Content tag (GHOSTTY_CELL_CONTENT_TAG_*) */
 +    uint8_t semantic_content; /**< Semantic content type (GHOSTTY_CELL_SEMANTIC_*) */
++    uint8_t has_hyperlink;    /**< Non-zero if this cell is part of a hyperlink (OSC 8) */
 +} GhosttyCell;
 +
 +/**
@@ -260,7 +261,7 @@ index 000000000..0434d2c49
 +#define GHOSTTY_MODE_MOUSE_BUTTON_EVENT (1 << 8)
 +#define GHOSTTY_MODE_MOUSE_ANY_EVENT    (1 << 9)
 +#define GHOSTTY_MODE_ALTERNATE_SCREEN   (1 << 10)
-+#define GHOSTTY_MODE_MOUSE_ALT_SCROLL   (1 << 11)
++#define GHOSTTY_MODE_MOUSE_ALT_SCROLL  (1 << 11)
 +/** @} */
 +
 +/**
@@ -552,6 +553,28 @@ index 000000000..0434d2c49
 +    int out_size);
 +
 +/**
++ * Get the hyperlink URI for a viewport cell.
++ *
++ * For cells where GhosttyCell.has_hyperlink is non-zero, this function
++ * retrieves the URI associated with the hyperlink (OSC 8).
++ *
++ * @param terminal The terminal handle, must not be NULL
++ * @param row Zero-based row index
++ * @param col Zero-based column index
++ * @param out_uri Buffer to fill with the URI bytes (UTF-8, not null-terminated)
++ * @param uri_size Size of the buffer in bytes
++ * @return Number of bytes written, or 0 if no hyperlink
++ *
++ * @ingroup terminal
++ */
++int ghostty_render_state_get_hyperlink(
++    GhosttyTerminal terminal,
++    int row,
++    int col,
++    uint8_t *out_uri,
++    int uri_size);
++
++/**
 + * Check whether a viewport row is soft-wrapped to the next row.
 + *
 + * @param terminal The terminal handle, must not be NULL
@@ -613,6 +636,28 @@ index 000000000..0434d2c49
 +    int col,
 +    uint32_t *out,
 +    int out_size);
++
++/**
++ * Get the hyperlink URI for a scrollback cell.
++ *
++ * For scrollback cells where GhosttyCell.has_hyperlink is non-zero, this
++ * function retrieves the URI associated with the hyperlink (OSC 8).
++ *
++ * @param terminal The terminal handle, must not be NULL
++ * @param offset Zero-based scrollback offset (0 = most recent)
++ * @param col Zero-based column index
++ * @param out_uri Buffer to fill with the URI bytes (UTF-8, not null-terminated)
++ * @param uri_size Size of the buffer in bytes
++ * @return Number of bytes written, or 0 if no hyperlink
++ *
++ * @ingroup terminal
++ */
++int ghostty_terminal_get_scrollback_hyperlink(
++    GhosttyTerminal terminal,
++    int offset,
++    int col,
++    uint8_t *out_uri,
++    int uri_size);
 +
 +/**
 + * Check whether a scrollback row is soft-wrapped to the next row.
@@ -751,10 +796,10 @@ index 000000000..0434d2c49
 +
 +#endif /* GHOSTTY_VT_TERMINAL_H */
 diff --git a/src/lib_vt.zig b/src/lib_vt.zig
-index 426660621..9607fbab5 100644
+index 426660621..227e0287d 100644
 --- a/src/lib_vt.zig
 +++ b/src/lib_vt.zig
-@@ -144,6 +144,41 @@ comptime {
+@@ -144,6 +144,43 @@ comptime {
          @export(&c.sgr_attribute_tag, .{ .name = "ghostty_sgr_attribute_tag" });
          @export(&c.sgr_attribute_value, .{ .name = "ghostty_sgr_attribute_value" });
  
@@ -776,6 +821,7 @@ index 426660621..9607fbab5 100644
 +        @export(&c.render_state_is_row_dirty, .{ .name = "ghostty_render_state_is_row_dirty" });
 +        @export(&c.render_state_mark_clean, .{ .name = "ghostty_render_state_mark_clean" });
 +        @export(&c.render_state_get_grapheme, .{ .name = "ghostty_render_state_get_grapheme" });
++        @export(&c.render_state_get_hyperlink, .{ .name = "ghostty_render_state_get_hyperlink" });
 +        @export(&c.terminal_get_scrollback_length, .{ .name = "ghostty_terminal_get_scrollback_length" });
 +        @export(&c.terminal_get_scrollback_line, .{ .name = "ghostty_terminal_get_scrollback_line" });
 +        @export(&c.terminal_is_alternate_screen, .{ .name = "ghostty_terminal_is_alternate_screen" });
@@ -791,13 +837,14 @@ index 426660621..9607fbab5 100644
 +        @export(&c.terminal_read_response, .{ .name = "ghostty_terminal_read_response" });
 +        @export(&c.render_state_is_row_wrapped, .{ .name = "ghostty_render_state_is_row_wrapped" });
 +        @export(&c.terminal_get_scrollback_grapheme, .{ .name = "ghostty_terminal_get_scrollback_grapheme" });
++        @export(&c.terminal_get_scrollback_hyperlink, .{ .name = "ghostty_terminal_get_scrollback_hyperlink" });
 +        @export(&c.terminal_is_scrollback_row_wrapped, .{ .name = "ghostty_terminal_is_scrollback_row_wrapped" });
 +
          // On Wasm we need to export our allocator convenience functions.
          if (builtin.target.cpu.arch.isWasm()) {
              const alloc = @import("lib/allocator/convenience.zig");
 diff --git a/src/terminal/c/main.zig b/src/terminal/c/main.zig
-index bc92597f5..1da26a020 100644
+index bc92597f5..c7a27f52e 100644
 --- a/src/terminal/c/main.zig
 +++ b/src/terminal/c/main.zig
 @@ -4,6 +4,7 @@ pub const key_event = @import("key_event.zig");
@@ -808,7 +855,7 @@ index bc92597f5..1da26a020 100644
  
  // The full C API, unexported.
  pub const osc_new = osc.new;
-@@ -52,6 +53,41 @@ pub const key_encoder_encode = key_encode.encode;
+@@ -52,6 +53,43 @@ pub const key_encoder_encode = key_encode.encode;
  
  pub const paste_is_safe = paste.is_safe;
  
@@ -844,13 +891,15 @@ index bc92597f5..1da26a020 100644
 +pub const terminal_has_response = terminal.has_response;
 +pub const terminal_read_response = terminal.read_response;
 +pub const render_state_is_row_wrapped = terminal.is_row_wrapped;
++pub const render_state_get_hyperlink = terminal.get_hyperlink;
 +pub const terminal_get_scrollback_grapheme = terminal.get_scrollback_grapheme;
++pub const terminal_get_scrollback_hyperlink = terminal.get_scrollback_hyperlink;
 +pub const terminal_is_scrollback_row_wrapped = terminal.is_scrollback_row_wrapped;
 +
  test {
      _ = color;
      _ = osc;
-@@ -59,6 +95,7 @@ test {
+@@ -59,6 +97,7 @@ test {
      _ = key_encode;
      _ = paste;
      _ = sgr;
@@ -860,10 +909,10 @@ index bc92597f5..1da26a020 100644
      _ = @import("../../lib/allocator.zig");
 diff --git a/src/terminal/c/terminal.zig b/src/terminal/c/terminal.zig
 new file mode 100644
-index 000000000..8a1f940ab
+index 000000000..980ba709a
 --- /dev/null
 +++ b/src/terminal/c/terminal.zig
-@@ -0,0 +1,1224 @@
+@@ -0,0 +1,1338 @@
 +const std = @import("std");
 +const Allocator = std.mem.Allocator;
 +const lib_alloc = @import("../../lib/allocator.zig");
@@ -914,6 +963,7 @@ index 000000000..8a1f940ab
 +    ul_set: u8 = 0,
 +    content_tag: u8 = 0,
 +    semantic_content: u8 = 0,
++    has_hyperlink: u8 = 0,
 +
 +    pub const flag_bold: u8 = 1 << 0;
 +    pub const flag_italic: u8 = 1 << 1;
@@ -1281,6 +1331,7 @@ index 000000000..8a1f940ab
 +            gc.wide = @intFromEnum(raw.wide);
 +            gc.content_tag = @intFromEnum(raw.content_tag);
 +            gc.semantic_content = @intFromEnum(raw.semantic_content);
++            gc.has_hyperlink = @intFromBool(raw.hyperlink);
 +
 +            gc.grapheme_len = if (raw.hasGrapheme())
 +                @intCast(@min(graphemes[x].len, 255))
@@ -1385,6 +1436,41 @@ index 000000000..8a1f940ab
 +    return @intCast(count);
 +}
 +
++pub fn get_hyperlink(
++    handle: Handle,
++    row: c_int,
++    col: c_int,
++    out: [*]u8,
++    out_size: c_int,
++) callconv(.c) c_int {
++    if (row < 0 or col < 0 or out_size <= 0) return 0;
++    const wrapper = handle orelse return 0;
++    const rs = &wrapper.render_state;
++    const urow: usize = @intCast(row);
++    const ucol: usize = @intCast(col);
++    if (urow >= rs.rows or ucol >= rs.cols) return 0;
++
++    const cells = rs.row_data.items(.cells)[urow];
++    if (cells.len == 0) return 0;
++
++    const raw = cells.items(.raw)[ucol];
++    if (!raw.hyperlink) return 0;
++
++    const pin = rs.row_data.items(.pin)[urow];
++    const p: *page.Page = &pin.node.data;
++    const rac = pin.rowAndCell();
++    const page_cells = p.getCells(rac.row);
++    const cell = &page_cells[ucol];
++
++    const hyperlink_id = p.lookupHyperlink(cell) orelse return 0;
++    const entry = p.hyperlink_set.get(p.memory, hyperlink_id);
++    const uri = entry.uri.slice(p.memory);
++
++    const count = @min(uri.len, @as(usize, @intCast(out_size)));
++    @memcpy(out[0..count], uri[0..count]);
++    return @intCast(count);
++}
++
 +pub fn is_row_wrapped(handle: Handle, row: c_int) callconv(.c) bool {
 +    const wrapper = handle orelse return false;
 +    const rs = &wrapper.render_state;
@@ -1454,6 +1540,7 @@ index 000000000..8a1f940ab
 +        gc.wide = @intFromEnum(raw.wide);
 +        gc.content_tag = @intFromEnum(raw.content_tag);
 +        gc.semantic_content = @intFromEnum(raw.semantic_content);
++        gc.has_hyperlink = @intFromBool(raw.hyperlink);
 +
 +        gc.grapheme_len = if (raw.hasGrapheme())
 +            @intCast(@min(p.lookupGrapheme(&raw).?.len, 255))
@@ -1499,6 +1586,44 @@ index 000000000..8a1f940ab
 +    for (0..count) |i| {
 +        out[i] = @intCast(grapheme[i]);
 +    }
++    return @intCast(count);
++}
++
++pub fn get_scrollback_hyperlink(
++    handle: Handle,
++    offset: c_int,
++    col: c_int,
++    out: [*]u8,
++    out_size: c_int,
++) callconv(.c) c_int {
++    if (offset < 0 or col < 0 or out_size <= 0) return 0;
++    const wrapper = handle orelse return 0;
++    const t = &wrapper.terminal;
++    const s = t.screens.get(.primary) orelse return 0;
++
++    const total = s.pages.total_rows;
++    const visible = s.pages.rows;
++    if (total <= visible) return 0;
++
++    const scrollback_len = total - visible;
++    const uoffset: usize = @intCast(offset);
++    const ucol: usize = @intCast(col);
++    if (uoffset >= scrollback_len or ucol >= s.pages.cols) return 0;
++
++    const row_pin = s.pages.pin(.{ .screen = .{ .x = 0, .y = @intCast(uoffset) } }) orelse return 0;
++    const p: *page.Page = &row_pin.node.data;
++    const rac = row_pin.rowAndCell();
++    const page_cells = p.getCells(rac.row);
++
++    const cell = &page_cells[ucol];
++    if (!cell.hyperlink) return 0;
++
++    const hyperlink_id = p.lookupHyperlink(cell) orelse return 0;
++    const entry = p.hyperlink_set.get(p.memory, hyperlink_id);
++    const uri = entry.uri.slice(p.memory);
++
++    const count = @min(uri.len, @as(usize, @intCast(out_size)));
++    @memcpy(out[0..count], uri[0..count]);
 +    return @intCast(count);
 +}
 +
@@ -2070,6 +2195,44 @@ index 000000000..8a1f940ab
 +    try testing.expect(c1 != 0);
 +}
 +
++test "hyperlink" {
++    const testing = std.testing;
++    var h: Handle = undefined;
++    try testing.expectEqual(Result.success, new(
++        &lib_alloc.test_allocator,
++        80,
++        24,
++        &h,
++    ));
++    defer free(h);
++
++    // OSC 8 ; ; URI ST  text  OSC 8 ; ; ST
++    _ = write(h.?, "\x1b]8;;https://example.com\x1b\\Click\x1b]8;;\x1b\\", 42);
++    _ = update(h);
++
++    var buf: [80]GhosttyCell = undefined;
++    const count = get_viewport(h, &buf, 80);
++    try testing.expect(count > 0);
++
++    // First 5 cells ("Click") should have hyperlink set
++    try testing.expectEqual(@as(u8, 1), buf[0].has_hyperlink);
++    try testing.expectEqual(@as(u32, 'C'), buf[0].codepoint);
++    try testing.expectEqual(@as(u8, 1), buf[4].has_hyperlink);
++
++    // Cell after the link text should not have hyperlink
++    try testing.expectEqual(@as(u8, 0), buf[5].has_hyperlink);
++
++    // Query the URI for cell (0, 0)
++    var uri_buf: [256]u8 = undefined;
++    const uri_len = get_hyperlink(h, 0, 0, &uri_buf, 256);
++    try testing.expect(uri_len > 0);
++    try testing.expectEqualStrings("https://example.com", uri_buf[0..@intCast(uri_len)]);
++
++    // Cell without hyperlink returns 0
++    const no_link = get_hyperlink(h, 0, 5, &uri_buf, 256);
++    try testing.expectEqual(@as(c_int, 0), no_link);
++}
++
 +test "null safety" {
 +    free(null);
 +    _ = write(null, "x", 1);
@@ -2087,6 +2250,8 @@ index 000000000..8a1f940ab
 +    try std.testing.expect(!is_row_wrapped(null, 0));
 +    try std.testing.expect(!is_scrollback_row_wrapped(null, 0));
 +    try std.testing.expectEqual(@as(c_int, 0), get_scrollback_grapheme(null, 0, 0, undefined, 0));
++    try std.testing.expectEqual(@as(c_int, 0), get_hyperlink(null, 0, 0, undefined, 0));
++    try std.testing.expectEqual(@as(c_int, 0), get_scrollback_hyperlink(null, 0, 0, undefined, 0));
 +}
 diff --git a/src/terminal/osc/parsers/semantic_prompt.zig b/src/terminal/osc/parsers/semantic_prompt.zig
 index d3a117515..2ea7fd91c 100644

@@ -176,5 +176,76 @@ void main() {
         expect(line.codepoint(0), 'L'.codeUnitAt(0));
       }
     });
+
+    test('viewport hyperlink flag set by OSC 8', () {
+      const osc8 = '\x1b]8;;https://example.com\x1b\\Link\x1b]8;;\x1b\\';
+      bindings.terminalWrite(handle, Uint8List.fromList(osc8.codeUnits));
+      bindings.renderStateUpdate(handle);
+      final cells = bindings.renderStateGetViewport(handle, 80, 24);
+
+      expect(cells.hasHyperlink(0), isNonZero);
+      expect(cells.hasHyperlink(3), isNonZero);
+      expect(cells.hasHyperlink(4), isZero);
+    });
+
+    test('renderStateGetHyperlink returns URI', () {
+      const osc8 = '\x1b]8;;https://example.com\x1b\\Link\x1b]8;;\x1b\\';
+      bindings.terminalWrite(handle, Uint8List.fromList(osc8.codeUnits));
+      bindings.renderStateUpdate(handle);
+
+      expect(
+        bindings.renderStateGetHyperlink(handle, 0, 0),
+        'https://example.com',
+      );
+      expect(bindings.renderStateGetHyperlink(handle, 0, 4), isNull);
+    });
+
+    test('scrollback hyperlink flag set by OSC 8', () {
+      const osc8 = '\x1b]8;;https://scroll.test\x1b\\A\x1b]8;;\x1b\\';
+      for (var i = 0; i < 30; i++) {
+        if (i == 0) {
+          bindings.terminalWrite(
+            handle,
+            Uint8List.fromList('$osc8\n'.codeUnits),
+          );
+        } else {
+          bindings.terminalWrite(
+            handle,
+            Uint8List.fromList('Line$i\n'.codeUnits),
+          );
+        }
+      }
+
+      final scrollback = bindings.terminalGetScrollbackLength(handle);
+      expect(scrollback, greaterThan(0));
+
+      final line = bindings.terminalGetScrollbackLine(handle, 0, 80);
+      expect(line, isNotNull);
+      expect(line!.hasHyperlink(0), isNonZero);
+      expect(line.hasHyperlink(1), isZero);
+    });
+
+    test('terminalGetScrollbackHyperlink returns URI', () {
+      const osc8 = '\x1b]8;;https://scroll.test\x1b\\A\x1b]8;;\x1b\\';
+      for (var i = 0; i < 30; i++) {
+        if (i == 0) {
+          bindings.terminalWrite(
+            handle,
+            Uint8List.fromList('$osc8\n'.codeUnits),
+          );
+        } else {
+          bindings.terminalWrite(
+            handle,
+            Uint8List.fromList('Line$i\n'.codeUnits),
+          );
+        }
+      }
+
+      expect(
+        bindings.terminalGetScrollbackHyperlink(handle, 0, 0),
+        'https://scroll.test',
+      );
+      expect(bindings.terminalGetScrollbackHyperlink(handle, 0, 1), isNull);
+    });
   });
 }

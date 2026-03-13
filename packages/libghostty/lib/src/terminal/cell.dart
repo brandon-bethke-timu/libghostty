@@ -10,6 +10,10 @@ class Cell {
 
   /// Unicode text content, or empty string for blank cells.
   final String content;
+
+  /// OSC 8 hyperlink URI, or null if this cell is not part of a hyperlink.
+  final String? hyperlink;
+
   final CellColor foreground;
   final CellColor background;
   final CellStyle style;
@@ -21,6 +25,7 @@ class Cell {
 
   const Cell({
     this.content = '',
+    this.hyperlink,
     this.foreground = const DefaultColor(),
     this.background = const DefaultColor(),
     this.style = const CellStyle(),
@@ -32,6 +37,7 @@ class Cell {
   @override
   int get hashCode => Object.hash(
     content,
+    hyperlink,
     foreground,
     background,
     style,
@@ -49,6 +55,7 @@ class Cell {
   bool operator ==(Object other) =>
       other is Cell &&
       other.content == content &&
+      other.hyperlink == hyperlink &&
       other.foreground == foreground &&
       other.background == background &&
       other.style == style &&
@@ -169,13 +176,6 @@ enum CellWidth {
   const CellWidth(this._nativeValue);
 }
 
-extension CellWidthNative on CellWidth {
-  int get nativeValue => _nativeValue;
-
-  static CellWidth fromNative(int value) =>
-      CellWidth._nativeMap[value] ?? CellWidth.narrow;
-}
-
 /// Semantic content type set by shell integration (OSC 133).
 enum SemanticContent {
   output(0),
@@ -187,6 +187,14 @@ enum SemanticContent {
   final int _nativeValue;
 
   const SemanticContent(this._nativeValue);
+}
+
+extension CellWidthNative on CellWidth {
+  int get nativeValue => _nativeValue;
+
+  static CellWidth fromNative(int value) {
+    return CellWidth._nativeMap[value] ?? .narrow;
+  }
 }
 
 extension SemanticContentNative on SemanticContent {

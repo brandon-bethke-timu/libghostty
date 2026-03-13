@@ -199,11 +199,17 @@ abstract interface class GhosttyBindings {
   // ghostty_terminal_read_response (u8* buf + buf_size)
   Uint8List? terminalReadResponse(int handle);
 
+  // ghostty_render_state_get_hyperlink (u8* buf + buf_size)
+  String? renderStateGetHyperlink(int handle, int row, int col);
+
   // ghostty_render_state_is_row_wrapped
   bool renderStateIsRowWrapped(int handle, int row);
 
   // ghostty_terminal_get_scrollback_grapheme (u32* buf + buf_size)
   List<int> terminalGetScrollbackGrapheme(int handle, int offset, int col);
+
+  // ghostty_terminal_get_scrollback_hyperlink (u8* buf + buf_size)
+  String? terminalGetScrollbackHyperlink(int handle, int offset, int col);
 
   // ghostty_terminal_is_scrollback_row_wrapped
   bool terminalIsScrollbackRowWrapped(int handle, int offset);
@@ -217,12 +223,12 @@ class OscEndResult {
   final String? windowTitle;
 }
 
-/// Flat storage for GhosttyCell structs (20 bytes each, little-endian).
+/// Flat storage for GhosttyCell structs (24 bytes each, little-endian).
 ///
 /// Provides indexed field accessors over a raw byte buffer, avoiding
 /// per-cell Dart object allocations.
 class RawCells {
-  static const bytesPerCell = 20;
+  static const bytesPerCell = 24;
   static final empty = RawCells(ByteData(0), 0);
 
   final int length;
@@ -263,6 +269,8 @@ class RawCells {
   int contentTag(int i) => _data.getUint8(i * bytesPerCell + 18);
 
   int semanticContent(int i) => _data.getUint8(i * bytesPerCell + 19);
+
+  int hasHyperlink(int i) => _data.getUint8(i * bytesPerCell + 20);
 }
 
 // Mirrors GhosttyTerminalConfig fields from the C struct.

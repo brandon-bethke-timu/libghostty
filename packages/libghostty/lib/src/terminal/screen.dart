@@ -20,143 +20,6 @@ CellStyle _styleFromFlags(int flags, int underlineStyle) {
   );
 }
 
-/// [Screen] backed by the terminal's render state via the bindings
-/// abstraction layer. Used on both native and WASM platforms.
-///
-/// Lazily fetches the viewport grid on first access and caches lines
-/// until [invalidate] is called.
-class BindingsScreen implements Screen {
-  final int _handle;
-  final RgbColor _defaultFg;
-  final RgbColor _defaultBg;
-
-  var _cachedCols = 0;
-  var _cachedRows = 0;
-  DirtyState _dirtyState = DirtyState.clean;
-  RawCells? _viewport;
-  List<Line?>? _cachedLines;
-
-  BindingsScreen(
-    this._handle, {
-    required RgbColor defaultFg,
-    required RgbColor defaultBg,
-  }) : _defaultFg = defaultFg,
-       _defaultBg = defaultBg;
-
-  @override
-  int get cols => _viewport != null ? _cachedCols : _freshCols();
-
-  @override
-  DirtyState get dirtyState => _dirtyState;
-
-  set dirtyState(DirtyState value) => _dirtyState = value;
-
-  @override
-  int get rows => _viewport != null ? _cachedRows : _freshRows();
-
-  @override
-  Cell cellAt(int row, int col) {
-    _ensureViewport();
-
-    if (_cachedLines case final lines? when row >= 0 && row < _cachedRows) {
-      final cached = lines[row];
-      if (cached != null) return cached.cellAt(col);
-    }
-
-    final idx = row * _cachedCols + col;
-    if (idx < 0 || idx >= _viewport!.length) return Cell.empty;
-
-    return _resolveCell(idx, row, col);
-  }
-
-  void invalidate() {
-    _viewport = null;
-    _cachedLines = null;
-  }
-
-  @override
-  bool isRowDirty(int row) => bindings.renderStateIsRowDirty(_handle, row);
-
-  @override
-  bool isRowWrapped(int row) => bindings.renderStateIsRowWrapped(_handle, row);
-
-  @override
-  Line lineAt(int row) {
-    _ensureViewport();
-
-    if (row < 0 || row >= _cachedRows) return const Line([]);
-
-    final lines = _cachedLines ??= List<Line?>.filled(_cachedRows, null);
-    final cached = lines[row];
-    if (cached != null) return cached;
-
-    final start = row * _cachedCols;
-    if (start >= _viewport!.length) return const Line([]);
-
-    final end = start + _cachedCols;
-    final line = Line([
-      for (var i = start; i < end && i < _viewport!.length; i++)
-        _resolveCell(i, row, i - start),
-    ]);
-
-    lines[row] = line;
-    return line;
-  }
-
-  void _ensureViewport() {
-    if (_viewport != null) return;
-
-    _cachedCols = _freshCols();
-    _cachedRows = _freshRows();
-    _viewport = bindings.renderStateGetViewport(
-      _handle,
-      _cachedCols,
-      _cachedRows,
-    );
-  }
-
-  int _freshCols() => bindings.renderStateGetCols(_handle);
-
-  int _freshRows() => bindings.renderStateGetRows(_handle);
-
-  Cell _resolveCell(int index, int row, int col) {
-    final vp = _viewport!;
-    String? contentOverride;
-
-    if (vp.graphemeLen(index) > 0) {
-      final codepoints = bindings.renderStateGetGrapheme(_handle, row, col);
-      if (codepoints.isNotEmpty) {
-        contentOverride = String.fromCharCodes(codepoints);
-      }
-    }
-
-    return vp.cellAt(
-      index,
-      defaultFg: _defaultFg,
-      defaultBg: _defaultBg,
-      contentOverride: contentOverride,
-    );
-  }
-}
-
-/// Result of [Terminal]'s render state update.
-enum DirtyState {
-  /// Nothing changed since the last update.
-  clean,
-
-  /// Some rows changed — check [Screen.isRowDirty] per row.
-  partial,
-
-  /// Everything changed — skip per-row checks, rebuild all rows.
-  full;
-
-  factory DirtyState.fromNative(int value) => switch (value) {
-    0 => DirtyState.clean,
-    1 => DirtyState.partial,
-    _ => DirtyState.full,
-  };
-}
-
 /// Live view of a terminal screen buffer.
 ///
 /// ```dart
@@ -190,12 +53,150 @@ abstract class Screen {
   Line lineAt(int row);
 }
 
+/// [Screen] backed by the terminal's render state via the bindings
+/// abstraction layer. Used on both native and WASM platforms.
+///
+/// Lazily fetches the viewport grid on first access and caches lines
+/// until [invalidate] is called.
+class BindingsScreen implements Screen {
+  final int _handle;
+  final RgbColor _defaultFg;
+  final RgbColor _defaultBg;
+
+  var _cachedCols = 0;
+  var _cachedRows = 0;
+  var _dirtyState = DirtyState.clean;
+  RawCells? _cells;
+  List<Line?>? _cachedLines;
+
+  BindingsScreen(
+    this._handle, {
+    required RgbColor defaultFg,
+    required RgbColor defaultBg,
+  }) : _defaultFg = defaultFg,
+       _defaultBg = defaultBg;
+
+  @override
+  int get cols => _cells != null ? _cachedCols : _freshCols();
+
+  @override
+  DirtyState get dirtyState => _dirtyState;
+
+  set dirtyState(DirtyState value) => _dirtyState = value;
+
+  @override
+  int get rows => _cells != null ? _cachedRows : _freshRows();
+
+  @override
+  Cell cellAt(int row, int col) {
+    _ensureViewport();
+
+    if (_cachedLines case final lines? when row >= 0 && row < _cachedRows) {
+      final cached = lines[row];
+      if (cached != null) return cached.cellAt(col);
+    }
+
+    final idx = row * _cachedCols + col;
+    if (idx < 0 || idx >= _cells!.length) return Cell.empty;
+
+    return _resolveCell(idx, row, col);
+  }
+
+  void invalidate() {
+    _cells = null;
+    _cachedLines = null;
+  }
+
+  @override
+  bool isRowDirty(int row) => bindings.renderStateIsRowDirty(_handle, row);
+
+  @override
+  bool isRowWrapped(int row) => bindings.renderStateIsRowWrapped(_handle, row);
+
+  @override
+  Line lineAt(int row) {
+    _ensureViewport();
+
+    if (row < 0 || row >= _cachedRows) return const Line([]);
+
+    final lines = _cachedLines ??= List<Line?>.filled(_cachedRows, null);
+    final cached = lines[row];
+    if (cached != null) return cached;
+
+    final start = row * _cachedCols;
+    if (start >= _cells!.length) return const Line([]);
+
+    final end = start + _cachedCols;
+    final line = Line([
+      for (var i = start; i < end && i < _cells!.length; i++)
+        _resolveCell(i, row, i - start),
+    ]);
+
+    lines[row] = line;
+    return line;
+  }
+
+  void _ensureViewport() {
+    if (_cells != null) return;
+
+    _cachedCols = _freshCols();
+    _cachedRows = _freshRows();
+    _cells = bindings.renderStateGetViewport(_handle, _cachedCols, _cachedRows);
+  }
+
+  int _freshCols() => bindings.renderStateGetCols(_handle);
+
+  int _freshRows() => bindings.renderStateGetRows(_handle);
+
+  Cell _resolveCell(int index, int row, int col) {
+    String? hyperlink;
+    String? contentOverride;
+
+    final cells = _cells!;
+    if (cells.graphemeLen(index) > 0) {
+      final codepoints = bindings.renderStateGetGrapheme(_handle, row, col);
+      if (codepoints.isNotEmpty) contentOverride = .fromCharCodes(codepoints);
+    }
+
+    if (cells.hasHyperlink(index) != 0) {
+      hyperlink = bindings.renderStateGetHyperlink(_handle, row, col);
+    }
+
+    return cells.cellAt(
+      index,
+      hyperlink: hyperlink,
+      defaultFg: _defaultFg,
+      defaultBg: _defaultBg,
+      contentOverride: contentOverride,
+    );
+  }
+}
+
+/// Result of [Terminal]'s render state update.
+enum DirtyState {
+  /// Nothing changed since the last update.
+  clean,
+
+  /// Some rows changed — check [Screen.isRowDirty] per row.
+  partial,
+
+  /// Everything changed — skip per-row checks, rebuild all rows.
+  full;
+
+  factory DirtyState.fromNative(int value) => switch (value) {
+    0 => DirtyState.clean,
+    1 => DirtyState.partial,
+    _ => DirtyState.full,
+  };
+}
+
 extension RawCellsExtension on RawCells {
   Cell cellAt(
     int index, {
     required RgbColor defaultFg,
     required RgbColor defaultBg,
     String? contentOverride,
+    String? hyperlink,
   }) {
     final cp = codepoint(index);
     if (cp == 0) return Cell.empty;
@@ -223,6 +224,7 @@ extension RawCellsExtension on RawCells {
       foreground: fgColor,
       background: bgColor,
       underlineColor: ulColor,
+      hyperlink: hyperlink,
       wide: CellWidthNative.fromNative(wide(index)),
       style: _styleFromFlags(flags(index), underlineStyle(index)),
       semanticContent: SemanticContentNative.fromNative(semanticContent(index)),

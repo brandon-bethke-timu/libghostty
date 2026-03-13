@@ -382,6 +382,25 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  String? renderStateGetHyperlink(int handle, int row, int col) {
+    const bufSize = 2048;
+    final buf = _fn.call1('ghostty_wasm_alloc_u8_array', bufSize);
+    try {
+      final len = _fn.callN('ghostty_render_state_get_hyperlink', [
+        handle,
+        row,
+        col,
+        buf,
+        bufSize,
+      ]);
+      if (len <= 0) return null;
+      return utf8.decode(_mem.readBytes(buf, len));
+    } finally {
+      _fn.void2('ghostty_wasm_free_u8_array', buf, bufSize);
+    }
+  }
+
+  @override
   int renderStateGetRows(int handle) =>
       _fn.call1('ghostty_render_state_get_rows', handle);
 
@@ -673,6 +692,25 @@ class WasmBindings implements GhosttyBindings {
       return [for (var i = 0; i < count; i++) _mem.readU32(buf + i * 4)];
     } finally {
       _fn.void2('ghostty_wasm_free_u8_array', buf, bufBytes);
+    }
+  }
+
+  @override
+  String? terminalGetScrollbackHyperlink(int handle, int offset, int col) {
+    const bufSize = 2048;
+    final buf = _fn.call1('ghostty_wasm_alloc_u8_array', bufSize);
+    try {
+      final len = _fn.callN('ghostty_terminal_get_scrollback_hyperlink', [
+        handle,
+        offset,
+        col,
+        buf,
+        bufSize,
+      ]);
+      if (len <= 0) return null;
+      return utf8.decode(_mem.readBytes(buf, len));
+    } finally {
+      _fn.void2('ghostty_wasm_free_u8_array', buf, bufSize);
     }
   }
 

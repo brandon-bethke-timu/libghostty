@@ -12,13 +12,9 @@ void main() {
   group('Terminal', () {
     late Terminal terminal;
 
-    setUp(() {
-      terminal = Terminal(cols: 80, rows: 24);
-    });
+    setUp(() => terminal = Terminal(cols: 80, rows: 24));
 
-    tearDown(() {
-      terminal.dispose();
-    });
+    tearDown(() => terminal.dispose());
 
     test('initial dimensions', () {
       expect(terminal.screen.cols, 80);
@@ -263,6 +259,17 @@ void main() {
         });
         terminal.resize(cols: 120, rows: 40);
         expect(changeCount, 1);
+      });
+
+      test('ResponseReceived compares bytes', () {
+        final a = ResponseReceived(Uint8List.fromList([1, 2, 3]));
+        final b = ResponseReceived(Uint8List.fromList([1, 2, 3]));
+        final c = ResponseReceived(Uint8List.fromList([1, 2, 4]));
+        final d = ResponseReceived(Uint8List.fromList([1, 2]));
+        expect(a, b);
+        expect(a.hashCode, b.hashCode);
+        expect(a, isNot(c));
+        expect(a, isNot(d));
       });
     });
 

@@ -1172,6 +1172,36 @@ external int ghostty_render_state_get_grapheme(
   int out_size,
 );
 
+/// Get the hyperlink URI for a viewport cell.
+///
+/// For cells where GhosttyCell.has_hyperlink is non-zero, this function
+/// retrieves the URI associated with the hyperlink (OSC 8).
+///
+/// @param terminal The terminal handle, must not be NULL
+/// @param row Zero-based row index
+/// @param col Zero-based column index
+/// @param out_uri Buffer to fill with the URI bytes (UTF-8, not null-terminated)
+/// @param uri_size Size of the buffer in bytes
+/// @return Number of bytes written, or 0 if no hyperlink
+///
+/// @ingroup terminal
+@ffi.Native<
+  ffi.Int Function(
+    ffi.Pointer<GhosttyTerminal>,
+    ffi.Int,
+    ffi.Int,
+    ffi.Pointer<ffi.Uint8>,
+    ffi.Int,
+  )
+>()
+external int ghostty_render_state_get_hyperlink(
+  ffi.Pointer<GhosttyTerminal> terminal,
+  int row,
+  int col,
+  ffi.Pointer<ffi.Uint8> out_uri,
+  int uri_size,
+);
+
 /// Check whether a viewport row is soft-wrapped to the next row.
 ///
 /// @param terminal The terminal handle, must not be NULL
@@ -1251,6 +1281,36 @@ external int ghostty_terminal_get_scrollback_grapheme(
   int col,
   ffi.Pointer<ffi.Uint32> out,
   int out_size,
+);
+
+/// Get the hyperlink URI for a scrollback cell.
+///
+/// For scrollback cells where GhosttyCell.has_hyperlink is non-zero, this
+/// function retrieves the URI associated with the hyperlink (OSC 8).
+///
+/// @param terminal The terminal handle, must not be NULL
+/// @param offset Zero-based scrollback offset (0 = most recent)
+/// @param col Zero-based column index
+/// @param out_uri Buffer to fill with the URI bytes (UTF-8, not null-terminated)
+/// @param uri_size Size of the buffer in bytes
+/// @return Number of bytes written, or 0 if no hyperlink
+///
+/// @ingroup terminal
+@ffi.Native<
+  ffi.Int Function(
+    ffi.Pointer<GhosttyTerminal>,
+    ffi.Int,
+    ffi.Int,
+    ffi.Pointer<ffi.Uint8>,
+    ffi.Int,
+  )
+>()
+external int ghostty_terminal_get_scrollback_hyperlink(
+  ffi.Pointer<GhosttyTerminal> terminal,
+  int offset,
+  int col,
+  ffi.Pointer<ffi.Uint8> out_uri,
+  int uri_size,
 );
 
 /// Check whether a scrollback row is soft-wrapped to the next row.
@@ -1725,30 +1785,29 @@ enum GhosttySgrAttributeTag {
   GHOSTTY_SGR_ATTR_RESET_ITALIC(5),
   GHOSTTY_SGR_ATTR_FAINT(6),
   GHOSTTY_SGR_ATTR_UNDERLINE(7),
-  GHOSTTY_SGR_ATTR_RESET_UNDERLINE(8),
-  GHOSTTY_SGR_ATTR_UNDERLINE_COLOR(9),
-  GHOSTTY_SGR_ATTR_UNDERLINE_COLOR_256(10),
-  GHOSTTY_SGR_ATTR_RESET_UNDERLINE_COLOR(11),
-  GHOSTTY_SGR_ATTR_OVERLINE(12),
-  GHOSTTY_SGR_ATTR_RESET_OVERLINE(13),
-  GHOSTTY_SGR_ATTR_BLINK(14),
-  GHOSTTY_SGR_ATTR_RESET_BLINK(15),
-  GHOSTTY_SGR_ATTR_INVERSE(16),
-  GHOSTTY_SGR_ATTR_RESET_INVERSE(17),
-  GHOSTTY_SGR_ATTR_INVISIBLE(18),
-  GHOSTTY_SGR_ATTR_RESET_INVISIBLE(19),
-  GHOSTTY_SGR_ATTR_STRIKETHROUGH(20),
-  GHOSTTY_SGR_ATTR_RESET_STRIKETHROUGH(21),
-  GHOSTTY_SGR_ATTR_DIRECT_COLOR_FG(22),
-  GHOSTTY_SGR_ATTR_DIRECT_COLOR_BG(23),
-  GHOSTTY_SGR_ATTR_BG_8(24),
-  GHOSTTY_SGR_ATTR_FG_8(25),
-  GHOSTTY_SGR_ATTR_RESET_FG(26),
-  GHOSTTY_SGR_ATTR_RESET_BG(27),
-  GHOSTTY_SGR_ATTR_BRIGHT_BG_8(28),
-  GHOSTTY_SGR_ATTR_BRIGHT_FG_8(29),
-  GHOSTTY_SGR_ATTR_BG_256(30),
-  GHOSTTY_SGR_ATTR_FG_256(31);
+  GHOSTTY_SGR_ATTR_UNDERLINE_COLOR(8),
+  GHOSTTY_SGR_ATTR_UNDERLINE_COLOR_256(9),
+  GHOSTTY_SGR_ATTR_RESET_UNDERLINE_COLOR(10),
+  GHOSTTY_SGR_ATTR_OVERLINE(11),
+  GHOSTTY_SGR_ATTR_RESET_OVERLINE(12),
+  GHOSTTY_SGR_ATTR_BLINK(13),
+  GHOSTTY_SGR_ATTR_RESET_BLINK(14),
+  GHOSTTY_SGR_ATTR_INVERSE(15),
+  GHOSTTY_SGR_ATTR_RESET_INVERSE(16),
+  GHOSTTY_SGR_ATTR_INVISIBLE(17),
+  GHOSTTY_SGR_ATTR_RESET_INVISIBLE(18),
+  GHOSTTY_SGR_ATTR_STRIKETHROUGH(19),
+  GHOSTTY_SGR_ATTR_RESET_STRIKETHROUGH(20),
+  GHOSTTY_SGR_ATTR_DIRECT_COLOR_FG(21),
+  GHOSTTY_SGR_ATTR_DIRECT_COLOR_BG(22),
+  GHOSTTY_SGR_ATTR_BG_8(23),
+  GHOSTTY_SGR_ATTR_FG_8(24),
+  GHOSTTY_SGR_ATTR_RESET_FG(25),
+  GHOSTTY_SGR_ATTR_RESET_BG(26),
+  GHOSTTY_SGR_ATTR_BRIGHT_BG_8(27),
+  GHOSTTY_SGR_ATTR_BRIGHT_FG_8(28),
+  GHOSTTY_SGR_ATTR_BG_256(29),
+  GHOSTTY_SGR_ATTR_FG_256(30);
 
   final int value;
 
@@ -1763,30 +1822,29 @@ enum GhosttySgrAttributeTag {
     5 => GHOSTTY_SGR_ATTR_RESET_ITALIC,
     6 => GHOSTTY_SGR_ATTR_FAINT,
     7 => GHOSTTY_SGR_ATTR_UNDERLINE,
-    8 => GHOSTTY_SGR_ATTR_RESET_UNDERLINE,
-    9 => GHOSTTY_SGR_ATTR_UNDERLINE_COLOR,
-    10 => GHOSTTY_SGR_ATTR_UNDERLINE_COLOR_256,
-    11 => GHOSTTY_SGR_ATTR_RESET_UNDERLINE_COLOR,
-    12 => GHOSTTY_SGR_ATTR_OVERLINE,
-    13 => GHOSTTY_SGR_ATTR_RESET_OVERLINE,
-    14 => GHOSTTY_SGR_ATTR_BLINK,
-    15 => GHOSTTY_SGR_ATTR_RESET_BLINK,
-    16 => GHOSTTY_SGR_ATTR_INVERSE,
-    17 => GHOSTTY_SGR_ATTR_RESET_INVERSE,
-    18 => GHOSTTY_SGR_ATTR_INVISIBLE,
-    19 => GHOSTTY_SGR_ATTR_RESET_INVISIBLE,
-    20 => GHOSTTY_SGR_ATTR_STRIKETHROUGH,
-    21 => GHOSTTY_SGR_ATTR_RESET_STRIKETHROUGH,
-    22 => GHOSTTY_SGR_ATTR_DIRECT_COLOR_FG,
-    23 => GHOSTTY_SGR_ATTR_DIRECT_COLOR_BG,
-    24 => GHOSTTY_SGR_ATTR_BG_8,
-    25 => GHOSTTY_SGR_ATTR_FG_8,
-    26 => GHOSTTY_SGR_ATTR_RESET_FG,
-    27 => GHOSTTY_SGR_ATTR_RESET_BG,
-    28 => GHOSTTY_SGR_ATTR_BRIGHT_BG_8,
-    29 => GHOSTTY_SGR_ATTR_BRIGHT_FG_8,
-    30 => GHOSTTY_SGR_ATTR_BG_256,
-    31 => GHOSTTY_SGR_ATTR_FG_256,
+    8 => GHOSTTY_SGR_ATTR_UNDERLINE_COLOR,
+    9 => GHOSTTY_SGR_ATTR_UNDERLINE_COLOR_256,
+    10 => GHOSTTY_SGR_ATTR_RESET_UNDERLINE_COLOR,
+    11 => GHOSTTY_SGR_ATTR_OVERLINE,
+    12 => GHOSTTY_SGR_ATTR_RESET_OVERLINE,
+    13 => GHOSTTY_SGR_ATTR_BLINK,
+    14 => GHOSTTY_SGR_ATTR_RESET_BLINK,
+    15 => GHOSTTY_SGR_ATTR_INVERSE,
+    16 => GHOSTTY_SGR_ATTR_RESET_INVERSE,
+    17 => GHOSTTY_SGR_ATTR_INVISIBLE,
+    18 => GHOSTTY_SGR_ATTR_RESET_INVISIBLE,
+    19 => GHOSTTY_SGR_ATTR_STRIKETHROUGH,
+    20 => GHOSTTY_SGR_ATTR_RESET_STRIKETHROUGH,
+    21 => GHOSTTY_SGR_ATTR_DIRECT_COLOR_FG,
+    22 => GHOSTTY_SGR_ATTR_DIRECT_COLOR_BG,
+    23 => GHOSTTY_SGR_ATTR_BG_8,
+    24 => GHOSTTY_SGR_ATTR_FG_8,
+    25 => GHOSTTY_SGR_ATTR_RESET_FG,
+    26 => GHOSTTY_SGR_ATTR_RESET_BG,
+    27 => GHOSTTY_SGR_ATTR_BRIGHT_BG_8,
+    28 => GHOSTTY_SGR_ATTR_BRIGHT_FG_8,
+    29 => GHOSTTY_SGR_ATTR_BG_256,
+    30 => GHOSTTY_SGR_ATTR_FG_256,
     _ => throw ArgumentError(
       'Unknown value for GhosttySgrAttributeTag: $value',
     ),
@@ -2488,6 +2546,10 @@ final class GhosttyCell extends ffi.Struct {
   /// < Semantic content type (GHOSTTY_CELL_SEMANTIC_*)
   @ffi.Uint8()
   external int semantic_content;
+
+  /// < Non-zero if this cell is part of a hyperlink (OSC 8)
+  @ffi.Uint8()
+  external int has_hyperlink;
 }
 
 /// Terminal configuration for ghostty_terminal_new_with_config().
