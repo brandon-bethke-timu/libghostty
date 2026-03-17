@@ -67,4 +67,5 @@ linter:
     prefer_mixin: false
     public_member_api_docs: false
     sort_constructors_first: false
+    avoid_setters_without_getters: false
     document_ignores: false

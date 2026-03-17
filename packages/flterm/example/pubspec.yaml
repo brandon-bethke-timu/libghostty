@@ -13,7 +13,7 @@ dependencies:
     path: ..
   flutter:
     sdk: flutter
-  libghostty: ^0.0.2
+  libghostty: ^0.0.4
 
 dev_dependencies:
   flutter_test:
