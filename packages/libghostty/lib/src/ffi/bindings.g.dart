@@ -1090,19 +1090,6 @@ external int ghostty_render_state_get_cursor_style(
   ffi.Pointer<GhosttyTerminal> terminal,
 );
 
-/// Get whether the cursor should blink.
-///
-/// Reflects the terminal's cursor blink mode as set by DECSCUSR.
-///
-/// @param terminal The terminal handle, must not be NULL
-/// @return true if the cursor should blink, false otherwise
-///
-/// @ingroup terminal
-@ffi.Native<ffi.Bool Function(ffi.Pointer<GhosttyTerminal>)>()
-external bool ghostty_render_state_get_cursor_blinking(
-  ffi.Pointer<GhosttyTerminal> terminal,
-);
-
 /// Get the default foreground color as a packed RGB value.
 ///
 /// The color is packed as (R << 16 | G << 8 | B).
@@ -1479,6 +1466,7 @@ enum GhosttyResult {
   GHOSTTY_INVALID_VALUE(-2);
 
   final int value;
+
   const GhosttyResult(this.value);
 
   static GhosttyResult fromValue(int value) => switch (value) {
@@ -1695,6 +1683,7 @@ enum GhosttyOscCommandType {
   GHOSTTY_OSC_COMMAND_KITTY_TEXT_SIZING(22);
 
   final int value;
+
   const GhosttyOscCommandType(this.value);
 
   static GhosttyOscCommandType fromValue(int value) => switch (value) {
@@ -1746,6 +1735,7 @@ enum GhosttyOscCommandData {
   GHOSTTY_OSC_DATA_CHANGE_WINDOW_TITLE_STR(1);
 
   final int value;
+
   const GhosttyOscCommandData(this.value);
 
   static GhosttyOscCommandData fromValue(int value) => switch (value) {
@@ -1820,6 +1810,7 @@ enum GhosttySgrAttributeTag {
   GHOSTTY_SGR_ATTR_FG_256(30);
 
   final int value;
+
   const GhosttySgrAttributeTag(this.value);
 
   static GhosttySgrAttributeTag fromValue(int value) => switch (value) {
@@ -1872,6 +1863,7 @@ enum GhosttySgrUnderline {
   GHOSTTY_SGR_UNDERLINE_DASHED(5);
 
   final int value;
+
   const GhosttySgrUnderline(this.value);
 
   static GhosttySgrUnderline fromValue(int value) => switch (value) {
@@ -1985,6 +1977,7 @@ enum GhosttyKeyAction {
   GHOSTTY_KEY_ACTION_REPEAT(2);
 
   final int value;
+
   const GhosttyKeyAction(this.value);
 
   static GhosttyKeyAction fromValue(int value) => switch (value) {
@@ -2203,6 +2196,7 @@ enum GhosttyKey {
   GHOSTTY_KEY_PASTE(175);
 
   final int value;
+
   const GhosttyKey(this.value);
 
   static GhosttyKey fromValue(int value) => switch (value) {
@@ -2418,6 +2412,7 @@ enum GhosttyOptionAsAlt {
   GHOSTTY_OPTION_AS_ALT_RIGHT(3);
 
   final int value;
+
   const GhosttyOptionAsAlt(this.value);
 
   static GhosttyOptionAsAlt fromValue(int value) => switch (value) {
@@ -2458,6 +2453,7 @@ enum GhosttyKeyEncoderOption {
   GHOSTTY_KEY_ENCODER_OPT_MACOS_OPTION_AS_ALT(6);
 
   final int value;
+
   const GhosttyKeyEncoderOption(this.value);
 
   static GhosttyKeyEncoderOption fromValue(int value) => switch (value) {

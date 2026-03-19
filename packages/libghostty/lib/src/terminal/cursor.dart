@@ -6,19 +6,17 @@ class Cursor {
   final int row;
   final int col;
   final bool visible;
-  final bool blinking;
   final CursorShape shape;
 
   const Cursor({
     this.row = 0,
     this.col = 0,
     this.visible = true,
-    this.blinking = true,
     this.shape = CursorShape.block,
   });
 
   @override
-  int get hashCode => Object.hash(row, col, visible, blinking, shape);
+  int get hashCode => Object.hash(row, col, visible, shape);
 
   @override
   bool operator ==(Object other) =>
@@ -26,29 +24,20 @@ class Cursor {
       other.row == row &&
       other.col == col &&
       other.visible == visible &&
-      other.blinking == blinking &&
       other.shape == shape;
 
-  Cursor copyWith({
-    int? row,
-    int? col,
-    bool? visible,
-    bool? blinking,
-    CursorShape? shape,
-  }) {
+  Cursor copyWith({int? row, int? col, bool? visible, CursorShape? shape}) {
     return Cursor(
       row: row ?? this.row,
       col: col ?? this.col,
       visible: visible ?? this.visible,
-      blinking: blinking ?? this.blinking,
       shape: shape ?? this.shape,
     );
   }
 
   @override
   String toString() =>
-      'Cursor(row: $row, col: $col, visible: $visible, blinking: $blinking, '
-      'shape: $shape)';
+      'Cursor(row: $row, col: $col, visible: $visible, shape: $shape)';
 }
 
 /// Terminal cursor rendering shape.

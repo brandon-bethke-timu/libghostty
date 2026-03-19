@@ -316,12 +316,6 @@ class NativeBindings implements GhosttyBindings {
       native.ghostty_render_state_get_cols(ffi.Pointer.fromAddress(handle));
 
   @override
-  bool renderStateGetCursorBlinking(int handle) =>
-      native.ghostty_render_state_get_cursor_blinking(
-        ffi.Pointer.fromAddress(handle),
-      );
-
-  @override
   int renderStateGetCursorStyle(int handle) => native
       .ghostty_render_state_get_cursor_style(ffi.Pointer.fromAddress(handle));
 

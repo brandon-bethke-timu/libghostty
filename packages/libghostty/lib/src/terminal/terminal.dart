@@ -218,7 +218,6 @@ class Terminal extends Disposable {
       col: bindings.renderStateGetCursorX(_handle),
       row: bindings.renderStateGetCursorY(_handle),
       visible: bindings.renderStateGetCursorVisible(_handle),
-      blinking: bindings.renderStateGetCursorBlinking(_handle),
       shape: CursorShapeNative.fromNative(
         bindings.renderStateGetCursorStyle(_handle),
       ),

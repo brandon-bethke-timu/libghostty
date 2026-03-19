@@ -145,9 +145,6 @@ abstract interface class GhosttyBindings {
   // ghostty_render_state_get_cursor_style
   int renderStateGetCursorStyle(int handle);
 
-  // ghostty_render_state_get_cursor_blinking
-  bool renderStateGetCursorBlinking(int handle);
-
   // ghostty_render_state_get_fg_color → packed 0xRRGGBB
   int renderStateGetFgColor(int handle);
 

@@ -343,10 +343,6 @@ class WasmBindings implements GhosttyBindings {
       _fn.call1('ghostty_render_state_get_cols', handle);
 
   @override
-  bool renderStateGetCursorBlinking(int handle) =>
-      _fn.call1('ghostty_render_state_get_cursor_blinking', handle) != 0;
-
-  @override
   int renderStateGetCursorStyle(int handle) =>
       _fn.call1('ghostty_render_state_get_cursor_style', handle);
 
