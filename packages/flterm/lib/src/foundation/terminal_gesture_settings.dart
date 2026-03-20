@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show immutable, setEquals;
+import 'package:flutter/foundation.dart';
 
 import 'terminal_selection.dart';
 

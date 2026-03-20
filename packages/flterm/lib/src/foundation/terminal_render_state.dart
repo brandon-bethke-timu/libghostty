@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show Listenable;
+import 'package:flutter/foundation.dart';
 
 import 'terminal_selection.dart';
 

@@ -1,9 +1,7 @@
-import 'dart:ui' show lerpDouble;
+import 'dart:ui';
 
-import 'package:flutter/foundation.dart' show listEquals;
-import 'package:flutter/painting.dart';
+import 'package:flutter/foundation.dart';
 import 'package:libghostty/libghostty.dart';
-import 'package:meta/meta.dart';
 
 import 'color_palette.dart';
 
