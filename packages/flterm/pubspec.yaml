@@ -1,5 +1,5 @@
 name: flterm
-description: A high-performance terminal emulator renderer for Flutter, powered by VT engine (libghostty-vt).
+description: A high-performance terminal emulator renderer for Flutter, powered by libghostty-vt.
 version: 0.0.1-dev.1
 homepage: https://github.com/elias8/libghostty
 repository: https://github.com/elias8/libghostty/tree/main/packages/flterm

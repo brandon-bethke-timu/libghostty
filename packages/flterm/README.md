@@ -1,39 +1,86 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# flterm
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages).
+A high-performance terminal emulator renderer for Flutter, powered by
+[Ghostty](https://ghostty.org)'s virtual terminal engine
+([libghostty-vt](https://github.com/elias8/libghostty)).
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages).
--->
+| Android | iOS | Linux | macOS | Web | Windows |
+|:-------:|:---:|:-----:|:-----:|:---:|:-------:|
+|    ✅    |  ✅  |   ✅   |   ✅   |  ✅  |    ✅    |
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+> [!CAUTION]
+> This package is under active development. The API is unstable and breaking
+> changes are expected between releases.
 
 ## Features
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+- Three-layer rendering: content, cursor, and selection with per-row caching
+- Wide character support (CJK, emoji) with correct selection snapping
+- Multi-tap selection: word (double-click), line (triple-click), block (Alt+drag)
+- Platform-adaptive shortcuts: copy, paste, select all, clear
+- Soft keyboard input for mobile platforms
+- Scrollback with smooth scrolling and alternate screen support
+- Configurable theming: colors, cursor shape, hyperlink styles, font
+- Runs on Android, iOS, Linux, macOS, Web, and Windows
 
 ## Getting started
 
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
+Add `flterm` and `libghostty` to your `pubspec.yaml`:
+
+```yaml
+dependencies:
+  flterm: ^0.0.1-dev.1
+  libghostty: ^0.0.4
+```
+
+For web, call `initializeForWeb` before using the terminal:
+
+```dart
+import 'package:libghostty/libghostty.dart';
+
+if (kIsWeb) {
+  await initializeForWeb(Uri.parse('path/to/libghostty.wasm'));
+}
+```
 
 ## Usage
 
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
+Minimal setup:
 
 ```dart
-const like = 'sample';
+import 'package:flterm/flterm.dart';
+import 'package:libghostty/libghostty.dart';
+
+final terminal = Terminal(cols: 80, rows: 24);
+
+TerminalView(terminal: terminal)
 ```
 
-## Additional information
+With PTY integration:
 
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+```dart
+TerminalView(
+  terminal: terminal,
+  onOutput: (bytes) => pty.write(bytes),
+  onResize: (size) => pty.resize(size.cols, size.rows),
+)
+```
+
+With programmatic control:
+
+```dart
+final controller = TerminalController();
+
+TerminalView(
+  terminal: terminal,
+  controller: controller,
+);
+
+controller.sendText('ls -la\n');
+controller.selectAll();
+print(controller.selectedText);
+```
+
+## License
+
+MIT. See [LICENSE](LICENSE) for details.
