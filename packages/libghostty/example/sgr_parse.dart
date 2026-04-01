@@ -1,19 +1,17 @@
-// ignore_for_file: avoid_print
-
-import 'package:libghostty/parsing.dart';
+import 'package:libghostty/libghostty.dart';
 
 void main() {
   final parser = SgrParser();
 
   final attrs = parser.parse([1, 31]);
   for (final attr in attrs) {
-    switch (attr) {
-      case SgrBold():
+    switch (attr.tag) {
+      case .bold:
         print('Bold');
-      case SgrForeground8(:final index):
-        print('Foreground color: $index');
-      default:
-        print(attr.runtimeType);
+      case .fg8:
+        print('Foreground color: ${attr.paletteIndex}');
+      case _:
+        print(attr.tag);
     }
   }
 

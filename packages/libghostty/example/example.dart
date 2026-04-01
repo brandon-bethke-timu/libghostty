@@ -1,5 +1,4 @@
-// ignore_for_file: avoid_print
-
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:libghostty/libghostty.dart';
@@ -7,20 +6,40 @@ import 'package:libghostty/libghostty.dart';
 void main() {
   final terminal = Terminal(cols: 80, rows: 24);
 
+  // Register effect callbacks (invoked synchronously during write).
+  terminal.onWritePty = (data) => print('PTY: ${data.length} bytes');
+  terminal.onBell = () => print('Bell!');
+  terminal.onTitleChanged = () => print('Title: ${terminal.title}');
+
+  // Write styled text and a title change.
   terminal.write(
     Uint8List.fromList(
-      '\x1b[1;34mHello\x1b[0m, \x1b[32mWorld\x1b[0m!\r\n'.codeUnits,
+      '\x1b]2;My Terminal\x07\x1b[1;34mHello\x1b[0m, World!\r\n'.codeUnits,
     ),
   );
 
-  final screen = terminal.screen;
-  for (var row = 0; row < screen.rows; row++) {
-    final text = screen.lineAt(row).text;
-    if (text.isNotEmpty) print('Row $row: $text');
+  // Read screen content via render state.
+  terminal.renderState.update();
+  while (terminal.renderState.nextRow()) {
+    final buf = StringBuffer();
+    while (terminal.renderState.nextCell()) {
+      if (terminal.renderState.cell.hasText) {
+        buf.write(terminal.renderState.cell.content);
+      }
+    }
+    final line = buf.toString().trimRight();
+    if (line.isNotEmpty) print(line);
   }
+  terminal.renderState.markClean();
 
-  final cell = screen.cellAt(0, 0);
-  print('\nFirst cell: "${cell.content}", bold: ${cell.style.bold}');
+  // Encode a Ctrl+C key press.
+  final event = KeyEvent()
+    ..mods = const .ctrl()
+    ..action = .press
+    ..key = .c;
+  final seq = terminal.keyEncoder.encode(event);
+  if (seq.isNotEmpty) print('Key sequence: ${utf8.encode(seq)}');
+  event.dispose();
 
   terminal.dispose();
 }

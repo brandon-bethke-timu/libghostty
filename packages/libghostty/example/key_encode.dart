@@ -1,19 +1,17 @@
-// ignore_for_file: avoid_print
-
-import 'package:libghostty/input.dart';
+import 'package:libghostty/libghostty.dart';
 
 void main() {
   final encoder = KeyEncoder();
   final event = KeyEvent()
-    ..action = KeyAction.press
-    ..key = Key.keyC
-    ..mods = Mods.ctrl;
+    ..mods = const .ctrl()
+    ..action = .press
+    ..key = .c;
 
   final sequence = encoder.encode(event);
-  print('Ctrl+C encodes to: ${sequence.codeUnits}'); // [3] (ETX)
+  print('Ctrl+C encodes to: ${sequence.codeUnits}');
 
-  event.key = Key.arrowUp;
-  event.mods = Mods.none;
+  event.key = .arrowUp;
+  event.mods = const .none();
   print('Arrow Up encodes to: ${encoder.encode(event).codeUnits}');
 
   event.dispose();

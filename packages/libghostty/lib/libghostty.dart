@@ -6,25 +6,71 @@
 library;
 
 export 'src/bindings/bindings.dart' show initializeForWeb;
-export 'src/color.dart';
-export 'src/enums/key.dart' show Key;
-export 'src/enums/key_action.dart' show KeyAction;
-export 'src/enums/kitty_key_flags.dart' show KittyKeyFlags;
-export 'src/enums/mods.dart' show Mods;
-export 'src/enums/option_as_alt.dart' show OptionAsAlt;
-export 'src/enums/underline_style.dart' show UnderlineStyle;
-export 'src/exceptions.dart';
-export 'src/key_encoder.dart' show KeyEncoder;
-export 'src/key_event.dart' show KeyEvent;
-export 'src/paste.dart';
-export 'src/terminal/cell.dart'
-    show Cell, CellStyle, CellWidth, SemanticContent;
-export 'src/terminal/cursor.dart' show Cursor, CursorShape;
-export 'src/terminal/line.dart' show Line;
-export 'src/terminal/modes.dart' show ScreenMode, TerminalModes;
-export 'src/terminal/mouse.dart' show MouseShape, MouseTracking;
-export 'src/terminal/screen.dart' show DirtyState, Screen;
-export 'src/terminal/scrollback.dart' show Scrollback;
-export 'src/terminal/terminal.dart' show Terminal;
-export 'src/terminal/terminal_event.dart';
-export 'src/terminal/terminal_options.dart' show TerminalOptions;
+export 'src/bindings/types/types.dart'
+    show
+        CellColor,
+        CellWidth,
+        CursorShape,
+        DefaultColor,
+        DeviceAttributesPrimary,
+        DeviceAttributesResponse,
+        DeviceAttributesSecondary,
+        DeviceAttributesTertiary,
+        FormatterExtra,
+        InvalidValueException,
+        LibGhosttyException,
+        MouseEncoderSize,
+        MouseFormat,
+        MouseTracking,
+        NamedColor,
+        OptimizeMode,
+        OutOfMemoryException,
+        PaletteColor,
+        RgbColor,
+        Scrollbar,
+        SemanticContent,
+        SemanticPrompt,
+        SgrAttribute,
+        Style,
+        TerminalColors,
+        TerminalSizeInfo,
+        UnderlineStyle;
+export 'src/ffi/libghostty_enums.g.dart'
+    show
+        ColorScheme,
+        FocusEvent,
+        FormatterFormat,
+        Key,
+        KeyAction,
+        ModeReportState,
+        MouseAction,
+        MouseButton,
+        OptionAsAlt,
+        OscCommandType,
+        PointTag,
+        SgrAttributeTag,
+        SizeReportStyle,
+        TerminalScreen;
+export 'src/impl/build_info.dart' show LibGhosttyBuildInfo;
+export 'src/impl/encode.dart' show FocusEventEncode, SizeReportStyleEncode;
+export 'src/impl/key/key_encoder.dart' show KeyEncoder;
+export 'src/impl/key/key_event.dart' show KeyEvent;
+export 'src/impl/key/kitty_key_flags.dart' show KittyKeyFlags;
+export 'src/impl/key/mods.dart' show Mods;
+export 'src/impl/mouse/mouse_encoder.dart' show MouseEncoder;
+export 'src/impl/mouse/mouse_event.dart' show MouseEvent;
+export 'src/impl/osc_parser.dart' show OscCommand, OscParser;
+export 'src/impl/paste.dart' show pasteEncode, pasteIsSafe;
+export 'src/impl/sgr_parser.dart' show SgrParser;
+export 'src/impl/terminal/terminal.dart'
+    show
+        Cell,
+        Cursor,
+        DirtyState,
+        Formatter,
+        GridRef,
+        RenderState,
+        Row,
+        Terminal;
+export 'src/impl/terminal/terminal_mode.dart' show TerminalMode;
+export 'src/listenable.dart' show Listenable;

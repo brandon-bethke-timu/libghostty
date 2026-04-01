@@ -88,7 +88,7 @@ jobs:
         id: ghostty-cache
         with:
           path: ${{ runner.temp }}/ghostty-src
-          key: ghostty-src-${{ steps.ghostty.outputs.full }}-${{ hashFiles('packages/libghostty/patches/*.patch') }}
+          key: ghostty-src-${{ steps.ghostty.outputs.full }}
       - name: download ghostty source
         if: steps.ghostty-cache.outputs.cache-hit != 'true'
         run: |
@@ -96,16 +96,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ghostty-src"
           tar xzf ghostty.tar.gz -C "$RUNNER_TEMP/ghostty-src" --strip-components=1
           rm ghostty.tar.gz
-      - name: apply patches
-        if: steps.ghostty-cache.outputs.cache-hit != 'true'
-        run: |
-          for p in packages/libghostty/patches/*.patch; do
-            [ -f "$p" ] || continue
-            git apply --unsafe-paths --ignore-whitespace --whitespace=nowarn --directory="$RUNNER_TEMP/ghostty-src" "$p"
-          done
       - name: compile
         working-directory: ${{ runner.temp }}/ghostty-src
-        run: zig build lib-vt --release=fast -Dtarget=${{ matrix.target }} ${{ matrix.extra_args }}
+        run: zig build -Demit-lib-vt=true --release=fast -Dtarget=${{ matrix.target }} ${{ matrix.extra_args }}
       - name: prepare artifact
         id: artifact
         run: |
@@ -137,7 +130,7 @@ jobs:
         id: ghostty-cache
         with:
           path: ${{ runner.temp }}/ghostty-src
-          key: ghostty-src-${{ steps.ghostty.outputs.full }}-${{ hashFiles('packages/libghostty/patches/*.patch') }}
+          key: ghostty-src-${{ steps.ghostty.outputs.full }}
       - name: download ghostty source
         if: steps.ghostty-cache.outputs.cache-hit != 'true'
         run: |
@@ -145,16 +138,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ghostty-src"
           tar xzf ghostty.tar.gz -C "$RUNNER_TEMP/ghostty-src" --strip-components=1
           rm ghostty.tar.gz
-      - name: apply patches
-        if: steps.ghostty-cache.outputs.cache-hit != 'true'
-        run: |
-          for p in packages/libghostty/patches/*.patch; do
-            [ -f "$p" ] || continue
-            git apply --unsafe-paths --ignore-whitespace --whitespace=nowarn --directory="$RUNNER_TEMP/ghostty-src" "$p"
-          done
       - name: compile wasm
         working-directory: ${{ runner.temp }}/ghostty-src
-        run: zig build lib-vt -Dtarget=wasm32-freestanding -Doptimize=ReleaseSmall
+        run: zig build -Demit-lib-vt=true -Dtarget=wasm32-freestanding -Doptimize=ReleaseSmall
       - name: prepare artifact
         id: artifact
         run: |

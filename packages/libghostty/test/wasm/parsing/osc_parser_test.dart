@@ -3,7 +3,7 @@ library;
 
 import 'dart:convert';
 
-import 'package:libghostty/parsing.dart';
+import 'package:libghostty/libghostty.dart';
 import 'package:test/test.dart';
 
 import '../helpers/setup.dart';

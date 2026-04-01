@@ -3,249 +3,516 @@ library;
 
 import 'dart:typed_data';
 
+import 'package:libghostty/libghostty.dart';
 import 'package:libghostty/src/bindings/bindings.dart';
+import 'package:libghostty/src/ffi/libghostty_enums.g.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('native terminal bindings', () {
-    late int handle;
+  group('terminal', () {
+    late int terminal;
+    late int renderState;
 
     setUp(() {
-      handle = bindings.terminalNew(80, 24);
+      final (_, t) = bindings.terminalNew(80, 24, 0);
+      terminal = t;
+      final (_, rs) = bindings.renderStateNew();
+      renderState = rs;
     });
 
     tearDown(() {
-      bindings.terminalFree(handle);
+      bindings.renderStateFree(renderState);
+      bindings.terminalFree(terminal);
     });
 
-    test('create and free terminal', () {
-      expect(handle, isNonZero);
+    test('create and free', () {
+      expect(terminal, isNonZero);
     });
 
-    test('render state dimensions match creation', () {
-      bindings.renderStateUpdate(handle);
-      expect(bindings.renderStateGetCols(handle), 80);
-      expect(bindings.renderStateGetRows(handle), 24);
+    test('dimensions match creation', () {
+      checkCode(bindings.renderStateUpdate(renderState, terminal));
+      expect(bindings.renderStateGetCols(renderState).$2, 80);
+      expect(bindings.renderStateGetRows(renderState).$2, 24);
     });
 
-    test('initial cursor is at origin and visible', () {
-      bindings.renderStateUpdate(handle);
-      expect(bindings.renderStateGetCursorX(handle), 0);
-      expect(bindings.renderStateGetCursorY(handle), 0);
-      expect(bindings.renderStateGetCursorVisible(handle), isTrue);
+    test('initial cursor at origin and visible', () {
+      checkCode(bindings.renderStateUpdate(renderState, terminal));
+      expect(bindings.renderStateGetCursorViewportX(renderState).$2, 0);
+      expect(bindings.renderStateGetCursorViewportY(renderState).$2, 0);
+      expect(bindings.renderStateGetCursorVisible(renderState).$2, isTrue);
     });
 
-    test('write bytes and read viewport', () {
-      bindings.terminalWrite(handle, Uint8List.fromList('Hello'.codeUnits));
-      bindings.renderStateUpdate(handle);
+    test('write and read cells via row iterator', () {
+      bindings.terminalVtWrite(terminal, Uint8List.fromList('Hello'.codeUnits));
+      checkCode(bindings.renderStateUpdate(renderState, terminal));
 
-      final cells = bindings.renderStateGetViewport(handle, 80, 24);
-      expect(cells.length, 80 * 24);
+      final (_, rowIter) = bindings.rowIteratorNew();
+      final (_, rowCells) = bindings.rowCellsNew();
+      checkCode(bindings.rowIteratorInit(rowIter, renderState));
 
-      expect(cells.codepoint(0), 'H'.codeUnitAt(0));
-      expect(cells.codepoint(1), 'e'.codeUnitAt(0));
-      expect(cells.codepoint(2), 'l'.codeUnitAt(0));
-      expect(cells.codepoint(3), 'l'.codeUnitAt(0));
-      expect(cells.codepoint(4), 'o'.codeUnitAt(0));
-      expect(cells.codepoint(5), 0);
+      expect(bindings.rowIteratorNext(rowIter), isTrue);
+      checkCode(bindings.rowCellsInit(rowCells, rowIter));
+
+      final codepoints = <int>[];
+      while (bindings.rowCellsNext(rowCells)) {
+        final (_, rawCell) = bindings.rowCellsGetRawCell(rowCells);
+        codepoints.add(bindings.cellGetCodepoint(rawCell).$2);
+      }
+
+      expect(String.fromCharCodes(codepoints.take(5)), 'Hello');
+
+      bindings.rowCellsFree(rowCells);
+      bindings.rowIteratorFree(rowIter);
     });
 
     test('cursor moves after write', () {
-      bindings.terminalWrite(handle, Uint8List.fromList('ABC'.codeUnits));
-      bindings.renderStateUpdate(handle);
-      expect(bindings.renderStateGetCursorX(handle), 3);
-      expect(bindings.renderStateGetCursorY(handle), 0);
+      bindings.terminalVtWrite(terminal, Uint8List.fromList('ABC'.codeUnits));
+      checkCode(bindings.renderStateUpdate(renderState, terminal));
+      expect(bindings.renderStateGetCursorViewportX(renderState).$2, 3);
     });
 
     test('resize changes dimensions', () {
-      bindings.terminalResize(handle, 40, 10);
-      bindings.renderStateUpdate(handle);
-      expect(bindings.renderStateGetCols(handle), 40);
-      expect(bindings.renderStateGetRows(handle), 10);
+      checkCode(bindings.terminalResize(terminal, 40, 10, 0, 0));
+      checkCode(bindings.renderStateUpdate(renderState, terminal));
+      expect(bindings.renderStateGetCols(renderState).$2, 40);
+      expect(bindings.renderStateGetRows(renderState).$2, 10);
     });
 
-    test('write returns event flags', () {
-      final events = bindings.terminalWrite(handle, .fromList('Hi'.codeUnits));
-      expect(events & TerminalEventFlag.repaint, isNonZero);
-      expect(events & TerminalEventFlag.bell, isZero);
-    });
-
-    test('write returns bell event flag', () {
-      final events = bindings.terminalWrite(handle, .fromList([0x07]));
-      expect(events & TerminalEventFlag.bell, isNonZero);
-    });
-
-    test('write returns title event flag', () {
-      const osc = '\x1b]0;Test\x07';
-      final events = bindings.terminalWrite(handle, .fromList(osc.codeUnits));
-      expect(events & TerminalEventFlag.titleChanged, isNonZero);
-    });
-
-    test('bell count incremented by BEL character', () {
-      expect(bindings.terminalGetBellCount(handle), 0);
-      bindings.terminalWrite(handle, Uint8List.fromList([0x07]));
-      expect(bindings.terminalGetBellCount(handle), 1);
-      bindings.terminalResetBellCount(handle);
-      expect(bindings.terminalGetBellCount(handle), 0);
-    });
-
-    test('title change via OSC 0', () {
-      expect(bindings.terminalHasTitleChanged(handle), isFalse);
-      const osc = '\x1b]0;My Title\x07';
-      bindings.terminalWrite(handle, Uint8List.fromList(osc.codeUnits));
-      expect(bindings.terminalHasTitleChanged(handle), isTrue);
-      expect(bindings.terminalGetTitle(handle), 'My Title');
-      expect(bindings.terminalHasTitleChanged(handle), isFalse);
-    });
-
-    test('alternate screen mode', () {
-      expect(bindings.terminalIsAlternateScreen(handle), isFalse);
-      const enterAlt = '\x1b[?1049h';
-      bindings.terminalWrite(handle, Uint8List.fromList(enterAlt.codeUnits));
-      expect(bindings.terminalIsAlternateScreen(handle), isTrue);
-      const exitAlt = '\x1b[?1049l';
-      bindings.terminalWrite(handle, Uint8List.fromList(exitAlt.codeUnits));
-      expect(bindings.terminalIsAlternateScreen(handle), isFalse);
-    });
-
-    test('bold attribute sets flag', () {
-      const boldHello = '\x1b[1mHi';
-      bindings.terminalWrite(handle, Uint8List.fromList(boldHello.codeUnits));
-      bindings.renderStateUpdate(handle);
-      final cells = bindings.renderStateGetViewport(handle, 80, 24);
-      expect(cells.flags(0) & 1, 1);
-      expect(cells.codepoint(0), 'H'.codeUnitAt(0));
-    });
-
-    test('create with config sets colors', () {
-      const config = RawTerminalConfig(
-        fgR: 255,
-        fgG: 128,
-        fgB: 64,
-        fgSet: true,
-        bgR: 10,
-        bgG: 20,
-        bgB: 30,
-        bgSet: true,
-      );
-      final h = bindings.terminalNewWithConfig(80, 24, config);
-      try {
-        bindings.renderStateUpdate(h);
-        final fg = bindings.renderStateGetFgColor(h);
-        expect((fg >> 16) & 0xFF, 255);
-        expect((fg >> 8) & 0xFF, 128);
-        expect(fg & 0xFF, 64);
-
-        final bg = bindings.renderStateGetBgColor(h);
-        expect((bg >> 16) & 0xFF, 10);
-        expect((bg >> 8) & 0xFF, 20);
-        expect(bg & 0xFF, 30);
-      } finally {
-        bindings.terminalFree(h);
-      }
-    });
-
-    test('dirty tracking works', () {
-      bindings.renderStateUpdate(handle);
-      bindings.renderStateMarkClean(handle);
-
-      bindings.terminalWrite(handle, Uint8List.fromList('X'.codeUnits));
-      final dirty = bindings.renderStateUpdate(handle);
-      expect(dirty, greaterThan(0));
-    });
-
-    test('scrollback grows when lines scroll off', () {
-      expect(bindings.terminalGetScrollbackLength(handle), 0);
-
-      final lines = List.generate(30, (i) => 'Line $i\n').join();
-      bindings.terminalWrite(handle, Uint8List.fromList(lines.codeUnits));
-
-      final scrollback = bindings.terminalGetScrollbackLength(handle);
-      expect(scrollback, greaterThan(0));
-    });
-
-    test('scrollback line returns cells', () {
-      final lines = List.generate(30, (i) => 'L$i\n').join();
-      bindings.terminalWrite(handle, Uint8List.fromList(lines.codeUnits));
-
-      final scrollback = bindings.terminalGetScrollbackLength(handle);
-      if (scrollback > 0) {
-        final line = bindings.terminalGetScrollbackLine(handle, 0, 80);
-        expect(line, isNotNull);
-        expect(line!.length, 80);
-        expect(line.codepoint(0), 'L'.codeUnitAt(0));
-      }
-    });
-
-    test('viewport hyperlink flag set by OSC 8', () {
-      const osc8 = '\x1b]8;;https://example.com\x1b\\Link\x1b]8;;\x1b\\';
-      bindings.terminalWrite(handle, Uint8List.fromList(osc8.codeUnits));
-      bindings.renderStateUpdate(handle);
-      final cells = bindings.renderStateGetViewport(handle, 80, 24);
-
-      expect(cells.hasHyperlink(0), isNonZero);
-      expect(cells.hasHyperlink(3), isNonZero);
-      expect(cells.hasHyperlink(4), isZero);
-    });
-
-    test('renderStateGetHyperlink returns URI', () {
-      const osc8 = '\x1b]8;;https://example.com\x1b\\Link\x1b]8;;\x1b\\';
-      bindings.terminalWrite(handle, Uint8List.fromList(osc8.codeUnits));
-      bindings.renderStateUpdate(handle);
-
+    test('alternate screen via mode', () {
       expect(
-        bindings.renderStateGetHyperlink(handle, 0, 0),
-        'https://example.com',
+        bindings.terminalGetActiveScreen(terminal).$2,
+        TerminalScreen.primary,
       );
-      expect(bindings.renderStateGetHyperlink(handle, 0, 4), isNull);
-    });
-
-    test('scrollback hyperlink flag set by OSC 8', () {
-      const osc8 = '\x1b]8;;https://scroll.test\x1b\\A\x1b]8;;\x1b\\';
-      for (var i = 0; i < 30; i++) {
-        if (i == 0) {
-          bindings.terminalWrite(
-            handle,
-            Uint8List.fromList('$osc8\n'.codeUnits),
-          );
-        } else {
-          bindings.terminalWrite(
-            handle,
-            Uint8List.fromList('Line$i\n'.codeUnits),
-          );
-        }
-      }
-
-      final scrollback = bindings.terminalGetScrollbackLength(handle);
-      expect(scrollback, greaterThan(0));
-
-      final line = bindings.terminalGetScrollbackLine(handle, 0, 80);
-      expect(line, isNotNull);
-      expect(line!.hasHyperlink(0), isNonZero);
-      expect(line.hasHyperlink(1), isZero);
-    });
-
-    test('terminalGetScrollbackHyperlink returns URI', () {
-      const osc8 = '\x1b]8;;https://scroll.test\x1b\\A\x1b]8;;\x1b\\';
-      for (var i = 0; i < 30; i++) {
-        if (i == 0) {
-          bindings.terminalWrite(
-            handle,
-            Uint8List.fromList('$osc8\n'.codeUnits),
-          );
-        } else {
-          bindings.terminalWrite(
-            handle,
-            Uint8List.fromList('Line$i\n'.codeUnits),
-          );
-        }
-      }
-
+      bindings.terminalVtWrite(
+        terminal,
+        Uint8List.fromList('\x1b[?1049h'.codeUnits),
+      );
       expect(
-        bindings.terminalGetScrollbackHyperlink(handle, 0, 0),
-        'https://scroll.test',
+        bindings.terminalGetActiveScreen(terminal).$2,
+        TerminalScreen.alternate,
       );
-      expect(bindings.terminalGetScrollbackHyperlink(handle, 0, 1), isNull);
+      bindings.terminalVtWrite(
+        terminal,
+        Uint8List.fromList('\x1b[?1049l'.codeUnits),
+      );
+      expect(
+        bindings.terminalGetActiveScreen(terminal).$2,
+        TerminalScreen.primary,
+      );
+    });
+
+    test('dirty tracking', () {
+      checkCode(bindings.renderStateUpdate(renderState, terminal));
+      checkCode(
+        bindings.renderStateSetDirty(renderState, RenderStateDirty.false$),
+      );
+
+      bindings.terminalVtWrite(terminal, Uint8List.fromList('X'.codeUnits));
+      checkCode(bindings.renderStateUpdate(renderState, terminal));
+      expect(
+        bindings.renderStateGetDirty(renderState).$2,
+        isNot(RenderStateDirty.false$),
+      );
+    });
+
+    test('render state colors', () {
+      checkCode(bindings.renderStateUpdate(renderState, terminal));
+      final (_, colors) = bindings.renderStateGetColors(renderState);
+      expect(colors.palette.length, 256);
+    });
+
+    test('mode get and set', () {
+      expect(
+        bindings
+            .terminalModeGet(
+              terminal,
+              const TerminalMode.bracketedPaste().value,
+            )
+            .$2,
+        isFalse,
+      );
+      checkCode(
+        bindings.terminalModeSet(
+          terminal,
+          const TerminalMode.bracketedPaste().value,
+          value: true,
+        ),
+      );
+      expect(
+        bindings
+            .terminalModeGet(
+              terminal,
+              const TerminalMode.bracketedPaste().value,
+            )
+            .$2,
+        isTrue,
+      );
+    });
+
+    test('reset restores defaults', () {
+      bindings.terminalVtWrite(terminal, Uint8List.fromList('Hello'.codeUnits));
+      bindings.terminalReset(terminal);
+      expect(bindings.terminalGetCursorX(terminal).$2, 0);
+      expect(bindings.terminalGetCursorY(terminal).$2, 0);
+    });
+
+    test('scrollbar state', () {
+      final (_, sb) = bindings.terminalGetScrollbar(terminal);
+      expect(sb.visible, greaterThan(0));
+    });
+  });
+
+  group('key event', () {
+    late int event;
+
+    setUp(() {
+      final (_, e) = bindings.keyEventNew();
+      event = e;
+    });
+    tearDown(() => bindings.keyEventFree(event));
+
+    test('set and get action', () {
+      bindings.keyEventSetAction(event, KeyAction.press);
+      expect(bindings.keyEventGetAction(event), KeyAction.press);
+    });
+
+    test('set and get key', () {
+      bindings.keyEventSetKey(event, Key.a);
+      expect(bindings.keyEventGetKey(event), Key.a);
+    });
+
+    test('set and get mods', () {
+      final mods = const Mods.ctrl().value | const Mods.shift().value;
+      bindings.keyEventSetMods(event, mods);
+      expect(bindings.keyEventGetMods(event), mods);
+    });
+
+    test('set and get consumed mods', () {
+      bindings.keyEventSetConsumedMods(event, const Mods.alt().value);
+      expect(bindings.keyEventGetConsumedMods(event), const Mods.alt().value);
+    });
+
+    test('set and get composing', () {
+      bindings.keyEventSetComposing(event, composing: true);
+      expect(bindings.keyEventGetComposing(event), isTrue);
+    });
+
+    test('set and get utf8', () {
+      bindings.keyEventSetUtf8(event, 'a');
+      expect(bindings.keyEventGetUtf8(event), 'a');
+    });
+
+    test('utf8 null roundtrip', () {
+      bindings.keyEventSetUtf8(event, null);
+      expect(bindings.keyEventGetUtf8(event), isNull);
+    });
+
+    test('set and get unshifted codepoint', () {
+      bindings.keyEventSetUnshiftedCodepoint(event, 0x61);
+      expect(bindings.keyEventGetUnshiftedCodepoint(event), 0x61);
+    });
+  });
+
+  group('key encoder', () {
+    late int encoder;
+    late int event;
+
+    setUp(() {
+      final (_, enc) = bindings.keyEncoderNew();
+      encoder = enc;
+      final (_, ev) = bindings.keyEventNew();
+      event = ev;
+    });
+
+    tearDown(() {
+      bindings.keyEventFree(event);
+      bindings.keyEncoderFree(encoder);
+    });
+
+    test('encode Ctrl+C produces ETX', () {
+      bindings.keyEventSetAction(event, KeyAction.press);
+      bindings.keyEventSetKey(event, Key.c);
+      bindings.keyEventSetMods(event, const Mods.ctrl().value);
+      final (_, result) = bindings.keyEncoderEncode(encoder, event);
+      expect(result, '\x03');
+    });
+
+    test('setOptFromTerminal syncs encoder options', () {
+      final (_, t) = bindings.terminalNew(80, 24, 0);
+      bindings.keyEncoderSetOptFromTerminal(encoder, t);
+      bindings.terminalFree(t);
+    });
+  });
+
+  group('mouse event', () {
+    late int event;
+
+    setUp(() {
+      final (_, e) = bindings.mouseEventNew();
+      event = e;
+    });
+    tearDown(() => bindings.mouseEventFree(event));
+
+    test('set and get action', () {
+      bindings.mouseEventSetAction(event, MouseAction.press);
+      expect(bindings.mouseEventGetAction(event), MouseAction.press);
+    });
+
+    test('set and get button', () {
+      bindings.mouseEventSetButton(event, MouseButton.left);
+      final (code, button) = bindings.mouseEventGetButton(event);
+      expect(code, Result.success);
+      expect(button, MouseButton.left);
+    });
+
+    test('clear button', () {
+      bindings.mouseEventSetButton(event, MouseButton.left);
+      bindings.mouseEventClearButton(event);
+      final (code, _) = bindings.mouseEventGetButton(event);
+      expect(code, Result.noValue);
+    });
+
+    test('set and get mods', () {
+      bindings.mouseEventSetMods(event, const Mods.shift().value);
+      expect(bindings.mouseEventGetMods(event), const Mods.shift().value);
+    });
+
+    test('set and get position', () {
+      bindings.mouseEventSetPosition(event, 10.5, 20.5);
+      final (x, y) = bindings.mouseEventGetPosition(event);
+      expect(x, closeTo(10.5, 0.01));
+      expect(y, closeTo(20.5, 0.01));
+    });
+  });
+
+  group('mouse encoder', () {
+    late int encoder;
+
+    setUp(() {
+      final (_, enc) = bindings.mouseEncoderNew();
+      encoder = enc;
+    });
+    tearDown(() => bindings.mouseEncoderFree(encoder));
+
+    test('configuration methods accept values without error', () {
+      bindings.mouseEncoderReset(encoder);
+      bindings.mouseEncoderSetBoolOpt(
+        encoder,
+        MouseEncoderOption.anyButtonPressed,
+        value: true,
+      );
+      bindings.mouseEncoderSetBoolOpt(
+        encoder,
+        MouseEncoderOption.trackLastCell,
+        value: true,
+      );
+      bindings.mouseEncoderSetTrackingMode(encoder, MouseTrackingMode.normal);
+      bindings.mouseEncoderSetFormat(encoder, MouseFormat.sgr);
+      bindings.mouseEncoderSetSize(
+        encoder,
+        const MouseEncoderSize(
+          screenWidth: 640,
+          screenHeight: 384,
+          cellWidth: 8,
+          cellHeight: 16,
+        ),
+      );
+    });
+
+    test('setOptFromTerminal syncs encoder options', () {
+      final (_, t) = bindings.terminalNew(80, 24, 0);
+      bindings.mouseEncoderSetOptFromTerminal(encoder, t);
+      bindings.terminalFree(t);
+    });
+  });
+
+  group('focus encode', () {
+    test('gained encodes as CSI I', () {
+      final (_, result) = bindings.focusEncode(FocusEvent.gained);
+      expect(result, '\x1b[I');
+    });
+
+    test('lost encodes as CSI O', () {
+      final (_, result) = bindings.focusEncode(FocusEvent.lost);
+      expect(result, '\x1b[O');
+    });
+  });
+
+  group('paste', () {
+    test('safe content returns true', () {
+      expect(bindings.pasteIsSafe('hello'), isTrue);
+    });
+
+    test('content with newline returns false', () {
+      expect(bindings.pasteIsSafe('hello\nworld'), isFalse);
+    });
+  });
+
+  group('build info', () {
+    test('boolean and numeric fields return valid values', () {
+      final (_, simd) = bindings.buildInfoBool(BuildInfo.simd);
+      expect(simd, isA<bool>());
+      final (_, opt) = bindings.buildInfo(BuildInfo.optimize);
+      expect(opt, isA<int>());
+    });
+  });
+
+  group('mode report encode', () {
+    test('produces non-empty sequence', () {
+      final (_, result) = bindings.modeReportEncode(
+        const TerminalMode.cursorKeys().value,
+        ModeReportState.set,
+      );
+      expect(result, isNotEmpty);
+    });
+  });
+
+  group('size report encode', () {
+    test('csi18T encodes text area size in characters', () {
+      final (_, result) = bindings.sizeReportEncode(
+        SizeReportStyle.csi18T,
+        80,
+        24,
+        8,
+        16,
+      );
+      expect(result, startsWith('\x1b[8;'));
+      expect(result, endsWith('t'));
+    });
+  });
+
+  group('style', () {
+    test('default style has no colors or flags', () {
+      final style = bindings.styleDefault();
+      expect(style.bold, isFalse);
+      expect(style.italic, isFalse);
+      expect(style.foreground, isA<DefaultColor>());
+      expect(bindings.styleIsDefault(style), isTrue);
+    });
+  });
+
+  group('grid ref', () {
+    late int terminal;
+
+    setUp(() {
+      final (_, t) = bindings.terminalNew(80, 24, 0);
+      terminal = t;
+      bindings.terminalVtWrite(terminal, Uint8List.fromList('Hello'.codeUnits));
+    });
+
+    tearDown(() => bindings.terminalFree(terminal));
+
+    test('grid ref cell returns valid cell', () {
+      final (_, ref) = bindings.terminalGridRef(
+        terminal,
+        PointTag.active,
+        0,
+        0,
+      );
+      final (_, cell) = bindings.gridRefCell(ref);
+      expect(bindings.cellGetCodepoint(cell).$2, 'H'.codeUnitAt(0));
+    });
+
+    test('grid ref row returns valid row', () {
+      final (_, ref) = bindings.terminalGridRef(
+        terminal,
+        PointTag.active,
+        0,
+        0,
+      );
+      final (_, row) = bindings.gridRefRow(ref);
+      expect(row, isNonZero);
+    });
+
+    test('grid ref style reflects bold attribute', () {
+      final (_, t) = bindings.terminalNew(80, 24, 0);
+      bindings.terminalVtWrite(t, Uint8List.fromList('\x1b[1mBold'.codeUnits));
+      final (_, ref) = bindings.terminalGridRef(t, PointTag.active, 0, 0);
+      final (_, style) = bindings.gridRefStyle(ref);
+      expect(style.bold, isTrue);
+      bindings.terminalFree(t);
+    });
+
+    test('grid ref graphemes returns codepoints', () {
+      final (_, ref) = bindings.terminalGridRef(
+        terminal,
+        PointTag.active,
+        0,
+        0,
+      );
+      final (_, graphemes) = bindings.gridRefGraphemes(ref);
+      expect(graphemes, contains('H'.codeUnitAt(0)));
+    });
+  });
+
+  group('formatter', () {
+    late int terminal;
+
+    setUp(() {
+      final (_, t) = bindings.terminalNew(80, 24, 0);
+      terminal = t;
+      bindings.terminalVtWrite(
+        terminal,
+        Uint8List.fromList('Hello World'.codeUnits),
+      );
+    });
+
+    tearDown(() => bindings.terminalFree(terminal));
+
+    test('plain text format', () {
+      final (_, formatter) = bindings.formatterTerminalNew(
+        terminal,
+        FormatterFormat.plain,
+        trim: true,
+      );
+      final (_, result) = bindings.formatterFormat(formatter);
+      bindings.formatterFree(formatter);
+      expect(result, contains('Hello World'));
+    });
+
+    test('vt format preserves content', () {
+      final (_, formatter) = bindings.formatterTerminalNew(
+        terminal,
+        FormatterFormat.vt,
+        trim: true,
+      );
+      final (_, result) = bindings.formatterFormat(formatter);
+      bindings.formatterFree(formatter);
+      expect(result, contains('Hello World'));
+    });
+
+    test('html format produces tags', () {
+      bindings.terminalVtWrite(
+        terminal,
+        Uint8List.fromList('\x1b[1mBold'.codeUnits),
+      );
+      final (_, formatter) = bindings.formatterTerminalNew(
+        terminal,
+        FormatterFormat.html,
+        trim: true,
+      );
+      final (_, result) = bindings.formatterFormat(formatter);
+      bindings.formatterFree(formatter);
+      expect(result.toLowerCase(), contains('<'));
+    });
+
+    test('vt format with FormatterExtra includes extra state', () {
+      final (_, formatter) = bindings.formatterTerminalNew(
+        terminal,
+        FormatterFormat.vt,
+        extra: const FormatterExtra.all(),
+      );
+      final (_, withExtras) = bindings.formatterFormat(formatter);
+      bindings.formatterFree(formatter);
+
+      final (_, fmtBasic) = bindings.formatterTerminalNew(
+        terminal,
+        FormatterFormat.vt,
+      );
+      final (_, withoutExtras) = bindings.formatterFormat(fmtBasic);
+      bindings.formatterFree(fmtBasic);
+
+      expect(withExtras.length, greaterThan(withoutExtras.length));
     });
   });
 }

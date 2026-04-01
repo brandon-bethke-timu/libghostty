@@ -1,7 +1,7 @@
 @Tags(['wasm'])
 library;
 
-import 'package:libghostty/input.dart';
+import 'package:libghostty/libghostty.dart';
 import 'package:test/test.dart';
 
 import 'helpers/setup.dart';
@@ -25,8 +25,8 @@ void main() {
 
     test('encodes Ctrl+C as ETX byte', () {
       event.action = KeyAction.press;
-      event.key = Key.keyC;
-      event.mods = Mods.ctrl;
+      event.key = Key.c;
+      event.mods = const Mods.ctrl();
 
       final result = encoder.encode(event);
       expect(result, isNotEmpty);
@@ -52,11 +52,11 @@ void main() {
     });
 
     test('encodes with Kitty protocol flags', () {
-      encoder.setKittyFlags(KittyKeyFlags.all);
+      encoder.setKittyFlags(const KittyKeyFlags.all());
 
       event.action = KeyAction.press;
-      event.key = Key.keyC;
-      event.mods = Mods.ctrl;
+      event.key = Key.c;
+      event.mods = const Mods.ctrl();
       event.utf8 = 'c';
       event.unshiftedCodepoint = 0x63;
 
@@ -97,8 +97,21 @@ void main() {
       encoder.setIgnoreKeypadWithNumLock(enabled: true);
       encoder.setAltEscPrefix(enabled: true);
       encoder.setModifyOtherKeys(enabled: true);
-      encoder.setKittyFlags(KittyKeyFlags.disambiguate);
-      encoder.setOptionAsAlt(OptionAsAlt.both);
+      encoder.setKittyFlags(const KittyKeyFlags.disambiguate());
+      encoder.setOptionAsAlt(OptionAsAlt.true$);
+    });
+
+    test('encodes sequence exceeding initial 128-byte buffer', () {
+      encoder.setKittyFlags(const KittyKeyFlags.all());
+
+      event.action = KeyAction.press;
+      event.key = Key.a;
+      event.utf8 = 'a' * 100;
+      event.unshiftedCodepoint = 0x61;
+
+      final result = encoder.encode(event);
+      expect(result, isNotEmpty);
+      expect(result, startsWith('\x1b'));
     });
   });
 }

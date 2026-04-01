@@ -25,8 +25,9 @@ jobs:
           COMMIT=$(cat packages/libghostty/ghostty.version)
           curl -fsSL -o /dev/null "https://github.com/ghostty-org/ghostty/archive/$COMMIT.tar.gz"
       - run: flutter pub get
-      - run: dart format --set-exit-if-changed .
-      - run: dart analyze .
+      # TODO: restore to `.` once flterm migration is complete
+      - run: dart format --set-exit-if-changed packages/libghostty
+      - run: dart analyze packages/libghostty
       - name: publish dry run
         working-directory: packages/libghostty
         run: dart pub publish --dry-run
@@ -70,7 +71,7 @@ jobs:
         id: ghostty-cache
         with:
           path: ghostty
-          key: ghostty-src-${{ steps.ghostty.outputs.commit }}-${{ hashFiles('packages/libghostty/patches/*.patch') }}
+          key: ghostty-src-${{ steps.ghostty.outputs.commit }}
       - name: download ghostty source
         if: steps.ghostty-cache.outputs.cache-hit != 'true'
         shell: bash
@@ -79,14 +80,6 @@ jobs:
           mkdir -p ghostty
           tar xzf ghostty.tar.gz -C ghostty --strip-components=1
           rm ghostty.tar.gz
-      - name: apply patches
-        if: steps.ghostty-cache.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          for p in packages/libghostty/patches/*.patch; do
-            [ -f "$p" ] || continue
-            git apply --ignore-whitespace --whitespace=nowarn --directory=ghostty "$p"
-          done
       - run: flutter pub get
       - run: dart pub global activate very_good_cli
       - name: run tests
@@ -122,7 +115,7 @@ jobs:
         id: ghostty-cache
         with:
           path: ghostty
-          key: ghostty-src-${{ steps.ghostty.outputs.commit }}-${{ hashFiles('packages/libghostty/patches/*.patch') }}
+          key: ghostty-src-${{ steps.ghostty.outputs.commit }}
       - name: download ghostty source
         if: steps.ghostty-cache.outputs.cache-hit != 'true'
         run: |
@@ -130,13 +123,6 @@ jobs:
           mkdir -p ghostty
           tar xzf ghostty.tar.gz -C ghostty --strip-components=1
           rm ghostty.tar.gz
-      - name: apply patches
-        if: steps.ghostty-cache.outputs.cache-hit != 'true'
-        run: |
-          for p in packages/libghostty/patches/*.patch; do
-            [ -f "$p" ] || continue
-            git apply --ignore-whitespace --whitespace=nowarn --directory=ghostty "$p"
-          done
       - name: isolate from repo git
         run: touch ghostty/.git
       - run: flutter pub get

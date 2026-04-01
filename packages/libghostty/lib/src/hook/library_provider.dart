@@ -102,7 +102,7 @@ final class CompileFromSource extends LibraryProvider {
 
     final zigArgs = [
       'build',
-      'lib-vt',
+      '-Demit-lib-vt=true',
       '-p',
       Directory.fromUri(installDir).path,
       '--release=fast',
@@ -174,7 +174,6 @@ final class CompileFromSource extends LibraryProvider {
       }
     }
 
-    await applyPatches(cacheDir, input.packageRoot);
     return cacheDir;
   }
 

@@ -3,17 +3,12 @@
 [![pub package](https://img.shields.io/pub/v/libghostty)](https://pub.dev/packages/libghostty)
 [![GitHub Actions](https://github.com/elias8/libghostty/actions/workflows/build.yml/badge.svg)](https://github.com/elias8/libghostty/actions)
 
-Dart FFI bindings to [libghostty-vt](https://github.com/ghostty-org/ghostty), the VT emulator library 
-from [Ghostty](https://ghostty.org).
+Dart FFI & WASM bindings to [libghostty-vt](https://github.com/ghostty-org/ghostty),
+the terminal emulator library from [Ghostty](https://ghostty.org).
 
 | Android | iOS | macOS | Linux | Windows | Web |
 |:-------:|:---:|:-----:|:-----:|:-------:|:---:|
 |    ✅    |  ✅  |   ✅   |   ✅   |    ✅    |  ✅  |
-
-> [!CAUTION]
-> This package is under active development. The underlying native library (patch)
-> has not yet landed upstream in Ghostty. Expect breaking changes between releases.
-> Linux and Windows are CI-tested but unverified in a Flutter application.
 
 ## Getting started
 
@@ -22,89 +17,115 @@ dependencies:
   libghostty: ^0.0.4
 ```
 
+## Usage
+
+### Terminal emulation with effects
+
 ```dart
+import 'dart:typed_data';
 import 'package:libghostty/libghostty.dart';
 
-Future<void> main() async {
-  // Required on web only. You can safely call this on other platforms.
-  // await initializeForWeb(Uri.parse('assets/libghostty.wasm'));
-
+void main() {
   final terminal = Terminal(cols: 80, rows: 24);
-  terminal.write(Uint8List.fromList('Hello, terminal!\r\n'.codeUnits));
 
-  final cell = terminal.screen.cellAt(0, 0);
-  print(cell.content); // H
+  // Register effects (callbacks invoked synchronously during write).
+  terminal.onWritePty = (data) => pty.write(data);
+  terminal.onBell = () => playSound();
+  terminal.onTitleChanged = () => print('Title: ${terminal.title}');
+
+  // Write VT data and resize.
+  terminal.write(Uint8List.fromList(vtData));
+  terminal.resize(cols: 120, rows: 40, cellWidthPx: 8, cellHeightPx: 16);
+
+  // Read a single cell via grid reference (for ad-hoc lookups).
+  final ref = terminal.gridRefAt(col: 0, row: 0);
+  print(ref.content); // the character at (0, 0)
+  ref.dispose();
+
+  // Read screen via render state (for render loops).
+  terminal.renderState.update();
+  while (terminal.renderState.nextRow()) {
+    while (terminal.renderState.nextCell()) {
+      final cell = terminal.renderState.cell;
+      if (cell.hasText) print(cell.content);
+    }
+  }
+  terminal.renderState.markClean();
 
   terminal.dispose();
 }
 ```
 
-## Usage
-
-### Terminal emulation
-
-```dart
-final terminal = Terminal(cols: 80, rows: 24);
-
-terminal.write(Uint8List.fromList('\x1b[1;34mHello\x1b[0m\r\n'.codeUnits));
-
-for (var row = 0; row < terminal.screen.rows; row++) {
-  final text = terminal.screen.lineAt(row).text;
-  if (text.isNotEmpty) print(text);
-}
-
-terminal.dispose();
-```
-
 ### Key encoding
 
 ```dart
-final encoder = KeyEncoder();
 final event = KeyEvent()
-  ..action = KeyAction.press
-  ..key = Key.keyC
-  ..mods = Mods.ctrl;
+  ..action = .press
+  ..key = .c
+  ..mods = const Mods.ctrl();
 
-print(encoder.encode(event).codeUnits); // [3] (ETX)
-
+final encoded = terminal.keyEncoder.encode(event);
+if (encoded.isNotEmpty) pty.write(utf8.encode(encoded));
 event.dispose();
-encoder.dispose();
 ```
 
-### SGR parsing
+### Mouse encoding
 
 ```dart
-final parser = SgrParser();
-final attrs = parser.parse([1, 31]);
+// Sync tracking mode from terminal after each write.
+terminal.mouseEncoder.syncFrom(terminal);
+terminal.mouseEncoder.setSize(const MouseEncoderSize(
+  screenWidth: 640,
+  screenHeight: 384,
+  cellWidth: 8,
+  cellHeight: 16,
+));
 
-for (final attr in attrs) {
-  switch (attr) {
-    case SgrBold():
-      print('Bold');
-    case SgrForeground8(:final index):
-      print('Color: $index');
+final event = MouseEvent()
+  ..action = .press
+  ..button = .left;
+event.setPosition(10.0, 5.0);
+
+final encoded = terminal.mouseEncoder.encode(event);
+if (encoded.isNotEmpty) pty.write(utf8.encode(encoded));
+event.dispose();
+```
+
+### Formatting terminal content
+
+```dart
+final formatter = terminal.createFormatter(format: .plain);
+print(formatter.format());
+formatter.dispose();
+```
+
+### SGR and OSC parsing
+
+```dart
+// SGR: parse Select Graphic Rendition parameters.
+final sgr = SgrParser();
+for (final attr in sgr.parse([1, 38, 2, 255, 0, 0])) {
+  switch (attr.tag) {
+    case .bold:
+      print('bold');
+    case .directColorFg:
+      print('fg: ${attr.color}');
     default:
       break;
   }
 }
+sgr.dispose();
 
-parser.dispose();
-```
-
-### OSC parsing
-
-```dart
-final parser = OscParser();
-parser.feedBytes(utf8.encode('0;Window Tile'));
-final command = parser.end(0x07);
-
+// OSC: parse Operating System Command sequences.
+final osc = OscParser();
+osc.feedBytes(utf8.encode('0;My Title'));
+final command = osc.end(0x07);
 print(command.type);        // OscCommandType.changeWindowTitle
 print(command.windowTitle); // My Title
-
-parser.dispose();
+osc.dispose();
 ```
 
-### Paste validation
+### Paste safety
 
 ```dart
 pasteIsSafe('hello');           // true
@@ -112,7 +133,9 @@ pasteIsSafe('rm -rf /\n');      // false
 pasteIsSafe('\x1b[201~inject'); // false
 ```
 
-## Clean up
+### Web (WASM)
 
-All native backed objects require `dispose()` when no longer needed. Using 
-disposed object throws `DisposedException`. Double dispose is a no-op.
+```dart
+// Call once before using any bindings on web. No-op on other platforms.
+await initializeForWeb(Uri.parse('assets/libghostty.wasm'));
+```

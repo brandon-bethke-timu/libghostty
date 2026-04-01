@@ -1,4 +1,4 @@
-import 'package:libghostty/libghostty.dart';
+import 'package:libghostty/src/bindings/types/result.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -25,26 +25,16 @@ void main() {
       expect(exception.message, 'Bad input');
     });
 
-    test('DisposedException formats message with type name', () {
-      const exception = DisposedException('Terminal');
-      expect(exception.typeName, 'Terminal');
-      expect(exception.message, contains('Terminal'));
-      expect(exception.message, contains('disposed'));
-      expect(exception.toString(), exception.message);
+    test('NoValueException has default message', () {
+      const exception = NoValueException();
+      expect(exception.message, 'Requested value is not set.');
+      expect(exception.toString(), 'Requested value is not set.');
     });
 
-    test('sealed class pattern matching covers all subtypes', () {
-      String describe(LibGhosttyException e) {
-        return switch (e) {
-          OutOfMemoryException() => 'oom',
-          InvalidValueException() => 'invalid',
-          DisposedException() => 'disposed',
-        };
-      }
-
-      expect(describe(const OutOfMemoryException()), 'oom');
-      expect(describe(const InvalidValueException()), 'invalid');
-      expect(describe(const DisposedException('X')), 'disposed');
+    test('OutOfSpaceException has default message', () {
+      const exception = OutOfSpaceException();
+      expect(exception.message, 'Output buffer too small.');
+      expect(exception.toString(), 'Output buffer too small.');
     });
   });
 }
