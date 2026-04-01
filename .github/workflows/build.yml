@@ -32,6 +32,9 @@ jobs:
     name: build-${{ matrix.target }}
     needs: [checks]
     runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -62,7 +65,7 @@ jobs:
             runner: ubuntu-latest
             ext: so
           - target: x86_64-windows
-            runner: ubuntu-latest
+            runner: windows-latest
             ext: dll
           - target: aarch64-linux-android
             runner: ubuntu-latest
@@ -87,23 +90,23 @@ jobs:
       - uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         id: ghostty-cache
         with:
-          path: ${{ runner.temp }}/ghostty-src
+          path: ghostty-src
           key: ghostty-src-${{ steps.ghostty.outputs.full }}
       - name: download ghostty source
         if: steps.ghostty-cache.outputs.cache-hit != 'true'
         run: |
           curl -fsSL "https://github.com/ghostty-org/ghostty/archive/${{ steps.ghostty.outputs.full }}.tar.gz" -o ghostty.tar.gz
-          mkdir -p "$RUNNER_TEMP/ghostty-src"
-          tar xzf ghostty.tar.gz -C "$RUNNER_TEMP/ghostty-src" --strip-components=1
+          mkdir -p ghostty-src
+          tar xzf ghostty.tar.gz -C ghostty-src --strip-components=1
           rm ghostty.tar.gz
       - name: compile
-        working-directory: ${{ runner.temp }}/ghostty-src
+        working-directory: ghostty-src
         run: zig build -Demit-lib-vt=true --release=fast -Dtarget=${{ matrix.target }} ${{ matrix.extra_args }}
       - name: prepare artifact
         id: artifact
         run: |
           FILENAME="libghostty-${{ matrix.target }}.${{ matrix.ext }}"
-          cp "$RUNNER_TEMP"/ghostty-src/zig-out/*/*ghostty-vt.${{ matrix.ext }} "$FILENAME"
+          cp ghostty-src/zig-out/*/*ghostty-vt.${{ matrix.ext }} "$FILENAME"
           echo "filename=$FILENAME" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -129,23 +132,23 @@ jobs:
       - uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         id: ghostty-cache
         with:
-          path: ${{ runner.temp }}/ghostty-src
+          path: ghostty-src
           key: ghostty-src-${{ steps.ghostty.outputs.full }}
       - name: download ghostty source
         if: steps.ghostty-cache.outputs.cache-hit != 'true'
         run: |
           curl -fsSL "https://github.com/ghostty-org/ghostty/archive/${{ steps.ghostty.outputs.full }}.tar.gz" -o ghostty.tar.gz
-          mkdir -p "$RUNNER_TEMP/ghostty-src"
-          tar xzf ghostty.tar.gz -C "$RUNNER_TEMP/ghostty-src" --strip-components=1
+          mkdir -p ghostty-src
+          tar xzf ghostty.tar.gz -C ghostty-src --strip-components=1
           rm ghostty.tar.gz
       - name: compile wasm
-        working-directory: ${{ runner.temp }}/ghostty-src
+        working-directory: ghostty-src
         run: zig build -Demit-lib-vt=true -Dtarget=wasm32-freestanding -Doptimize=ReleaseSmall
       - name: prepare artifact
         id: artifact
         run: |
           FILENAME="libghostty-wasm32-freestanding.wasm"
-          cp "$RUNNER_TEMP/ghostty-src/zig-out/bin/ghostty-vt.wasm" "$FILENAME"
+          cp ghostty-src/zig-out/bin/ghostty-vt.wasm "$FILENAME"
           echo "filename=$FILENAME" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
