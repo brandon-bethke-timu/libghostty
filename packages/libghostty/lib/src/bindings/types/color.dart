@@ -53,6 +53,9 @@ final class RgbColor extends CellColor {
   @override
   int get hashCode => Object.hash(RgbColor, r, g, b);
 
+  /// Converts to a 32-bit ARGB int with full opacity.
+  int get toArgb32 => 0xFF000000 | (r << 16) | (g << 8) | b;
+
   @override
   bool operator ==(Object other) =>
       other is RgbColor && other.r == r && other.g == g && other.b == b;

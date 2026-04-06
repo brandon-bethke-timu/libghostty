@@ -651,13 +651,12 @@ void main() {
         expect(terminal.renderState.cell.graphemeLength, 0);
       });
 
-      test('backgroundArgb returns default when no background is set', () {
-        const defaultBg = 0xFF000000;
+      test('backgroundArgb returns null when no background is set', () {
         terminal.write(Uint8List.fromList('A'.codeUnits));
         terminal.renderState.update();
         terminal.renderState.nextRow();
         terminal.renderState.nextCell();
-        expect(terminal.renderState.cell.backgroundArgb(defaultBg), defaultBg);
+        expect(terminal.renderState.cell.backgroundArgb, isNull);
       });
 
       test('backgroundArgb returns packed ARGB for RGB background', () {
@@ -665,19 +664,15 @@ void main() {
         terminal.renderState.update();
         terminal.renderState.nextRow();
         terminal.renderState.nextCell();
-        expect(
-          terminal.renderState.cell.backgroundArgb(0xFF000000),
-          0xFFFF8000,
-        );
+        expect(terminal.renderState.cell.backgroundArgb, 0xFFFF8000);
       });
 
-      test('foregroundArgb returns default when no foreground is set', () {
-        const defaultFg = 0xFFFFFFFF;
+      test('foregroundArgb returns null when no foreground is set', () {
         terminal.write(Uint8List.fromList('A'.codeUnits));
         terminal.renderState.update();
         terminal.renderState.nextRow();
         terminal.renderState.nextCell();
-        expect(terminal.renderState.cell.foregroundArgb(defaultFg), defaultFg);
+        expect(terminal.renderState.cell.foregroundArgb, isNull);
       });
 
       test('foregroundArgb returns packed ARGB for RGB foreground', () {
@@ -685,10 +680,7 @@ void main() {
         terminal.renderState.update();
         terminal.renderState.nextRow();
         terminal.renderState.nextCell();
-        expect(
-          terminal.renderState.cell.foregroundArgb(0xFFFFFFFF),
-          0xFF00FF40,
-        );
+        expect(terminal.renderState.cell.foregroundArgb, 0xFF00FF40);
       });
     });
 

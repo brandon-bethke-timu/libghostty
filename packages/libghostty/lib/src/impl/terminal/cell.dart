@@ -25,6 +25,12 @@ class Cell {
     return code == .success ? rgb : null;
   }
 
+  /// Resolved background as packed ARGB int, or null if unset.
+  int? get backgroundArgb {
+    final (code, argb) = bindings.rowCellsGetBgColorArgb(_handle);
+    return code == .success ? argb : null;
+  }
+
   /// The cell's primary codepoint, or 0 if the cell has no text.
   /// Cached during [_refresh] to avoid redundant FFI calls. Accessed
   /// by both the renderer hot loop and [content].
@@ -47,6 +53,12 @@ class Cell {
   RgbColor? get foreground {
     final (code, rgb) = bindings.rowCellsGetFgColor(_handle);
     return code == .success ? rgb : null;
+  }
+
+  /// Resolved foreground as packed ARGB int, or null if unset.
+  int? get foregroundArgb {
+    final (code, argb) = bindings.rowCellsGetFgColorArgb(_handle);
+    return code == .success ? argb : null;
   }
 
   /// Number of codepoints in this cell's grapheme cluster (0 = empty).
@@ -88,20 +100,6 @@ class Cell {
   /// Cached during [_refresh] to avoid per-access FFI calls.
   CellWide get wide => _wide;
 
-  /// Resolved background as packed ARGB int, or [defaultArgb] if unset.
-  /// Avoids [RgbColor] allocation on the hot path.
-  int backgroundArgb(int defaultArgb) {
-    final (code, argb) = bindings.rowCellsGetBgColorArgb(_handle);
-    return code == .success ? argb : defaultArgb;
-  }
-
-  /// Resolved foreground as packed ARGB int, or [defaultArgb] if unset.
-  /// Avoids [RgbColor] allocation on the hot path.
-  int foregroundArgb(int defaultArgb) {
-    final (code, argb) = bindings.rowCellsGetFgColorArgb(_handle);
-    return code == .success ? argb : defaultArgb;
-  }
-
   bool _advance() {
     if (!bindings.rowCellsNext(_handle)) return false;
     _refresh();
@@ -115,10 +113,10 @@ class Cell {
     _codepoint = _graphemeLen > 0
         ? check(bindings.cellGetCodepoint(_rawCell))
         : 0;
-    // Non-empty cells with narrow codepoints (ASCII, Latin, Cyrillic) are
-    // always narrow. Empty cells and wide-range codepoints need the FFI
-    // query: empty cells can be spacer tails of wide characters.
-    _wide = _graphemeLen > 0 && !_couldBeWide(_codepoint)
+    // Fast path: single-codepoint cells in narrow Unicode ranges are always
+    // narrow. All others need FFI: empty cells can be spacer tails, and
+    // multi-codepoint graphemes can be widened by VS16 (mode 2027).
+    _wide = _graphemeLen == 1 && !_couldBeWide(_codepoint)
         ? .narrow
         : bindings.cellGetWide(_rawCell).$2;
   }
