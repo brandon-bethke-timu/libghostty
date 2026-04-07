@@ -121,28 +121,11 @@ class Cell {
         : bindings.cellGetWide(_rawCell).$2;
   }
 
-  /// Fast heuristic: returns false for codepoints that are definitively
-  /// narrow (< U+1100), avoiding the FFI call to [cellGetWide].
-  static bool _couldBeWide(int codepoint) {
-    if (codepoint < 0x1100) return false;
-    if (codepoint < 0x1160) return true;
-    if (codepoint < 0x2329) return false;
-    if (codepoint <= 0x232A) return true;
-    if (codepoint < 0x2E80) return false;
-    if (codepoint <= 0x9FFF) return true;
-    if (codepoint < 0xA960) return false;
-    if (codepoint <= 0xA97F) return true;
-    if (codepoint < 0xAC00) return false;
-    if (codepoint <= 0xD7FF) return true;
-    if (codepoint < 0xF900) return false;
-    if (codepoint <= 0xFAFF) return true;
-    if (codepoint < 0xFE10) return false;
-    if (codepoint <= 0xFE6F) return true;
-    if (codepoint < 0xFF01) return false;
-    if (codepoint <= 0xFF60) return true;
-    if (codepoint < 0xFFE0) return false;
-    if (codepoint <= 0xFFE6) return true;
-    if (codepoint < 0x1F000) return false;
-    return true;
-  }
+  /// Whether a single codepoint could have East Asian Wide or Fullwidth
+  /// width. Returns false for codepoints below U+1100 where no wide
+  /// characters exist. Multi-codepoint cells always use FFI regardless
+  /// of this check, so emoji_vs_base codepoints below U+1100 (digits,
+  /// `#`, `*`) are handled correctly since they only become wide in
+  /// multi-codepoint sequences with VS16.
+  static bool _couldBeWide(int codepoint) => codepoint >= 0x1100;
 }
