@@ -12,7 +12,7 @@ String? zigTarget(OS targetOS, Architecture targetArch, {IOSSdk? iOSSdk}) {
 
   final osStr = switch (targetOS) {
     OS.macOS => 'macos',
-    OS.linux => 'linux',
+    OS.linux => 'linux-gnu',
     OS.windows => 'windows',
     OS.iOS => iOSSdk == IOSSdk.iPhoneSimulator ? 'ios-simulator' : 'ios',
     OS.android => switch (targetArch) {

@@ -71,9 +71,9 @@ void main() {
         expect(target, 'arm-macos');
       });
 
-      test('linux arm produces arm-linux', () {
+      test('linux arm produces arm-linux-gnu', () {
         final target = zigTarget(OS.linux, Architecture.arm);
-        expect(target, 'arm-linux');
+        expect(target, 'arm-linux-gnu');
       });
 
       test('windows arm produces arm-windows', () {
