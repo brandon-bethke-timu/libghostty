@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.0.6
+
+### Added
+
+- **ARGB color accessors**: `Cell.backgroundArgb` and `Cell.foregroundArgb`
+  return resolved colors as packed 32-bit ARGB ints, or `null` if unset.
+  Callers handle the default themselves.
+- **`RgbColor.toArgb32`**: convert an `RgbColor` to a packed 32-bit ARGB int
+  with full opacity.
+- **`Cell.graphemeLength`**: number of codepoints in the cell's grapheme
+  cluster (0 for empty cells).
+
+### Changed
+
+- **Cell hot path**: `codepoint` and `wide` are cached during row iteration
+  to eliminate per-access FFI calls in the renderer hot loop.
+- **Row hot path**: the raw row pointer is cached and invalidated when the
+  iterator advances to a new row.
+
+### Fixed
+
+- **VS16 emoji width**: multi-codepoint graphemes are no longer misclassified
+  as narrow based on their first codepoint. The wide-cell fast path now only
+  applies to single-codepoint cells, so an emoji base followed by VS16 is
+  correctly marked wide.
+- **Wide-codepoint heuristic**: replaced the hand-rolled Unicode range table
+  in the wide-cell fast path with a single `>= U+1100` check. The old table
+  could mark some wide CJK codepoints as narrow without consulting the FFI
+  width query.
+
 ## 0.0.5
 
 ### Breaking
