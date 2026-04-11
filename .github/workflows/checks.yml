@@ -199,3 +199,25 @@ jobs:
       - name: run tests
         working-directory: packages/flterm
         run: very_good test
+
+  # Single required status that aggregates every conditional job above.
+  # Branch protection requires only this context, which lets the matrix
+  # and path-filtered jobs skip without blocking merges. Fails if any
+  # dependency failed or was cancelled; succeeds when they all passed
+  # or were skipped by `needs.changes`.
+  checks-passed:
+    name: checks-passed
+    if: always()
+    needs:
+      - analyze
+      - test-libghostty-native
+      - test-libghostty-wasm
+      - test-flterm
+    runs-on: ubuntu-latest
+    steps:
+      - name: verify required checks
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more required checks failed or were cancelled."
+            exit 1
+          fi
