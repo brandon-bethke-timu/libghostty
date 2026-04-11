@@ -7,6 +7,30 @@ env:
   ZIG_VERSION: "0.15.2"
 
 jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    outputs:
+      libghostty: ${{ steps.filter.outputs.libghostty }}
+      flterm: ${{ steps.filter.outputs.flterm }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        id: filter
+        with:
+          filters: |
+            libghostty:
+              - 'packages/libghostty/**'
+              - '!packages/libghostty/**/*.md'
+              - 'pubspec.yaml'
+              - '.github/workflows/checks.yml'
+              - '.github/workflows/build.yml'
+            flterm:
+              - 'packages/flterm/**'
+              - '!packages/flterm/**/*.md'
+              - 'pubspec.yaml'
+              - '.github/workflows/checks.yml'
+
   analyze:
     name: analyze
     runs-on: ubuntu-latest
@@ -26,19 +50,22 @@ jobs:
           COMMIT=$(cat packages/libghostty/ghostty.version)
           curl -fsSL -o /dev/null "https://github.com/ghostty-org/ghostty/archive/$COMMIT.tar.gz"
       - run: flutter pub get
-      # TODO: restore to `.` once flterm migration is complete
-      - run: dart format --set-exit-if-changed packages/libghostty
-      - run: dart analyze packages/libghostty
-      - name: publish dry run
+      - run: dart format --set-exit-if-changed .
+      - run: dart analyze .
+      - name: publish dry run libghostty
         working-directory: packages/libghostty
         run: dart pub publish --dry-run
+      - name: publish dry run flterm
+        working-directory: packages/flterm
+        run: dart pub publish --dry-run
 
-  test-native:
-    name: test-${{ matrix.os }}
-    needs: [analyze]
+  test-libghostty-native:
+    name: test-libghostty-${{ matrix.os }}
+    needs: [analyze, changes]
+    if: needs.changes.outputs.libghostty == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
           - os: macos-arm64
@@ -82,15 +109,21 @@ jobs:
           mkdir -p ghostty
           tar xzf ghostty.tar.gz -C ghostty --strip-components=1
           rm ghostty.tar.gz
+      - name: build libghostty from source
+        shell: bash
+        run: |
+          sed -i.bak 's/source: prebuilt/source: compile/' pubspec.yaml
+          rm pubspec.yaml.bak
       - run: flutter pub get
       - run: dart pub global activate very_good_cli
       - name: run tests
         working-directory: packages/libghostty
         run: very_good test --no-optimization
 
-  test-wasm:
-    name: test-wasm
-    needs: [analyze]
+  test-libghostty-wasm:
+    name: test-libghostty-wasm
+    needs: [analyze, changes]
+    if: needs.changes.outputs.libghostty == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -136,3 +169,33 @@ jobs:
       - name: run wasm tests
         working-directory: packages/libghostty
         run: very_good test --platform=chrome test/wasm
+
+  test-flterm:
+    name: test-flterm
+    needs: [analyze, changes]
+    if: needs.changes.outputs.flterm == 'true'
+    runs-on: ubuntu-latest
+    # Run inside the cirruslabs Flutter image so the libfreetype/libpng/skia
+    # stack matches local Docker development. Vanilla ubuntu-latest pulls
+    # in newer freetype security builds that shift anti-aliased pixels and
+    # break golden tests. When the `stable` tag is republished, regenerate
+    # goldens via `packages/flterm/tool/update_goldens.sh`.
+    container:
+      image: ghcr.io/cirruslabs/flutter:stable
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-tags: false
+      - uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: ~/.pub-cache
+          key: pub-flterm-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: pub-flterm-
+      - run: flutter pub get
+      - name: install very_good_cli
+        run: |
+          dart pub global activate very_good_cli
+          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+      - name: run tests
+        working-directory: packages/flterm
+        run: very_good test

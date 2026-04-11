@@ -1,4 +1,4 @@
-@Tags(['ffi'])
+@Tags(['ffi', 'golden'])
 library;
 
 import 'dart:convert';
@@ -24,7 +24,10 @@ void main() {
       setUp(() {
         terminal = Terminal(cols: _cols, rows: _rows);
         terminal.writeUtf8('Hello World!\r\n\x1b[1;4H');
-        final theme = TerminalTheme.dark().copyWith(fontSize: 24.0);
+        final theme = TerminalTheme.dark().copyWith(
+          fontSize: 24.0,
+          fontFamilyFallback: bundledFontFamilyFallback,
+        );
         metrics = measureCellMetrics(
           fontFamily: theme.fontFamily,
           fontSize: theme.fontSize,
@@ -118,7 +121,10 @@ void main() {
       late CellMetrics metrics;
 
       setUp(() {
-        final theme = TerminalTheme.dark().copyWith(fontSize: 24.0);
+        final theme = TerminalTheme.dark().copyWith(
+          fontSize: 24.0,
+          fontFamilyFallback: bundledFontFamilyFallback,
+        );
         metrics = measureCellMetrics(
           fontFamily: theme.fontFamily,
           fontSize: theme.fontSize,
@@ -169,7 +175,10 @@ void main() {
       late CellMetrics metrics;
 
       setUp(() {
-        final theme = TerminalTheme.dark().copyWith(fontSize: 24.0);
+        final theme = TerminalTheme.dark().copyWith(
+          fontSize: 24.0,
+          fontFamilyFallback: bundledFontFamilyFallback,
+        );
         metrics = measureCellMetrics(
           fontFamily: theme.fontFamily,
           fontSize: theme.fontSize,
@@ -274,7 +283,7 @@ TerminalTheme _cursorTheme(
 }) {
   return TerminalTheme.dark().copyWith(
     fontSize: 24.0,
-    fontFamilyFallback: fallback,
+    fontFamilyFallback: fallback ?? bundledFontFamilyFallback,
     cursor: CursorTheme(
       shape: shape,
       color: color,

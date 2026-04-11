@@ -3,8 +3,11 @@ name: build
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - 'packages/libghostty/lib/src/hook/asset_hashes.dart'
+    paths:
+      - 'packages/libghostty/**'
+      - '!packages/libghostty/lib/src/hook/asset_hashes.dart'
+      - '.github/workflows/build.yml'
+      - '.github/workflows/checks.yml'
 
 concurrency:
   group: build-libghostty

@@ -13,9 +13,11 @@ hooks:
   user_defines:
     libghostty:
       # How to obtain the native library binary.
-      # - `prebuilt` (default): Download from GitHub Releases
-      # - `compile`: Build from source using Zig
-      source: compile
+      # - `prebuilt` (default): Download from GitHub Releases. Matches what
+      #   downstream pub.dev users get. No zig or ghostty source required.
+      # - `compile`: Build from source using Zig. Use this when actively
+      #   working on libghostty itself or testing unreleased changes.
+      source: prebuilt
       # How to download source code when source=compile.
       # - `tarball` (default): Download tarball from GitHub Releases
       # - `git`: Clone from GitHub

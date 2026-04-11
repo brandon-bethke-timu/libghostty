@@ -1,4 +1,4 @@
-@Tags(['ffi'])
+@Tags(['ffi', 'golden'])
 library;
 
 import 'dart:convert';
@@ -17,7 +17,10 @@ void main() {
   setUpAll(loadBundledFonts);
 
   group('TerminalRenderer goldens', () {
-    final theme = TerminalTheme.dark().copyWith(fontSize: 24.0);
+    final theme = TerminalTheme.dark().copyWith(
+      fontSize: 24.0,
+      fontFamilyFallback: bundledFontFamilyFallback,
+    );
     late Terminal terminal;
     late CellMetrics goldenMetrics;
 
@@ -778,7 +781,11 @@ Widget _wrap(
         constraints: BoxConstraints(maxWidth: width, maxHeight: height),
         child: TerminalRenderer(
           terminal: terminal,
-          theme: theme ?? TerminalTheme.dark(),
+          theme:
+              theme ??
+              TerminalTheme.dark().copyWith(
+                fontFamilyFallback: bundledFontFamilyFallback,
+              ),
           metrics: metrics,
           offset: ViewportOffset.zero(),
           renderObserver: _TestRenderObserver(

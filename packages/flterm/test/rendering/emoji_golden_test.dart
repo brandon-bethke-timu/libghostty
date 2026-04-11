@@ -1,6 +1,6 @@
 // ignore_for_file: lines_longer_than_80_chars
 
-@Tags(['ffi'])
+@Tags(['ffi', 'golden'])
 library;
 
 import 'dart:convert';
@@ -357,7 +357,10 @@ const _cjkFallback = ['Noto Sans JP', 'JetBrains Mono'];
 const _cols = 25;
 const _emojiFallback = ['Noto Color Emoji', 'Noto Emoji', 'JetBrains Mono'];
 const _rows = 5;
-final _baseTheme = TerminalTheme.dark().copyWith(fontSize: 24.0);
+final _baseTheme = TerminalTheme.dark().copyWith(
+  fontSize: 24.0,
+  fontFamilyFallback: bundledFontFamilyFallback,
+);
 final _cjkCursorTheme = _cursorTheme(.block, fallback: _cjkFallback);
 final _emojiCursorTheme = _cursorTheme(.block, fallback: _emojiFallback);
 
@@ -379,7 +382,7 @@ final _mixedTheme = TerminalTheme.dark().copyWith(
 TerminalTheme _cursorTheme(CursorShape shape, {List<String>? fallback}) =>
     TerminalTheme.dark().copyWith(
       fontSize: 24.0,
-      fontFamilyFallback: fallback,
+      fontFamilyFallback: fallback ?? bundledFontFamilyFallback,
       cursor: CursorTheme(
         shape: shape,
         blinkInterval: const Duration(hours: 1),

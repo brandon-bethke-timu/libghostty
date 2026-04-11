@@ -13,6 +13,16 @@ final _fontsDir =
 /// are read from the binary tables rather than estimated.
 Uint8List? jetBrainsMonoBytes;
 
+/// Font family fallback list for golden tests. References only the fonts
+/// loaded by [loadBundledFonts] so glyph rendering does not depend on any
+/// platform-installed font (e.g. Apple Color Emoji), keeping output
+/// deterministic across macOS minor versions and CPU architectures.
+const bundledFontFamilyFallback = <String>[
+  'Noto Color Emoji',
+  'Noto Emoji',
+  'Noto Sans JP',
+];
+
 Future<void> loadBundledFonts() async {
   jetBrainsMonoBytes = await _load(
     'JetBrainsMono-Regular.ttf',
