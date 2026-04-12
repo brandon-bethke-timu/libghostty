@@ -806,6 +806,56 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<Style> terminalGetCursorStyle(int handle) {
+    return _terminalGetStyle(handle, .cursorStyle);
+  }
+
+  @override
+  CResult<bool> terminalGetMouseTracking(int handle) {
+    return _terminalGetBool(handle, .mouseTracking);
+  }
+
+  @override
+  CResult<int> terminalGetKittyImageStorageLimit(int handle) {
+    return _terminalGetU64(handle, .kittyImageStorageLimit);
+  }
+
+  @override
+  CResult<bool> terminalGetKittyImageMediumFile(int handle) {
+    return _terminalGetBool(handle, .kittyImageMediumFile);
+  }
+
+  @override
+  CResult<bool> terminalGetKittyImageMediumTempFile(int handle) {
+    return _terminalGetBool(handle, .kittyImageMediumTempFile);
+  }
+
+  @override
+  CResult<bool> terminalGetKittyImageMediumSharedMem(int handle) {
+    return _terminalGetBool(handle, .kittyImageMediumSharedMem);
+  }
+
+  @override
+  Result terminalSetKittyImageStorageLimit(int handle, int? limit) {
+    return _terminalSetU64(handle, .kittyImageStorageLimit, limit);
+  }
+
+  @override
+  Result terminalSetKittyImageMediumFile(int handle, {bool? enabled}) {
+    return _terminalSetBool(handle, .kittyImageMediumFile, enabled);
+  }
+
+  @override
+  Result terminalSetKittyImageMediumTempFile(int handle, {bool? enabled}) {
+    return _terminalSetBool(handle, .kittyImageMediumTempFile, enabled);
+  }
+
+  @override
+  Result terminalSetKittyImageMediumSharedMem(int handle, {bool? enabled}) {
+    return _terminalSetBool(handle, .kittyImageMediumSharedMem, enabled);
+  }
+
+  @override
   CResult<Uint8List> pasteEncode(String data, {required bool bracketed}) {
     return using((arena) {
       final encoded = utf8.encode(data);
@@ -1340,6 +1390,48 @@ class NativeBindings implements GhosttyBindings {
     return (result, _outBool.value);
   }
 
+  CResult<int> _terminalGetU64(int handle, TerminalData data) {
+    final result = ghostty_terminal_get(
+      Pointer.fromAddress(handle),
+      data,
+      _outU64.cast(),
+    );
+    return (result, _outU64.value);
+  }
+
+  CResult<Style> _terminalGetStyle(int handle, TerminalData data) {
+    final result = ghostty_terminal_get(
+      Pointer.fromAddress(handle),
+      data,
+      _outStyle.cast(),
+    );
+    return (result, _readNativeStyle(_outStyle.ref));
+  }
+
+  Result _terminalSetBool(int handle, TerminalOption option, bool? value) {
+    if (value == null) {
+      return ghostty_terminal_set(Pointer.fromAddress(handle), option, nullptr);
+    }
+    _outBool.value = value;
+    return ghostty_terminal_set(
+      Pointer.fromAddress(handle),
+      option,
+      _outBool.cast(),
+    );
+  }
+
+  Result _terminalSetU64(int handle, TerminalOption option, int? value) {
+    if (value == null) {
+      return ghostty_terminal_set(Pointer.fromAddress(handle), option, nullptr);
+    }
+    _outU64.value = value;
+    return ghostty_terminal_set(
+      Pointer.fromAddress(handle),
+      option,
+      _outU64.cast(),
+    );
+  }
+
   CResult<RgbColor> _terminalGetColor(int handle, TerminalData data) {
     final result = ghostty_terminal_get(
       Pointer.fromAddress(handle),
@@ -1731,6 +1823,44 @@ class NativeBindings implements GhosttyBindings {
       }
 
       return (result, [for (var i = 0; i < len; i++) _graphemeBuf[i]]);
+    });
+  }
+
+  @override
+  CResult<String> gridRefHyperlinkUri(int ref) {
+    return using((arena) {
+      final gridRef = Pointer<GridRef>.fromAddress(ref);
+      final outLen = arena<Size>();
+      var buf = arena<Uint8>(256);
+      var result = ghostty_grid_ref_hyperlink_uri(gridRef, buf, 256, outLen);
+      var len = outLen.value;
+
+      if (result == Result.outOfSpace) {
+        buf = arena<Uint8>(len);
+        result = ghostty_grid_ref_hyperlink_uri(gridRef, buf, len, outLen);
+        len = outLen.value;
+      }
+
+      if (len == 0) return (result, '');
+      return (result, utf8.decode(buf.asTypedList(len)));
+    });
+  }
+
+  @override
+  CResult<({int col, int row})> terminalPointFromGridRef(
+    int terminal,
+    int ref,
+    PointTag pointTag,
+  ) {
+    return using((arena) {
+      final out = arena<PointCoordinate>();
+      final result = ghostty_terminal_point_from_grid_ref(
+        Pointer.fromAddress(terminal),
+        Pointer<GridRef>.fromAddress(ref),
+        pointTag,
+        out,
+      );
+      return (result, (col: out.ref.x, row: out.ref.y));
     });
   }
 

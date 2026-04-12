@@ -149,6 +149,9 @@ class Terminal with Listenable {
     return _optionalColor(bindings.terminalGetColorCursorDefault(_handle));
   }
 
+  /// The cursor's current SGR style (applied to newly printed characters).
+  Style get cursorStyle => check(bindings.terminalGetCursorStyle(_handle));
+
   /// Effective foreground color (OSC override if active, otherwise default).
   ///
   /// Returns null if no color is configured (neither a default nor an OSC
@@ -173,6 +176,68 @@ class Terminal with Listenable {
 
   /// Total terminal height in pixels (rows * cell height).
   int get heightPx => check(bindings.terminalGetHeightPx(_handle));
+
+  /// Whether any mouse tracking mode is currently active.
+  bool get isMouseTracking => check(bindings.terminalGetMouseTracking(_handle));
+
+  /// Whether the file medium is enabled for Kitty image loading.
+  /// Returns null when Kitty graphics are not compiled in.
+  bool? get isKittyFileMedium {
+    final (code, value) = bindings.terminalGetKittyImageMediumFile(_handle);
+    return code == .noValue ? null : check((code, value));
+  }
+
+  /// Enables or disables the file medium for Kitty image loading.
+  void setKittyFileMedium({required bool enabled}) {
+    checkCode(
+      bindings.terminalSetKittyImageMediumFile(_handle, enabled: enabled),
+    );
+  }
+
+  /// Whether the shared memory medium is enabled for Kitty image loading.
+  /// Returns null when Kitty graphics are not compiled in.
+  bool? get isKittySharedMemMedium {
+    final (code, value) = bindings.terminalGetKittyImageMediumSharedMem(
+      _handle,
+    );
+    return code == .noValue ? null : check((code, value));
+  }
+
+  /// Enables or disables the shared memory medium for Kitty image loading.
+  void setKittySharedMemMedium({required bool enabled}) {
+    checkCode(
+      bindings.terminalSetKittyImageMediumSharedMem(_handle, enabled: enabled),
+    );
+  }
+
+  /// Whether the temporary file medium is enabled for Kitty image loading.
+  /// Returns null when Kitty graphics are not compiled in.
+  bool? get isKittyTempFileMedium {
+    final (code, value) = bindings.terminalGetKittyImageMediumTempFile(_handle);
+    return code == .noValue ? null : check((code, value));
+  }
+
+  /// Enables or disables the temporary file medium for Kitty image loading.
+  void setKittyTempFileMedium({required bool enabled}) {
+    checkCode(
+      bindings.terminalSetKittyImageMediumTempFile(_handle, enabled: enabled),
+    );
+  }
+
+  /// Kitty image storage limit in bytes for the active screen.
+  ///
+  /// Zero means the Kitty graphics protocol is disabled. Returns null when
+  /// Kitty graphics support is not compiled into the library.
+  int? get kittyImageStorageLimit {
+    final (code, value) = bindings.terminalGetKittyImageStorageLimit(_handle);
+    return code == .noValue ? null : check((code, value));
+  }
+
+  /// Sets the Kitty image storage limit in bytes. Zero or null disables
+  /// the Kitty graphics protocol entirely.
+  set kittyImageStorageLimit(int? value) {
+    checkCode(bindings.terminalSetKittyImageStorageLimit(_handle, value));
+  }
 
   /// Current Kitty keyboard protocol flags.
   ///

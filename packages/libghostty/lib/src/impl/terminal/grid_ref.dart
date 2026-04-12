@@ -20,6 +20,7 @@ class GridRef {
   static final _finalizer = Finalizer<int>(bindings.gridRefFree);
 
   final int _handle;
+  final int _terminalHandle;
   var _disposed = false;
 
   GridRef._(
@@ -27,7 +28,8 @@ class GridRef {
     required int col,
     required int row,
     PointTag pointTag = PointTag.active,
-  }) : _handle = check(
+  }) : _terminalHandle = terminalHandle,
+       _handle = check(
          bindings.terminalGridRef(terminalHandle, pointTag, col, row),
        ) {
     _finalizer.attach(this, _handle, detach: this);
@@ -48,6 +50,14 @@ class GridRef {
   /// Empty if the cell has no text.
   List<int> get graphemes => check(bindings.gridRefGraphemes(_handle));
 
+  /// The hyperlink URI at this position, or null if the cell has no hyperlink.
+  String? get hyperlinkUri {
+    final (code, uri) = bindings.gridRefHyperlinkUri(_handle);
+    if (code == Result.noValue) return null;
+    checkCode(code);
+    return uri.isEmpty ? null : uri;
+  }
+
   /// Whether the cell is the first cell of a wide character.
   bool get isWide => wide == CellWidth.wide;
 
@@ -63,6 +73,21 @@ class GridRef {
   /// The cell's width: [CellWidth.normal], [CellWidth.wide], or
   /// [CellWidth.spacerTail].
   CellWidth get wide => check(bindings.cellGetWide(cell));
+
+  /// Converts this grid reference to coordinates in the given coordinate
+  /// space. Returns null if the reference falls outside the requested
+  /// system (e.g. a scrollback row cannot be expressed in active
+  /// coordinates).
+  ({int col, int row})? pointIn(PointTag pointTag) {
+    final (code, point) = bindings.terminalPointFromGridRef(
+      _terminalHandle,
+      _handle,
+      pointTag,
+    );
+    if (code == Result.noValue) return null;
+    checkCode(code);
+    return point;
+  }
 
   /// Releases this grid reference.
   ///
