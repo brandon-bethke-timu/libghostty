@@ -137,6 +137,18 @@ abstract interface class GhosttyBindings {
   CResult<RgbColor> terminalGetColorCursorDefault(int handle);
   CResult<List<RgbColor>> terminalGetColorPaletteDefault(int handle);
 
+  CResult<Style> terminalGetCursorStyle(int handle);
+  CResult<bool> terminalGetMouseTracking(int handle);
+
+  CResult<int> terminalGetKittyImageStorageLimit(int handle);
+  CResult<bool> terminalGetKittyImageMediumFile(int handle);
+  CResult<bool> terminalGetKittyImageMediumTempFile(int handle);
+  CResult<bool> terminalGetKittyImageMediumSharedMem(int handle);
+  Result terminalSetKittyImageStorageLimit(int handle, int? limit);
+  Result terminalSetKittyImageMediumFile(int handle, {bool? enabled});
+  Result terminalSetKittyImageMediumTempFile(int handle, {bool? enabled});
+  Result terminalSetKittyImageMediumSharedMem(int handle, {bool? enabled});
+
   CResult<Uint8List> pasteEncode(String data, {required bool bracketed});
 
   void terminalSetOnWritePty(int handle, ValueSetter<Uint8List>? callback);
@@ -241,11 +253,17 @@ abstract interface class GhosttyBindings {
   bool styleIsDefault(Style style);
 
   CResult<int> terminalGridRef(int terminal, PointTag pointTag, int x, int y);
+  CResult<({int col, int row})> terminalPointFromGridRef(
+    int terminal,
+    int ref,
+    PointTag pointTag,
+  );
   void gridRefFree(int ref);
   CResult<int> gridRefCell(int ref);
   CResult<int> gridRefRow(int ref);
   CResult<Style> gridRefStyle(int ref);
   CResult<List<int>> gridRefGraphemes(int ref);
+  CResult<String> gridRefHyperlinkUri(int ref);
 
   CResult<int> formatterTerminalNew(
     int terminal,

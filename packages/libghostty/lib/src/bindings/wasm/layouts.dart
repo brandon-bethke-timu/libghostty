@@ -46,6 +46,11 @@ class Layouts {
   // GhosttyGridRef
   late final int gridRefSize;
 
+  // GhosttyPointCoordinate
+  late final int pointCoordinateSize;
+  late final int pointCoordinateX;
+  late final int pointCoordinateY;
+
   // GhosttyMouseEncoderSize
   late final int mouseEncoderSizeSize;
   late final int mouseEncoderSizeScreenWidth;
@@ -188,6 +193,9 @@ class Layouts {
     sub = _Struct(types, 'GhosttyPointCoordinate');
     pointX = valueOff + sub['x'];
     pointY = valueOff + sub['y'];
+    pointCoordinateSize = sub.size;
+    pointCoordinateX = sub['x'];
+    pointCoordinateY = sub['y'];
 
     struct = _Struct(types, 'GhosttyRenderStateColors');
     colorsSize = struct.size;

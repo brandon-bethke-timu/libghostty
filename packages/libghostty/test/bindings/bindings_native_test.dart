@@ -457,6 +457,145 @@ void main() {
     });
   });
 
+  group('terminal cursor style and mouse tracking', () {
+    late int terminal;
+
+    setUp(() {
+      final (_, t) = bindings.terminalNew(80, 24, 0);
+      terminal = t;
+    });
+
+    tearDown(() => bindings.terminalFree(terminal));
+
+    test('cursor style returns default style initially', () {
+      final (code, style) = bindings.terminalGetCursorStyle(terminal);
+      expect(code, Result.success);
+      expect(bindings.styleIsDefault(style), isTrue);
+    });
+
+    test('mouse tracking is false initially', () {
+      final (code, tracking) = bindings.terminalGetMouseTracking(terminal);
+      expect(code, Result.success);
+      expect(tracking, isFalse);
+    });
+  });
+
+  group('kitty image config', () {
+    late int terminal;
+
+    setUp(() {
+      final (_, t) = bindings.terminalNew(80, 24, 0);
+      terminal = t;
+    });
+
+    tearDown(() => bindings.terminalFree(terminal));
+
+    test('storage limit getter returns a value or noValue', () {
+      final (code, _) = bindings.terminalGetKittyImageStorageLimit(terminal);
+      expect(code, anyOf(Result.success, Result.noValue));
+    });
+
+    test('medium file getter returns a value or noValue', () {
+      final (code, _) = bindings.terminalGetKittyImageMediumFile(terminal);
+      expect(code, anyOf(Result.success, Result.noValue));
+    });
+
+    test('storage limit can be set', () {
+      final result = bindings.terminalSetKittyImageStorageLimit(
+        terminal,
+        1024 * 1024,
+      );
+      expect(result, Result.success);
+    });
+
+    test('medium file can be toggled', () {
+      final result = bindings.terminalSetKittyImageMediumFile(
+        terminal,
+        enabled: true,
+      );
+      expect(result, Result.success);
+    });
+
+    test('temp file medium getter returns a value or noValue', () {
+      final (code, _) = bindings.terminalGetKittyImageMediumTempFile(terminal);
+      expect(code, anyOf(Result.success, Result.noValue));
+    });
+
+    test('shared mem medium getter returns a value or noValue', () {
+      final (code, _) = bindings.terminalGetKittyImageMediumSharedMem(terminal);
+      expect(code, anyOf(Result.success, Result.noValue));
+    });
+
+    test('temp file medium can be toggled', () {
+      final result = bindings.terminalSetKittyImageMediumTempFile(
+        terminal,
+        enabled: true,
+      );
+      expect(result, Result.success);
+    });
+
+    test('shared mem medium can be toggled', () {
+      final result = bindings.terminalSetKittyImageMediumSharedMem(
+        terminal,
+        enabled: true,
+      );
+      expect(result, Result.success);
+    });
+  });
+
+  group('grid ref hyperlink uri', () {
+    late int terminal;
+
+    setUp(() {
+      final (_, t) = bindings.terminalNew(80, 24, 0);
+      terminal = t;
+      bindings.terminalVtWrite(terminal, Uint8List.fromList('Hello'.codeUnits));
+    });
+
+    tearDown(() => bindings.terminalFree(terminal));
+
+    test('returns empty string for cell without hyperlink', () {
+      final (_, ref) = bindings.terminalGridRef(
+        terminal,
+        PointTag.active,
+        0,
+        0,
+      );
+      final (code, uri) = bindings.gridRefHyperlinkUri(ref);
+      expect(code, Result.success);
+      expect(uri, isEmpty);
+    });
+  });
+
+  group('terminal point from grid ref', () {
+    late int terminal;
+
+    setUp(() {
+      final (_, t) = bindings.terminalNew(80, 24, 0);
+      terminal = t;
+      bindings.terminalVtWrite(terminal, Uint8List.fromList('Hello'.codeUnits));
+    });
+
+    tearDown(() => bindings.terminalFree(terminal));
+
+    test('roundtrips active coordinates', () {
+      final (_, ref) = bindings.terminalGridRef(
+        terminal,
+        PointTag.active,
+        3,
+        0,
+      );
+      final (code, point) = bindings.terminalPointFromGridRef(
+        terminal,
+        ref,
+        PointTag.active,
+      );
+      expect(code, Result.success);
+      expect(point.col, 3);
+      expect(point.row, 0);
+    });
+  });
+
   group('formatter', () {
     late int terminal;
 

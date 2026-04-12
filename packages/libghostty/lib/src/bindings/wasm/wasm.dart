@@ -867,6 +867,56 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<Style> terminalGetCursorStyle(int handle) {
+    return _terminalGetStyle(handle, .cursorStyle);
+  }
+
+  @override
+  CResult<bool> terminalGetMouseTracking(int handle) {
+    return _terminalGetBool(handle, .mouseTracking);
+  }
+
+  @override
+  CResult<int> terminalGetKittyImageStorageLimit(int handle) {
+    return _terminalGetU64(handle, .kittyImageStorageLimit);
+  }
+
+  @override
+  CResult<bool> terminalGetKittyImageMediumFile(int handle) {
+    return _terminalGetBool(handle, .kittyImageMediumFile);
+  }
+
+  @override
+  CResult<bool> terminalGetKittyImageMediumTempFile(int handle) {
+    return _terminalGetBool(handle, .kittyImageMediumTempFile);
+  }
+
+  @override
+  CResult<bool> terminalGetKittyImageMediumSharedMem(int handle) {
+    return _terminalGetBool(handle, .kittyImageMediumSharedMem);
+  }
+
+  @override
+  Result terminalSetKittyImageStorageLimit(int handle, int? limit) {
+    return _terminalSetU64(handle, .kittyImageStorageLimit, limit);
+  }
+
+  @override
+  Result terminalSetKittyImageMediumFile(int handle, {bool? enabled}) {
+    return _terminalSetBool(handle, .kittyImageMediumFile, enabled);
+  }
+
+  @override
+  Result terminalSetKittyImageMediumTempFile(int handle, {bool? enabled}) {
+    return _terminalSetBool(handle, .kittyImageMediumTempFile, enabled);
+  }
+
+  @override
+  Result terminalSetKittyImageMediumSharedMem(int handle, {bool? enabled}) {
+    return _terminalSetBool(handle, .kittyImageMediumSharedMem, enabled);
+  }
+
+  @override
   CResult<Uint8List> pasteEncode(String data, {required bool bracketed}) {
     final encoded = utf8.encode(data);
     final dataPtr = _exports.ghostty_wasm_alloc_u8_array(encoded.length);
@@ -1924,6 +1974,57 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<String> gridRefHyperlinkUri(int ref) {
+    const initSize = 256;
+    final outLen = _exports.ghostty_wasm_alloc_usize();
+    var buf = _exports.ghostty_wasm_alloc_u8_array(initSize);
+    var result = Result.fromValue(
+      _exports.ghostty_grid_ref_hyperlink_uri(ref, buf, initSize, outLen),
+    );
+    var len = _mem.readU32(outLen);
+
+    if (result == .outOfSpace) {
+      _exports.ghostty_wasm_free_u8_array(buf, initSize);
+      buf = _exports.ghostty_wasm_alloc_u8_array(len);
+      result = Result.fromValue(
+        _exports.ghostty_grid_ref_hyperlink_uri(ref, buf, len, outLen),
+      );
+      len = _mem.readU32(outLen);
+      final value = len == 0 ? '' : utf8.decode(_mem.readBytes(buf, len));
+      _exports.ghostty_wasm_free_usize(outLen);
+      _exports.ghostty_wasm_free_u8_array(buf, len);
+      return (result, value);
+    }
+
+    final value = len == 0 ? '' : utf8.decode(_mem.readBytes(buf, len));
+    _exports.ghostty_wasm_free_usize(outLen);
+    _exports.ghostty_wasm_free_u8_array(buf, initSize);
+    return (result, value);
+  }
+
+  @override
+  CResult<({int col, int row})> terminalPointFromGridRef(
+    int terminal,
+    int ref,
+    PointTag pointTag,
+  ) {
+    final size = _layout.pointCoordinateSize;
+    final outPtr = _exports.ghostty_wasm_alloc_u8_array(size);
+    final result = Result.fromValue(
+      _exports.ghostty_terminal_point_from_grid_ref(
+        terminal,
+        ref,
+        pointTag.value,
+        outPtr,
+      ),
+    );
+    final col = _mem.readU16(outPtr + _layout.pointCoordinateX);
+    final row = _mem.readU32(outPtr + _layout.pointCoordinateY);
+    _exports.ghostty_wasm_free_u8_array(outPtr, size);
+    return (result, (col: col, row: row));
+  }
+
+  @override
   CResult<int> formatterTerminalNew(
     int terminal,
     FormatterFormat format, {
@@ -2057,6 +2158,46 @@ class WasmBindings implements GhosttyBindings {
     final value = _mem.readU32(outPtr);
     _exports.ghostty_wasm_free_usize(outPtr);
     return (.fromValue(result), value);
+  }
+
+  CResult<int> _terminalGetU64(int handle, TerminalData data) {
+    final outPtr = _exports.ghostty_wasm_alloc_u8_array(8);
+    final result = _exports.ghostty_terminal_get(handle, data.value, outPtr);
+    final value = _mem.readU64(outPtr);
+    _exports.ghostty_wasm_free_u8_array(outPtr, 8);
+    return (.fromValue(result), value);
+  }
+
+  CResult<Style> _terminalGetStyle(int handle, TerminalData data) {
+    final stylePtr = _exports.ghostty_wasm_alloc_u8_array(_layout.styleSize);
+    _mem.writeU32(stylePtr, _layout.styleSize);
+    final result = _exports.ghostty_terminal_get(handle, data.value, stylePtr);
+    final value = _readStyle(stylePtr);
+    _exports.ghostty_wasm_free_u8_array(stylePtr, _layout.styleSize);
+    return (.fromValue(result), value);
+  }
+
+  Result _terminalSetBool(int handle, TerminalOption option, bool? value) {
+    if (value == null) {
+      return .fromValue(_exports.ghostty_terminal_set(handle, option.value, 0));
+    }
+    final ptr = _exports.ghostty_wasm_alloc_u8();
+    _mem.writeU8(ptr, value ? 1 : 0);
+    final result = _exports.ghostty_terminal_set(handle, option.value, ptr);
+    _exports.ghostty_wasm_free_u8(ptr);
+    return .fromValue(result);
+  }
+
+  Result _terminalSetU64(int handle, TerminalOption option, int? value) {
+    if (value == null) {
+      return .fromValue(_exports.ghostty_terminal_set(handle, option.value, 0));
+    }
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(8);
+    _mem.writeU32(ptr, value & 0xFFFFFFFF);
+    _mem.writeU32(ptr + 4, value >> 32);
+    final result = _exports.ghostty_terminal_set(handle, option.value, ptr);
+    _exports.ghostty_wasm_free_u8_array(ptr, 8);
+    return .fromValue(result);
   }
 
   CResult<String> _terminalGetString(int handle, TerminalData data) {
