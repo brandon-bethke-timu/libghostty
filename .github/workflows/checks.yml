@@ -109,11 +109,6 @@ jobs:
           mkdir -p ghostty
           tar xzf ghostty.tar.gz -C ghostty --strip-components=1
           rm ghostty.tar.gz
-      - name: build libghostty from source
-        shell: bash
-        run: |
-          sed -i.bak 's/source: prebuilt/source: compile/' pubspec.yaml
-          rm pubspec.yaml.bak
       - run: flutter pub get
       - run: dart pub global activate very_good_cli
       - name: run tests
@@ -186,11 +181,33 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-tags: false
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: ${{ env.ZIG_VERSION }}
       - uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           path: ~/.pub-cache
           key: pub-flterm-${{ hashFiles('**/pubspec.lock') }}
           restore-keys: pub-flterm-
+      - name: resolve ghostty source
+        id: ghostty
+        shell: bash
+        run: |
+          COMMIT=$(cat packages/libghostty/ghostty.version)
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        id: ghostty-cache
+        with:
+          path: ghostty
+          key: ghostty-src-${{ steps.ghostty.outputs.commit }}
+      - name: download ghostty source
+        if: steps.ghostty-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          curl -fsSL "https://github.com/ghostty-org/ghostty/archive/${{ steps.ghostty.outputs.commit }}.tar.gz" -o ghostty.tar.gz
+          mkdir -p ghostty
+          tar xzf ghostty.tar.gz -C ghostty --strip-components=1
+          rm ghostty.tar.gz
       - run: flutter pub get
       - name: install very_good_cli
         run: |
