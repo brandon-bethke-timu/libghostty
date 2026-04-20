@@ -52,6 +52,35 @@ JSObject _buildImports() {
 @JS('WebAssembly.instantiate')
 external JSPromise _wasmInstantiate(JSArrayBuffer bytes, JSObject imports);
 
+const RawPlacement _emptyPlacement = (
+  imageId: 0,
+  placementId: 0,
+  isVirtual: false,
+  xOffset: 0,
+  yOffset: 0,
+  sourceX: 0,
+  sourceY: 0,
+  sourceWidth: 0,
+  sourceHeight: 0,
+  columns: 0,
+  rows: 0,
+  z: 0,
+);
+
+const RawPlacementRenderInfo _emptyRenderInfo = (
+  pixelWidth: 0,
+  pixelHeight: 0,
+  gridCols: 0,
+  gridRows: 0,
+  viewportCol: 0,
+  viewportRow: 0,
+  viewportVisible: false,
+  sourceX: 0,
+  sourceY: 0,
+  sourceWidth: 0,
+  sourceHeight: 0,
+);
+
 class WasmBindings implements GhosttyBindings {
   final Mem _mem;
   final web.Table _table;
@@ -1293,6 +1322,240 @@ class WasmBindings implements GhosttyBindings {
   void sysClearLogCallback() {
     _exports.ghostty_sys_set(SysOption.log.value, 0);
     if (_sysLogIndex case final index?) _table.set(index);
+    // _sysLogIndex is retained so a later sysSetLogCallback reuses the
+    // same table slot instead of growing the indirect function table.
+  }
+
+  @override
+  int kittyGraphicsGet(int handle) {
+    final outPtr = _exports.ghostty_wasm_alloc_opaque();
+    final code = _exports.ghostty_terminal_get(
+      handle,
+      TerminalData.kittyGraphics.value,
+      outPtr,
+    );
+    final graphics = _mem.readPtr(outPtr);
+    _exports.ghostty_wasm_free_opaque(outPtr);
+    return code == Result.success.value ? graphics : 0;
+  }
+
+  @override
+  int kittyGraphicsImage(int graphics, int imageId) {
+    if (graphics == 0) return 0;
+    return _exports.ghostty_kitty_graphics_image(graphics, imageId);
+  }
+
+  @override
+  CResult<int> kittyGraphicsImageGetId(int image) =>
+      _kittyImageGetU32(image, KittyGraphicsImageData.id);
+
+  @override
+  CResult<int> kittyGraphicsImageGetNumber(int image) =>
+      _kittyImageGetU32(image, KittyGraphicsImageData.number);
+
+  @override
+  CResult<int> kittyGraphicsImageGetWidth(int image) =>
+      _kittyImageGetU32(image, KittyGraphicsImageData.width);
+
+  @override
+  CResult<int> kittyGraphicsImageGetHeight(int image) =>
+      _kittyImageGetU32(image, KittyGraphicsImageData.height);
+
+  @override
+  CResult<KittyImageFormat> kittyGraphicsImageGetFormat(int image) {
+    final (code, value) = _kittyImageGetU32(
+      image,
+      KittyGraphicsImageData.format,
+    );
+    return (code, KittyImageFormat.fromValue(value));
+  }
+
+  @override
+  CResult<KittyImageCompression> kittyGraphicsImageGetCompression(int image) {
+    final (code, value) = _kittyImageGetU32(
+      image,
+      KittyGraphicsImageData.compression,
+    );
+    return (code, KittyImageCompression.fromValue(value));
+  }
+
+  @override
+  CResult<Uint8List> kittyGraphicsImageGetPixelData(int image) {
+    if (image == 0) return (Result.invalidValue, Uint8List(0));
+    final ptrOut = _exports.ghostty_wasm_alloc_opaque();
+    final lenOut = _exports.ghostty_wasm_alloc_usize();
+    try {
+      final ptrCode = _exports.ghostty_kitty_graphics_image_get(
+        image,
+        KittyGraphicsImageData.dataPtr.value,
+        ptrOut,
+      );
+      if (ptrCode != Result.success.value) {
+        return (Result.fromValue(ptrCode), Uint8List(0));
+      }
+      final lenCode = _exports.ghostty_kitty_graphics_image_get(
+        image,
+        KittyGraphicsImageData.dataLen.value,
+        lenOut,
+      );
+      if (lenCode != Result.success.value) {
+        return (Result.fromValue(lenCode), Uint8List(0));
+      }
+      final dataPtr = _mem.readPtr(ptrOut);
+      final dataLen = _mem.readU32(lenOut);
+      if (dataPtr == 0 || dataLen == 0) {
+        return (Result.success, Uint8List(0));
+      }
+      return (
+        Result.success,
+        Uint8List.fromList(_mem.readBytes(dataPtr, dataLen)),
+      );
+    } finally {
+      _exports.ghostty_wasm_free_opaque(ptrOut);
+      _exports.ghostty_wasm_free_usize(lenOut);
+    }
+  }
+
+  CResult<int> _kittyImageGetU32(int image, KittyGraphicsImageData data) {
+    if (image == 0) return (Result.invalidValue, 0);
+    final outPtr = _exports.ghostty_wasm_alloc_usize();
+    final code = _exports.ghostty_kitty_graphics_image_get(
+      image,
+      data.value,
+      outPtr,
+    );
+    final value = _mem.readU32(outPtr);
+    _exports.ghostty_wasm_free_usize(outPtr);
+    return (Result.fromValue(code), value);
+  }
+
+  @override
+  CResult<int> kittyGraphicsPlacementIteratorNew() {
+    final out = _exports.ghostty_wasm_alloc_opaque();
+    final code = _exports.ghostty_kitty_graphics_placement_iterator_new(0, out);
+    final handle = _mem.readPtr(out);
+    _exports.ghostty_wasm_free_opaque(out);
+    return (Result.fromValue(code), handle);
+  }
+
+  @override
+  void kittyGraphicsPlacementIteratorFree(int iterator) {
+    if (iterator == 0) return;
+    _exports.ghostty_kitty_graphics_placement_iterator_free(iterator);
+  }
+
+  @override
+  Result kittyGraphicsGetPlacements(int graphics, int iterator) {
+    if (graphics == 0 || iterator == 0) return Result.invalidValue;
+    final out = _exports.ghostty_wasm_alloc_opaque();
+    _mem.writeU32(out, iterator);
+    final code = _exports.ghostty_kitty_graphics_get(
+      graphics,
+      KittyGraphicsData.placementIterator.value,
+      out,
+    );
+    _exports.ghostty_wasm_free_opaque(out);
+    return Result.fromValue(code);
+  }
+
+  @override
+  Result kittyGraphicsPlacementIteratorSetLayer(
+    int iterator,
+    KittyPlacementLayer layer,
+  ) {
+    if (iterator == 0) return Result.invalidValue;
+    final ptr = _exports.ghostty_wasm_alloc_usize();
+    _mem.writeU32(ptr, layer.value);
+    final code = _exports.ghostty_kitty_graphics_placement_iterator_set(
+      iterator,
+      KittyGraphicsPlacementIteratorOption.layer.value,
+      ptr,
+    );
+    _exports.ghostty_wasm_free_usize(ptr);
+    return Result.fromValue(code);
+  }
+
+  @override
+  bool kittyGraphicsPlacementNext(int iterator) {
+    if (iterator == 0) return false;
+    return _exports.ghostty_kitty_graphics_placement_next(iterator) != 0;
+  }
+
+  @override
+  CResult<RawPlacement> kittyGraphicsPlacementGet(int iterator) {
+    if (iterator == 0) return (Result.invalidValue, _emptyPlacement);
+    final out = _exports.ghostty_wasm_alloc_usize();
+    int readU32(KittyGraphicsPlacementData tag) {
+      _exports.ghostty_kitty_graphics_placement_get(iterator, tag.value, out);
+      return _mem.readU32(out);
+    }
+
+    int readI32(KittyGraphicsPlacementData tag) {
+      _exports.ghostty_kitty_graphics_placement_get(iterator, tag.value, out);
+      return _mem.readI32(out);
+    }
+
+    bool readBool(KittyGraphicsPlacementData tag) {
+      _exports.ghostty_kitty_graphics_placement_get(iterator, tag.value, out);
+      return _mem.readU8(out) != 0;
+    }
+
+    final placement = (
+      imageId: readU32(KittyGraphicsPlacementData.imageId),
+      placementId: readU32(KittyGraphicsPlacementData.placementId),
+      isVirtual: readBool(KittyGraphicsPlacementData.isVirtual),
+      xOffset: readU32(KittyGraphicsPlacementData.xOffset),
+      yOffset: readU32(KittyGraphicsPlacementData.yOffset),
+      sourceX: readU32(KittyGraphicsPlacementData.sourceX),
+      sourceY: readU32(KittyGraphicsPlacementData.sourceY),
+      sourceWidth: readU32(KittyGraphicsPlacementData.sourceWidth),
+      sourceHeight: readU32(KittyGraphicsPlacementData.sourceHeight),
+      columns: readU32(KittyGraphicsPlacementData.columns),
+      rows: readU32(KittyGraphicsPlacementData.rows),
+      z: readI32(KittyGraphicsPlacementData.z),
+    );
+    _exports.ghostty_wasm_free_usize(out);
+    return (Result.success, placement);
+  }
+
+  @override
+  CResult<RawPlacementRenderInfo> kittyGraphicsPlacementRenderInfo(
+    int iterator,
+    int image,
+    int terminal,
+  ) {
+    if (iterator == 0 || image == 0 || terminal == 0) {
+      return (Result.invalidValue, _emptyRenderInfo);
+    }
+    final size = _layout.kittyRenderInfoSize;
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(size);
+    _mem.writeU32(ptr, size);
+    final code = _exports.ghostty_kitty_graphics_placement_render_info(
+      iterator,
+      image,
+      terminal,
+      ptr,
+    );
+    if (code != Result.success.value) {
+      _exports.ghostty_wasm_free_u8_array(ptr, size);
+      return (Result.fromValue(code), _emptyRenderInfo);
+    }
+    final info = (
+      pixelWidth: _mem.readU32(ptr + _layout.kittyRenderInfoPixelWidth),
+      pixelHeight: _mem.readU32(ptr + _layout.kittyRenderInfoPixelHeight),
+      gridCols: _mem.readU32(ptr + _layout.kittyRenderInfoGridCols),
+      gridRows: _mem.readU32(ptr + _layout.kittyRenderInfoGridRows),
+      viewportCol: _mem.readI32(ptr + _layout.kittyRenderInfoViewportCol),
+      viewportRow: _mem.readI32(ptr + _layout.kittyRenderInfoViewportRow),
+      viewportVisible:
+          _mem.readU8(ptr + _layout.kittyRenderInfoViewportVisible) != 0,
+      sourceX: _mem.readU32(ptr + _layout.kittyRenderInfoSourceX),
+      sourceY: _mem.readU32(ptr + _layout.kittyRenderInfoSourceY),
+      sourceWidth: _mem.readU32(ptr + _layout.kittyRenderInfoSourceWidth),
+      sourceHeight: _mem.readU32(ptr + _layout.kittyRenderInfoSourceHeight),
+    );
+    _exports.ghostty_wasm_free_u8_array(ptr, size);
+    return (Result.success, info);
   }
 
   void _installSysLog(void Function(int, int, int, int, int, int) fn) {

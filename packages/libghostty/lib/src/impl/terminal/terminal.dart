@@ -14,6 +14,7 @@ part 'cell.dart';
 part 'cursor.dart';
 part 'formatter.dart';
 part 'grid_ref.dart';
+part 'kitty_graphics.dart';
 part 'render_state.dart';
 part 'row.dart';
 part 'selection.dart';
@@ -180,6 +181,23 @@ class Terminal with Listenable {
 
   /// Whether any mouse tracking mode is currently active.
   bool get isMouseTracking => check(bindings.terminalGetMouseTracking(_handle));
+
+  /// Image storage for the Kitty graphics protocol on the active
+  /// screen, or null when Kitty graphics are disabled in the native
+  /// library build.
+  ///
+  /// The returned [KittyGraphics] handle is borrowed from the terminal
+  /// and is invalidated by any mutating terminal call ([write],
+  /// [reset], [resize]); re-read this getter after such operations
+  /// rather than retaining the previous value.
+  ///
+  /// Image storage must be enabled before any images are kept: set a
+  /// non-zero [kittyImageStorageLimit]. PNG payloads additionally
+  /// require a PNG decoder hook registered by the embedder.
+  KittyGraphics? get kittyGraphics {
+    final handle = bindings.kittyGraphicsGet(_handle);
+    return handle == 0 ? null : KittyGraphics._(handle, _handle);
+  }
 
   /// Whether the file medium is enabled for Kitty image loading.
   /// Returns null when Kitty graphics are not compiled in.

@@ -38,3 +38,47 @@ typedef RawSelection = ({int start, int end, bool rectangle});
 /// scope and message byte slices have been decoded to Dart strings.
 typedef SysLogCallback =
     void Function(SysLogLevel level, String scope, String message);
+
+/// Raw placement metadata read from a Kitty graphics placement
+/// iterator.
+///
+/// Sub-cell offsets and source rectangles are in pixels. `columns` and
+/// `rows` may be zero when the protocol leaves the grid extent implicit
+/// (the size is then derived from the image). `z` is signed; see
+/// [KittyPlacementLayer] for how it maps to paint order.
+typedef RawPlacement = ({
+  int imageId,
+  int placementId,
+  bool isVirtual,
+  int xOffset,
+  int yOffset,
+  int sourceX,
+  int sourceY,
+  int sourceWidth,
+  int sourceHeight,
+  int columns,
+  int rows,
+  int z,
+});
+
+/// Resolved rendering geometry for a placement, combining rendered
+/// pixel size, grid extent, viewport-relative position, and the
+/// clamped source rectangle.
+///
+/// `viewportCol`/`viewportRow` are meaningful only when
+/// `viewportVisible` is true. Source rectangle fields have the
+/// protocol's "0 means full image" semantics already applied and are
+/// clamped to the image bounds.
+typedef RawPlacementRenderInfo = ({
+  int pixelWidth,
+  int pixelHeight,
+  int gridCols,
+  int gridRows,
+  int viewportCol,
+  int viewportRow,
+  bool viewportVisible,
+  int sourceX,
+  int sourceY,
+  int sourceWidth,
+  int sourceHeight,
+});

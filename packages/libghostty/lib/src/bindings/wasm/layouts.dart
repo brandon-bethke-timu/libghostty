@@ -53,6 +53,20 @@ class Layouts {
   // GhosttyGridRef
   late final int gridRefSize;
 
+  // GhosttyKittyGraphicsPlacementRenderInfo
+  late final int kittyRenderInfoSize;
+  late final int kittyRenderInfoPixelWidth;
+  late final int kittyRenderInfoPixelHeight;
+  late final int kittyRenderInfoGridCols;
+  late final int kittyRenderInfoGridRows;
+  late final int kittyRenderInfoViewportCol;
+  late final int kittyRenderInfoViewportRow;
+  late final int kittyRenderInfoViewportVisible;
+  late final int kittyRenderInfoSourceX;
+  late final int kittyRenderInfoSourceY;
+  late final int kittyRenderInfoSourceWidth;
+  late final int kittyRenderInfoSourceHeight;
+
   // GhosttyPointCoordinate
   late final int pointCoordinateSize;
   late final int pointCoordinateX;
@@ -185,6 +199,21 @@ class Layouts {
 
     struct = _Struct(types, 'GhosttyGridRef');
     gridRefSize = struct.size;
+
+    // TODO(elias8): migrate to `_Struct(types, ...)` once upstream ghostty
+    // registers `GhosttyKittyGraphicsPlacementRenderInfo` in `types.zig`.
+    kittyRenderInfoSize = 48;
+    kittyRenderInfoPixelWidth = 4;
+    kittyRenderInfoPixelHeight = 8;
+    kittyRenderInfoGridCols = 12;
+    kittyRenderInfoGridRows = 16;
+    kittyRenderInfoViewportCol = 20;
+    kittyRenderInfoViewportRow = 24;
+    kittyRenderInfoViewportVisible = 28;
+    kittyRenderInfoSourceX = 32;
+    kittyRenderInfoSourceY = 36;
+    kittyRenderInfoSourceWidth = 40;
+    kittyRenderInfoSourceHeight = 44;
 
     struct = _Struct(types, 'GhosttyMouseEncoderSize');
     mouseEncoderSizeSize = struct.size;

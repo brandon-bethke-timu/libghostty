@@ -171,6 +171,54 @@ abstract interface class GhosttyBindings {
   void sysSetLogToStderr();
   void sysClearLogCallback();
 
+  /// Returns an opaque kitty graphics storage handle for [handle], or 0
+  /// when kitty graphics are disabled in the native library build.
+  int kittyGraphicsGet(int handle);
+
+  /// Returns an opaque kitty image handle for [imageId] under
+  /// [graphics], or 0 when no image with that id exists.
+  int kittyGraphicsImage(int graphics, int imageId);
+
+  CResult<int> kittyGraphicsImageGetId(int image);
+  CResult<int> kittyGraphicsImageGetNumber(int image);
+  CResult<int> kittyGraphicsImageGetWidth(int image);
+  CResult<int> kittyGraphicsImageGetHeight(int image);
+  CResult<KittyImageFormat> kittyGraphicsImageGetFormat(int image);
+  CResult<KittyImageCompression> kittyGraphicsImageGetCompression(int image);
+
+  /// Returns a borrowed view of the image's raw pixel bytes. Valid only
+  /// until the next mutating terminal call.
+  CResult<Uint8List> kittyGraphicsImageGetPixelData(int image);
+
+  /// Creates a placement iterator. Returns an opaque handle the caller
+  /// must pass to [kittyGraphicsPlacementIteratorFree].
+  CResult<int> kittyGraphicsPlacementIteratorNew();
+  void kittyGraphicsPlacementIteratorFree(int iterator);
+
+  /// Populates [iterator] with the current placements in [graphics].
+  /// Data yielded by the iterator is valid only until the next mutating
+  /// terminal call.
+  Result kittyGraphicsGetPlacements(int graphics, int iterator);
+
+  Result kittyGraphicsPlacementIteratorSetLayer(
+    int iterator,
+    KittyPlacementLayer layer,
+  );
+
+  /// Advances to the next placement. Returns false when exhausted.
+  bool kittyGraphicsPlacementNext(int iterator);
+
+  CResult<RawPlacement> kittyGraphicsPlacementGet(int iterator);
+
+  /// Computes full rendering geometry for the iterator's current
+  /// placement. Returns [Result.noValue] when the placement is fully
+  /// off-screen or virtual.
+  CResult<RawPlacementRenderInfo> kittyGraphicsPlacementRenderInfo(
+    int iterator,
+    int image,
+    int terminal,
+  );
+
   CResult<int> renderStateNew();
   void renderStateFree(int handle);
   Result renderStateUpdate(int state, int terminal);

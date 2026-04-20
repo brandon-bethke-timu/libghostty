@@ -18,6 +18,35 @@ final GhosttyBindings bindings = NativeBindings();
 
 Future<void> initializeForWeb(Uri wasmUri) async {}
 
+const RawPlacement _emptyPlacement = (
+  imageId: 0,
+  placementId: 0,
+  isVirtual: false,
+  xOffset: 0,
+  yOffset: 0,
+  sourceX: 0,
+  sourceY: 0,
+  sourceWidth: 0,
+  sourceHeight: 0,
+  columns: 0,
+  rows: 0,
+  z: 0,
+);
+
+const RawPlacementRenderInfo _emptyRenderInfo = (
+  pixelWidth: 0,
+  pixelHeight: 0,
+  gridCols: 0,
+  gridRows: 0,
+  viewportCol: 0,
+  viewportRow: 0,
+  viewportVisible: false,
+  sourceX: 0,
+  sourceY: 0,
+  sourceWidth: 0,
+  sourceHeight: 0,
+);
+
 class NativeBindings implements GhosttyBindings {
   final _utf8Ptrs = <int, Pointer<Char>>{};
   final _callables = <int, Map<TerminalOption, NativeCallable>>{};
@@ -38,6 +67,7 @@ class NativeBindings implements GhosttyBindings {
   final _outGhosttyString = calloc<native.String>();
   final _outColorRgb = calloc<ColorRgb>();
   final _graphemeBuf = calloc<Uint32>(32);
+  final _outOpaque = calloc<Pointer<Void>>();
 
   NativeBindings() {
     _outColors.ref.size = sizeOf<RenderStateColors>();
@@ -2345,6 +2375,235 @@ class NativeBindings implements GhosttyBindings {
     ghostty_sys_set(SysOption.log, nullptr);
     _sysLogCallable?.close();
     _sysLogCallable = null;
+  }
+
+  @override
+  int kittyGraphicsGet(int handle) {
+    final outPtr = _outOpaque;
+    final code = ghostty_terminal_get(
+      Pointer.fromAddress(handle),
+      TerminalData.kittyGraphics,
+      outPtr.cast(),
+    );
+    if (code != Result.success) return 0;
+    return outPtr.value.address;
+  }
+
+  @override
+  int kittyGraphicsImage(int graphics, int imageId) {
+    if (graphics == 0) return 0;
+    final image = ghostty_kitty_graphics_image(
+      Pointer.fromAddress(graphics),
+      imageId,
+    );
+    return image.address;
+  }
+
+  @override
+  CResult<int> kittyGraphicsImageGetId(int image) =>
+      _kittyImageGetU32(image, KittyGraphicsImageData.id);
+
+  @override
+  CResult<int> kittyGraphicsImageGetNumber(int image) =>
+      _kittyImageGetU32(image, KittyGraphicsImageData.number);
+
+  @override
+  CResult<int> kittyGraphicsImageGetWidth(int image) =>
+      _kittyImageGetU32(image, KittyGraphicsImageData.width);
+
+  @override
+  CResult<int> kittyGraphicsImageGetHeight(int image) =>
+      _kittyImageGetU32(image, KittyGraphicsImageData.height);
+
+  @override
+  CResult<KittyImageFormat> kittyGraphicsImageGetFormat(int image) {
+    final (code, value) = _kittyImageGetU32(
+      image,
+      KittyGraphicsImageData.format,
+    );
+    return (code, KittyImageFormat.fromValue(value));
+  }
+
+  @override
+  CResult<KittyImageCompression> kittyGraphicsImageGetCompression(int image) {
+    final (code, value) = _kittyImageGetU32(
+      image,
+      KittyGraphicsImageData.compression,
+    );
+    return (code, KittyImageCompression.fromValue(value));
+  }
+
+  @override
+  CResult<Uint8List> kittyGraphicsImageGetPixelData(int image) {
+    if (image == 0) return (Result.invalidValue, Uint8List(0));
+    final ptrOut = calloc<Pointer<Uint8>>();
+    final lenOut = calloc<Size>();
+    try {
+      final ptrCode = ghostty_kitty_graphics_image_get(
+        Pointer.fromAddress(image),
+        KittyGraphicsImageData.dataPtr,
+        ptrOut.cast(),
+      );
+      if (ptrCode != Result.success) return (ptrCode, Uint8List(0));
+      final lenCode = ghostty_kitty_graphics_image_get(
+        Pointer.fromAddress(image),
+        KittyGraphicsImageData.dataLen,
+        lenOut.cast(),
+      );
+      if (lenCode != Result.success) return (lenCode, Uint8List(0));
+      final ptr = ptrOut.value;
+      final len = lenOut.value;
+      if (ptr == nullptr || len == 0) return (Result.success, Uint8List(0));
+      return (Result.success, Uint8List.fromList(ptr.asTypedList(len)));
+    } finally {
+      calloc.free(ptrOut);
+      calloc.free(lenOut);
+    }
+  }
+
+  CResult<int> _kittyImageGetU32(int image, KittyGraphicsImageData data) {
+    if (image == 0) return (Result.invalidValue, 0);
+    final code = ghostty_kitty_graphics_image_get(
+      Pointer.fromAddress(image),
+      data,
+      _outU32.cast(),
+    );
+    return (code, _outU32.value);
+  }
+
+  @override
+  CResult<int> kittyGraphicsPlacementIteratorNew() {
+    final out = calloc<KittyGraphicsPlacementIterator>();
+    final code = ghostty_kitty_graphics_placement_iterator_new(nullptr, out);
+    final handle = out.value.address;
+    calloc.free(out);
+    return (code, handle);
+  }
+
+  @override
+  void kittyGraphicsPlacementIteratorFree(int iterator) {
+    if (iterator == 0) return;
+    ghostty_kitty_graphics_placement_iterator_free(
+      Pointer<KittyGraphicsPlacementIteratorImpl>.fromAddress(iterator),
+    );
+  }
+
+  @override
+  Result kittyGraphicsGetPlacements(int graphics, int iterator) {
+    if (graphics == 0 || iterator == 0) return Result.invalidValue;
+    final out = calloc<KittyGraphicsPlacementIterator>();
+    out.value = Pointer<KittyGraphicsPlacementIteratorImpl>.fromAddress(
+      iterator,
+    );
+    final code = ghostty_kitty_graphics_get(
+      Pointer.fromAddress(graphics),
+      KittyGraphicsData.placementIterator,
+      out.cast(),
+    );
+    calloc.free(out);
+    return code;
+  }
+
+  @override
+  Result kittyGraphicsPlacementIteratorSetLayer(
+    int iterator,
+    KittyPlacementLayer layer,
+  ) {
+    if (iterator == 0) return Result.invalidValue;
+    final layerPtr = calloc<UnsignedInt>()..value = layer.value;
+    final code = ghostty_kitty_graphics_placement_iterator_set(
+      Pointer<KittyGraphicsPlacementIteratorImpl>.fromAddress(iterator),
+      KittyGraphicsPlacementIteratorOption.layer,
+      layerPtr.cast(),
+    );
+    calloc.free(layerPtr);
+    return code;
+  }
+
+  @override
+  bool kittyGraphicsPlacementNext(int iterator) {
+    if (iterator == 0) return false;
+    return ghostty_kitty_graphics_placement_next(
+      Pointer<KittyGraphicsPlacementIteratorImpl>.fromAddress(iterator),
+    );
+  }
+
+  @override
+  CResult<RawPlacement> kittyGraphicsPlacementGet(int iterator) {
+    if (iterator == 0) return (Result.invalidValue, _emptyPlacement);
+    final iter = Pointer<KittyGraphicsPlacementIteratorImpl>.fromAddress(
+      iterator,
+    );
+    int readU32(KittyGraphicsPlacementData tag) {
+      ghostty_kitty_graphics_placement_get(iter, tag, _outU32.cast());
+      return _outU32.value;
+    }
+
+    int readI32(KittyGraphicsPlacementData tag) {
+      ghostty_kitty_graphics_placement_get(iter, tag, _outI32.cast());
+      return _outI32.value;
+    }
+
+    bool readBool(KittyGraphicsPlacementData tag) {
+      ghostty_kitty_graphics_placement_get(iter, tag, _outBool.cast());
+      return _outBool.value;
+    }
+
+    return (
+      Result.success,
+      (
+        imageId: readU32(KittyGraphicsPlacementData.imageId),
+        placementId: readU32(KittyGraphicsPlacementData.placementId),
+        isVirtual: readBool(KittyGraphicsPlacementData.isVirtual),
+        xOffset: readU32(KittyGraphicsPlacementData.xOffset),
+        yOffset: readU32(KittyGraphicsPlacementData.yOffset),
+        sourceX: readU32(KittyGraphicsPlacementData.sourceX),
+        sourceY: readU32(KittyGraphicsPlacementData.sourceY),
+        sourceWidth: readU32(KittyGraphicsPlacementData.sourceWidth),
+        sourceHeight: readU32(KittyGraphicsPlacementData.sourceHeight),
+        columns: readU32(KittyGraphicsPlacementData.columns),
+        rows: readU32(KittyGraphicsPlacementData.rows),
+        z: readI32(KittyGraphicsPlacementData.z),
+      ),
+    );
+  }
+
+  @override
+  CResult<RawPlacementRenderInfo> kittyGraphicsPlacementRenderInfo(
+    int iterator,
+    int image,
+    int terminal,
+  ) {
+    if (iterator == 0 || image == 0 || terminal == 0) {
+      return (Result.invalidValue, _emptyRenderInfo);
+    }
+    final out = calloc<KittyGraphicsPlacementRenderInfo>();
+    out.ref.size = sizeOf<KittyGraphicsPlacementRenderInfo>();
+    final code = ghostty_kitty_graphics_placement_render_info(
+      Pointer<KittyGraphicsPlacementIteratorImpl>.fromAddress(iterator),
+      Pointer.fromAddress(image),
+      Pointer.fromAddress(terminal),
+      out,
+    );
+    if (code != Result.success) {
+      calloc.free(out);
+      return (code, _emptyRenderInfo);
+    }
+    final info = (
+      pixelWidth: out.ref.pixel_width,
+      pixelHeight: out.ref.pixel_height,
+      gridCols: out.ref.grid_cols,
+      gridRows: out.ref.grid_rows,
+      viewportCol: out.ref.viewport_col,
+      viewportRow: out.ref.viewport_row,
+      viewportVisible: out.ref.viewport_visible,
+      sourceX: out.ref.source_x,
+      sourceY: out.ref.source_y,
+      sourceWidth: out.ref.source_width,
+      sourceHeight: out.ref.source_height,
+    );
+    calloc.free(out);
+    return (Result.success, info);
   }
 
   void _installSysLog(
