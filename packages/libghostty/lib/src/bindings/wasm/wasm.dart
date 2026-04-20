@@ -1326,6 +1326,55 @@ class WasmBindings implements GhosttyBindings {
     // same table slot instead of growing the indirect function table.
   }
 
+  int? _sysDecodePngIndex;
+
+  @override
+  void sysSetPngDecoder(PngDecoder decoder) {
+    int trampoline(
+      int userdata,
+      int allocator,
+      int pngPtr,
+      int pngLen,
+      int outPtr,
+    ) {
+      try {
+        final bytes = Uint8List.fromList(_mem.readBytes(pngPtr, pngLen));
+        final decoded = decoder(bytes);
+        if (decoded == null) return 0;
+        final rgba = decoded.rgba;
+        final buf = _exports.ghostty_alloc(allocator, rgba.length);
+        if (buf == 0) return 0;
+        _mem.writeBytes(buf, rgba);
+        // SysImage { u32 width; u32 height; ptr data; size data_len }
+        _mem.writeU32(outPtr, decoded.width);
+        _mem.writeU32(outPtr + 4, decoded.height);
+        _mem.writeU32(outPtr + 8, buf);
+        _mem.writeU32(outPtr + 12, rgba.length);
+        return 1;
+      } on Object catch (_) {
+        return 0;
+      }
+    }
+
+    final index = _registerCallback(
+      trampoline.toJS,
+      ['i32', 'i32', 'i32', 'i32', 'i32'],
+      results: ['i32'],
+      reuseIndex: _sysDecodePngIndex,
+    );
+    _sysDecodePngIndex = index;
+    _exports.ghostty_sys_set(SysOption.decodePng.value, index);
+  }
+
+  @override
+  void sysClearPngDecoder() {
+    _exports.ghostty_sys_set(SysOption.decodePng.value, 0);
+    if (_sysDecodePngIndex case final index?) _table.set(index);
+    // _sysDecodePngIndex is retained so a subsequent sysSetPngDecoder
+    // reuses the same table slot via `reuseIndex` instead of growing
+    // the WASM indirect function table. Matches the log callback path.
+  }
+
   @override
   int kittyGraphicsGet(int handle) {
     final outPtr = _exports.ghostty_wasm_alloc_opaque();

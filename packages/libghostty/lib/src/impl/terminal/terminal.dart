@@ -193,7 +193,7 @@ class Terminal with Listenable {
   ///
   /// Image storage must be enabled before any images are kept: set a
   /// non-zero [kittyImageStorageLimit]. PNG payloads additionally
-  /// require a PNG decoder hook registered by the embedder.
+  /// require a decoder installed via [LibGhostty.setPngDecoder].
   KittyGraphics? get kittyGraphics {
     final handle = bindings.kittyGraphicsGet(_handle);
     return handle == 0 ? null : KittyGraphics._(handle, _handle);

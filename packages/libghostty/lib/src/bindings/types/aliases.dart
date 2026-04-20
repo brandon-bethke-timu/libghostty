@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../../ffi/libghostty_enums.g.dart';
 
 /// Cell wide property.
@@ -38,6 +40,16 @@ typedef RawSelection = ({int start, int end, bool rectangle});
 /// scope and message byte slices have been decoded to Dart strings.
 typedef SysLogCallback =
     void Function(SysLogLevel level, String scope, String message);
+
+/// An image decoded from PNG into top-to-bottom RGBA pixel bytes.
+typedef DecodedImage = ({int width, int height, Uint8List rgba});
+
+/// Callback that decodes PNG bytes to RGBA pixels.
+///
+/// Invoked by libghostty for every Kitty graphics payload received in
+/// PNG form. Returning null signals a decode failure; the library
+/// rejects the payload and no image is stored.
+typedef PngDecoder = DecodedImage? Function(Uint8List pngBytes);
 
 /// Raw placement metadata read from a Kitty graphics placement
 /// iterator.

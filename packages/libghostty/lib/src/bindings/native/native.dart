@@ -53,6 +53,7 @@ class NativeBindings implements GhosttyBindings {
   final _stringBuffers = <int, Map<TerminalOption, _StringBuffer>>{};
 
   NativeCallable? _sysLogCallable;
+  NativeCallable? _sysDecodePngCallable;
 
   final _outU8 = calloc<Uint8>();
   final _outU16 = calloc<Uint16>();
@@ -2375,6 +2376,53 @@ class NativeBindings implements GhosttyBindings {
     ghostty_sys_set(SysOption.log, nullptr);
     _sysLogCallable?.close();
     _sysLogCallable = null;
+  }
+
+  @override
+  void sysSetPngDecoder(PngDecoder decoder) {
+    _sysDecodePngCallable?.close();
+    final callable =
+        NativeCallable<
+          Bool Function(
+            Pointer<Void>,
+            Pointer<Allocator>,
+            Pointer<Uint8>,
+            Size,
+            Pointer<SysImage>,
+          )
+        >.isolateLocal((
+          Pointer<Void> userdata,
+          Pointer<Allocator> allocator,
+          Pointer<Uint8> pngData,
+          int pngLen,
+          Pointer<SysImage> out,
+        ) {
+          try {
+            final bytes = Uint8List.fromList(pngData.asTypedList(pngLen));
+            final decoded = decoder(bytes);
+            if (decoded == null) return false;
+            final rgba = decoded.rgba;
+            final buf = ghostty_alloc(allocator, rgba.length);
+            if (buf == nullptr) return false;
+            buf.asTypedList(rgba.length).setAll(0, rgba);
+            out.ref.width = decoded.width;
+            out.ref.height = decoded.height;
+            out.ref.data = buf;
+            out.ref.data_len = rgba.length;
+            return true;
+          } on Object catch (_) {
+            return false;
+          }
+        }, exceptionalReturn: false);
+    _sysDecodePngCallable = callable;
+    ghostty_sys_set(SysOption.decodePng, callable.nativeFunction.cast());
+  }
+
+  @override
+  void sysClearPngDecoder() {
+    ghostty_sys_set(SysOption.decodePng, nullptr);
+    _sysDecodePngCallable?.close();
+    _sysDecodePngCallable = null;
   }
 
   @override

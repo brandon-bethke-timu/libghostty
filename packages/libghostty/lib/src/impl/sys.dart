@@ -34,6 +34,37 @@ abstract final class LibGhostty {
   /// discarded until another logger is installed.
   static void clearLogger() => bindings.sysClearLogCallback();
 
+  /// Installs [decoder] as the PNG decoder invoked by libghostty when a
+  /// Kitty graphics payload arrives in PNG form.
+  ///
+  /// Replaces any previously installed decoder. Use [clearPngDecoder]
+  /// to stop accepting PNG payloads; with no decoder installed, PNG
+  /// data is rejected by the native library and no image is stored.
+  /// The callback returns null to signal a decode failure, which is
+  /// treated the same as having no decoder installed for that payload.
+  ///
+  /// The [DecodedImage.rgba] buffer is copied into a library-owned
+  /// allocation before the callback returns, so the caller's buffer
+  /// lifetime is not a concern. The callback may be invoked from any
+  /// thread.
+  ///
+  /// ```dart
+  /// LibGhostty.setPngDecoder((pngBytes) {
+  ///   final decoded = decodePngToRgba(pngBytes);
+  ///   if (decoded == null) return null;
+  ///   return (width: decoded.w, height: decoded.h, rgba: decoded.pixels);
+  /// });
+  /// ```
+  static void setPngDecoder(PngDecoder decoder) =>
+      bindings.sysSetPngDecoder(decoder);
+
+  /// Clears the installed PNG decoder and releases resources held by
+  /// the Dart-side callback trampoline.
+  ///
+  /// Safe to call multiple times. After this, PNG payloads are
+  /// rejected until another decoder is installed.
+  static void clearPngDecoder() => bindings.sysClearPngDecoder();
+
   /// Installs [logger] as the sink for internal libghostty log messages.
   ///
   /// Replaces any previously installed logger (including the one set by

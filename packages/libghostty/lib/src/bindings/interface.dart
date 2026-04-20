@@ -171,6 +171,9 @@ abstract interface class GhosttyBindings {
   void sysSetLogToStderr();
   void sysClearLogCallback();
 
+  void sysSetPngDecoder(PngDecoder decoder);
+  void sysClearPngDecoder();
+
   /// Returns an opaque kitty graphics storage handle for [handle], or 0
   /// when kitty graphics are disabled in the native library build.
   int kittyGraphicsGet(int handle);

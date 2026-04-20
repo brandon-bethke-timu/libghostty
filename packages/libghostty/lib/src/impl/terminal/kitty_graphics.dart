@@ -12,8 +12,8 @@ part of 'terminal.dart';
 ///
 /// Before any images are stored, Kitty graphics must be enabled on the
 /// terminal by setting a non-zero [Terminal.kittyImageStorageLimit].
-/// PNG payloads additionally require a process-global PNG decoder hook
-/// registered by the embedder.
+/// PNG payloads additionally require a decoder installed via
+/// [LibGhostty.setPngDecoder].
 ///
 /// ```dart
 /// final kitty = terminal.kittyGraphics;
@@ -303,9 +303,9 @@ class KittyImage {
   ///
   /// The layout honors [format] and [compression]: decompressing
   /// zlib-compressed payloads and reinterpreting non-RGB/RGBA formats
-  /// is the caller's responsibility. PNG-format payloads are decoded
-  /// ahead of time by a decoder hook the embedder registers and are
-  /// stored here as RGBA.
+  /// is the caller's responsibility. PNG payloads are decoded ahead of
+  /// time by the callback installed via [LibGhostty.setPngDecoder] and
+  /// are stored here as RGBA.
   Uint8List get pixelData {
     return check(bindings.kittyGraphicsImageGetPixelData(_handle));
   }

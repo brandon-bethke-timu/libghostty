@@ -6,6 +6,7 @@
 library;
 
 export 'src/bindings/bindings.dart' show initializeForWeb;
+export 'src/bindings/types/aliases.dart' show DecodedImage, PngDecoder;
 export 'src/bindings/types/types.dart'
     show
         CellColor,
