@@ -132,6 +132,7 @@ class _TerminalViewState extends State<TerminalView> {
   var _mouseCursorHidden = false;
   var _lastAlternatePixels = 0.0;
   var _visibleRows = 0;
+  var _devicePixelRatio = 1.0;
   Timer? _blinkTimer;
   var _blinkVisible = true;
 
@@ -297,6 +298,12 @@ class _TerminalViewState extends State<TerminalView> {
     _controller.addListener(_onControllerChanged);
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+  }
+
   MouseCursor _effectiveMouseCursor() {
     if (_mouseCursorHidden) return SystemMouseCursors.none;
     if (_controller.mouseTracking != .none) return SystemMouseCursors.basic;
@@ -337,6 +344,7 @@ class _TerminalViewState extends State<TerminalView> {
       rows: rows,
       metrics: _metrics,
       padding: .zero,
+      devicePixelRatio: _devicePixelRatio,
     );
   }
 

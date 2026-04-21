@@ -65,6 +65,7 @@ void main() {
             baseline: 12,
           ),
           padding: EdgeInsets.zero,
+          devicePixelRatio: 1.0,
         );
 
         expect(reportedCols, 120);
@@ -249,6 +250,7 @@ void main() {
             baseline: 12,
           ),
           padding: EdgeInsets.zero,
+          devicePixelRatio: 1.0,
         );
 
         final output = <Uint8List>[];

@@ -11,30 +11,30 @@ import 'atlas/glyph_atlas.dart';
 /// painters during the paint phase. Each painter holds a final reference
 /// and never mutates this object.
 ///
-/// Contains grid dimensions, resolved terminal colors, selection state,
-/// cursor state, and faint text opacity.
+/// Contains grid dimensions, device pixel ratio, resolved terminal
+/// colors, selection state, cursor state, and faint text opacity.
 class TerminalPaintState {
   TerminalTheme theme;
   CellMetrics metrics;
 
-  // Grid.
   var rows = 0;
   var cols = 0;
   var blinkVisible = true;
 
-  // Terminal colors (may differ from theme via OSC 10/11).
+  /// Scale between Flutter's logical-pixel canvas and the physical
+  /// pixels libghostty uses for size reports and Kitty graphics.
+  var devicePixelRatio = 1.0;
+
   late int terminalForegroundArgb;
   late int terminalBackgroundArgb;
 
   /// Alpha byte (0-255) applied to faint text foregrounds.
   int faintAlpha;
 
-  // Selection.
   TerminalSelection? selection;
   Color selectionBackground;
   var viewportOffset = 0;
 
-  // Cursor.
   var cursor = const Cursor();
   var cursorWide = false;
   var cursorFocused = true;

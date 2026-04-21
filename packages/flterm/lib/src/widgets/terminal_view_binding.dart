@@ -49,12 +49,15 @@ abstract interface class TerminalViewBinding {
   /// Reports a mouse event. Controller encodes and emits via onOutput.
   void handleMouseEvent(TerminalMouseEvent event);
 
-  /// Reports resize from layout.
+  /// Reports resize from layout. [metrics] are in logical pixels and
+  /// are scaled by [devicePixelRatio] for libghostty's physical-pixel
+  /// size reports and Kitty graphics.
   void handleResize({
     required int cols,
     required int rows,
     required CellMetrics metrics,
     required EdgeInsets padding,
+    required double devicePixelRatio,
   });
 
   /// Reports scroll by line count.

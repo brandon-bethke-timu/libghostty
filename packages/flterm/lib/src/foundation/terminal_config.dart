@@ -82,6 +82,13 @@ class TerminalConfig {
   /// The terminal discards the oldest lines when this limit is reached.
   final int scrollbackLimit;
 
+  /// Maximum bytes of Kitty graphics image storage.
+  ///
+  /// Caps the in-memory footprint of images transmitted via the Kitty
+  /// graphics protocol. Defaults to 64 MiB. Set to 0 to reject every
+  /// image payload.
+  final int kittyImageStorageLimit;
+
   /// Initial cursor shape. Terminal programs can override via DECSCUSR.
   final CursorShape cursorStyle;
 
@@ -142,18 +149,24 @@ class TerminalConfig {
     this.modes = defaultModes,
     this.cursorStyle = .block,
     this.scrollbackLimit = 10_000_000,
+    this.kittyImageStorageLimit = 64 * 1024 * 1024,
     this.selectionClearOnTyping = true,
     this.scrollToBottom = .onKeystroke,
     this.deviceAttributes = const DeviceAttributesResponse(),
   }) : assert(cols > 0, 'cols must be positive'),
        assert(rows > 0, 'rows must be positive'),
-       assert(scrollbackLimit >= 0, 'scrollbackLimit must be non-negative');
+       assert(scrollbackLimit >= 0, 'scrollbackLimit must be non-negative'),
+       assert(
+         kittyImageStorageLimit >= 0,
+         'kittyImageStorageLimit must be non-negative',
+       );
 
   @override
   int get hashCode => Object.hash(
     cols,
     rows,
     scrollbackLimit,
+    kittyImageStorageLimit,
     cursorStyle,
     cursorBlink,
     .hashAllUnordered(modes.entries.map((e) => .hash(e.key, e.value))),
@@ -171,6 +184,7 @@ class TerminalConfig {
           cols == other.cols &&
           rows == other.rows &&
           scrollbackLimit == other.scrollbackLimit &&
+          kittyImageStorageLimit == other.kittyImageStorageLimit &&
           cursorStyle == other.cursorStyle &&
           cursorBlink == other.cursorBlink &&
           _modesEqual(modes, other.modes) &&
@@ -185,6 +199,7 @@ class TerminalConfig {
     int? cols,
     int? rows,
     int? scrollbackLimit,
+    int? kittyImageStorageLimit,
     CursorShape? cursorStyle,
     bool? cursorBlink,
     Map<TerminalMode, bool>? modes,
@@ -198,6 +213,8 @@ class TerminalConfig {
       cols: cols ?? this.cols,
       rows: rows ?? this.rows,
       scrollbackLimit: scrollbackLimit ?? this.scrollbackLimit,
+      kittyImageStorageLimit:
+          kittyImageStorageLimit ?? this.kittyImageStorageLimit,
       cursorStyle: cursorStyle ?? this.cursorStyle,
       cursorBlink: cursorBlink ?? this.cursorBlink,
       modes: modes ?? this.modes,

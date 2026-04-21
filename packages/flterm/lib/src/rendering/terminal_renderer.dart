@@ -5,11 +5,13 @@ import 'package:libghostty/libghostty.dart';
 import '../foundation.dart';
 import 'atlas/glyph_atlas.dart';
 import 'atlas/sprite_buffer.dart';
+import 'kitty_image_cache.dart';
 import 'paint_state.dart';
 import 'painters/background_painter.dart';
 import 'painters/cursor_painter.dart';
 import 'painters/decoration_painter.dart';
 import 'painters/emoji_painter.dart';
+import 'painters/kitty_graphics_painter.dart';
 import 'painters/selection_painter.dart';
 import 'painters/terminal_text_painter.dart';
 import 'painters/underline_painter.dart';
@@ -170,12 +172,14 @@ class TerminalRenderer extends LeafRenderObjectWidget {
 ///
 /// 2. **Sync** (start of paint): snapshots terminal cells, resolves colors
 ///    (including OSC 10/11 overrides, bold-is-bright, inverse, faint),
-///    builds sprite data for text/backgrounds/decorations, and resolves
-///    the cursor cell glyph.
+///    builds sprite data for text/backgrounds/decorations, resolves
+///    the cursor cell glyph, and collects Kitty graphics placements.
 ///
-/// 3. **Paint**: delegates to six painters in z-order: background, text,
-///    cursor, emoji, decorations, selection. Each painter reads only from
-///    pre-built sprite data with zero terminal access.
+/// 3. **Paint**: delegates to painters in z-order: kitty-below-bg,
+///    background, kitty-below-text, underlines, text, cursor, emoji,
+///    decorations, kitty-above-text, selection. Each painter reads
+///    only from pre-built sprite data and cached images, with zero
+///    terminal access.
 ///
 /// Created and managed by [TerminalRenderer]. Not intended for direct use.
 class TerminalRenderBox extends RenderBox {
@@ -203,6 +207,11 @@ class TerminalRenderBox extends RenderBox {
   late final UnderlinePainter _underlinePainter;
   late final BackgroundPainter _backgroundPainter;
   late final DecorationPainter _decorationPainter;
+  late final KittyImageCache _kittyImageCache;
+  late final KittyGraphicsPainter _kittyBelowBgPainter;
+  late final KittyGraphicsPainter _kittyBelowTextPainter;
+  late final KittyGraphicsPainter _kittyAbovePainter;
+  final List<KittyPlacementSnapshot> _kittyPlacements = [];
 
   TerminalRenderBox({
     required Terminal terminal,
@@ -236,6 +245,25 @@ class TerminalRenderBox extends RenderBox {
     _underlinePainter = UnderlinePainter(_atlas, _sprites);
     _decorationPainter = DecorationPainter(_sprites);
     _selectionPainter = SelectionPainter(_paintState);
+    _kittyImageCache = KittyImageCache(onImageReady: markNeedsPaint);
+    _kittyBelowBgPainter = KittyGraphicsPainter(
+      state: _paintState,
+      cache: _kittyImageCache,
+      snapshots: _kittyPlacements,
+      layer: KittyPaintLayer.belowBg,
+    );
+    _kittyBelowTextPainter = KittyGraphicsPainter(
+      state: _paintState,
+      cache: _kittyImageCache,
+      snapshots: _kittyPlacements,
+      layer: KittyPaintLayer.belowText,
+    );
+    _kittyAbovePainter = KittyGraphicsPainter(
+      state: _paintState,
+      cache: _kittyImageCache,
+      snapshots: _kittyPlacements,
+      layer: KittyPaintLayer.aboveText,
+    );
 
     _applyThemeColors();
   }
@@ -374,7 +402,9 @@ class TerminalRenderBox extends RenderBox {
 
     canvas.save();
     canvas.translate(offset.dx, offset.dy);
+    _kittyBelowBgPainter.paint(canvas);
     _backgroundPainter.paint(canvas);
+    _kittyBelowTextPainter.paint(canvas);
     // Underlines drawn before text so descender glyphs cover the underline
     // at intersections.
     _underlinePainter.paint(canvas);
@@ -384,6 +414,7 @@ class TerminalRenderBox extends RenderBox {
     // Strikethrough and overline drawn after text so strikethrough visibly
     // crosses through glyphs.
     _decorationPainter.paint(canvas);
+    _kittyAbovePainter.paint(canvas);
     _selectionPainter.paint(canvas);
     canvas.restore();
   }
@@ -415,16 +446,22 @@ class TerminalRenderBox extends RenderBox {
     if (gridChanged) {
       _paintState.cols = newCols;
       _paintState.rows = newRows;
+      _paintState.devicePixelRatio = dpr;
       _sprites.resize(newRows * newCols);
       if (newCols > 0 && newRows > 0) {
+        // Cell size is reported in physical pixels so size-report
+        // escapes and Kitty graphics geometry match a native terminal
+        // at the same DPI.
         _terminal.resize(
           cols: newCols,
           rows: newRows,
-          cellWidthPx: _paintState.metrics.cellWidth.round(),
-          cellHeightPx: _paintState.metrics.cellHeight.round(),
+          cellWidthPx: (_paintState.metrics.cellWidth * dpr).round(),
+          cellHeightPx: (_paintState.metrics.cellHeight * dpr).round(),
         );
         _onResize?.call(newCols, newRows);
       }
+    } else if (_paintState.devicePixelRatio != dpr) {
+      _paintState.devicePixelRatio = dpr;
     }
 
     _syncScrollLayout();
@@ -648,6 +685,55 @@ class TerminalRenderBox extends RenderBox {
       renderState.resetIteration();
       _spriteBuilder.build(renderState);
     }
+
+    _syncKittyPlacements();
+  }
+
+  void _syncKittyPlacements() {
+    _kittyPlacements.clear();
+    final graphics = _terminal.kittyGraphics;
+    if (graphics == null) return;
+
+    final cellWidth = _paintState.metrics.cellWidth;
+    final cellHeight = _paintState.metrics.cellHeight;
+    // Placement geometry is reported in physical pixels, matching the
+    // cell size we report at resize. Convert back to logical pixels for
+    // the Flutter canvas.
+    final dpr = _paintState.devicePixelRatio;
+    final liveIds = <int>{};
+    for (final placement in graphics.placements()) {
+      final info = placement.renderInfo;
+      if (!info.viewportVisible) continue;
+      if (info.pixelWidth == 0 || info.pixelHeight == 0) continue;
+
+      final image = graphics.image(placement.imageId);
+      if (image == null) continue;
+      liveIds.add(placement.imageId);
+      _kittyImageCache.lookup(image);
+
+      _kittyPlacements.add(
+        KittyPlacementSnapshot(
+          imageId: placement.imageId,
+          dst: Rect.fromLTWH(
+            info.viewportCol * cellWidth + placement.xOffset / dpr,
+            info.viewportRow * cellHeight + placement.yOffset / dpr,
+            info.pixelWidth / dpr,
+            info.pixelHeight / dpr,
+          ),
+          src: Rect.fromLTWH(
+            info.sourceX.toDouble(),
+            info.sourceY.toDouble(),
+            info.sourceWidth.toDouble(),
+            info.sourceHeight.toDouble(),
+          ),
+          z: placement.z,
+        ),
+      );
+    }
+    // Sort once so each layer painter can filter in a single pass.
+    // Equal-z placements keep storage iteration order.
+    _kittyPlacements.sort((a, b) => a.z.compareTo(b.z));
+    _kittyImageCache.evict(liveIds);
   }
 }
 

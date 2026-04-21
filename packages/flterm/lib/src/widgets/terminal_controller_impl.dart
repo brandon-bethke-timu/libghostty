@@ -7,6 +7,7 @@ import 'package:libghostty/libghostty.dart' hide KeyEvent;
 import 'package:meta/meta.dart';
 
 import '../foundation.dart';
+import '../rendering/kitty_png_decoder.dart';
 import 'terminal_controller.dart';
 import 'terminal_input_client.dart';
 import 'terminal_view_binding.dart';
@@ -51,6 +52,7 @@ class TerminalControllerImpl extends TerminalController
     cellHeight: 0,
     baseline: 0,
   );
+  var _lastDevicePixelRatio = 1.0;
 
   FocusNode? _focusNode;
   TerminalSelection? _selection;
@@ -67,6 +69,8 @@ class TerminalControllerImpl extends TerminalController
         maxScrollback: config.scrollbackLimit,
       ),
       super.base() {
+    installDefaultKittyPngDecoder();
+    terminal.kittyImageStorageLimit = config.kittyImageStorageLimit;
     _textInput
       ..onTextCommitted = _handleTextCommitted
       ..onDelete = _handleDelete
@@ -266,18 +270,22 @@ class TerminalControllerImpl extends TerminalController
     required int rows,
     required CellMetrics metrics,
     required EdgeInsets padding,
+    required double devicePixelRatio,
   }) {
     _lastMetrics = metrics;
+    _lastDevicePixelRatio = devicePixelRatio;
+    final cellWidthPx = (metrics.cellWidth * devicePixelRatio).round();
+    final cellHeightPx = (metrics.cellHeight * devicePixelRatio).round();
     terminal.mouseEncoder.setSize(
       MouseEncoderSize(
-        screenWidth: (cols * metrics.cellWidth).round(),
-        screenHeight: (rows * metrics.cellHeight).round(),
-        cellWidth: metrics.cellWidth.round(),
-        cellHeight: metrics.cellHeight.round(),
-        paddingLeft: padding.left.round(),
-        paddingRight: padding.right.round(),
-        paddingTop: padding.top.round(),
-        paddingBottom: padding.bottom.round(),
+        screenWidth: cols * cellWidthPx,
+        screenHeight: rows * cellHeightPx,
+        cellWidth: cellWidthPx,
+        cellHeight: cellHeightPx,
+        paddingLeft: (padding.left * devicePixelRatio).round(),
+        paddingRight: (padding.right * devicePixelRatio).round(),
+        paddingTop: (padding.top * devicePixelRatio).round(),
+        paddingBottom: (padding.bottom * devicePixelRatio).round(),
       ),
     );
     onResize?.call(cols, rows);
@@ -286,8 +294,8 @@ class TerminalControllerImpl extends TerminalController
       final report = SizeReportStyle.mode2048.encode(
         rows: rows,
         columns: cols,
-        cellWidth: metrics.cellWidth.round(),
-        cellHeight: metrics.cellHeight.round(),
+        cellWidth: cellWidthPx,
+        cellHeight: cellHeightPx,
       );
       _emitOutput(utf8.encode(report));
     }
@@ -602,8 +610,8 @@ class TerminalControllerImpl extends TerminalController
     return TerminalSizeInfo(
       rows: rs.rows,
       columns: rs.cols,
-      cellWidth: _lastMetrics.cellWidth.round(),
-      cellHeight: _lastMetrics.cellHeight.round(),
+      cellWidth: (_lastMetrics.cellWidth * _lastDevicePixelRatio).round(),
+      cellHeight: (_lastMetrics.cellHeight * _lastDevicePixelRatio).round(),
     );
   }
 

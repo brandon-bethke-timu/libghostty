@@ -674,6 +674,7 @@ void _enableMouseTracking(
     rows: 24,
     metrics: _metrics,
     padding: EdgeInsets.zero,
+    devicePixelRatio: 1.0,
   );
   binding.terminal.renderState.update();
 }
