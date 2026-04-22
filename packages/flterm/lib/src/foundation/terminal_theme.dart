@@ -265,6 +265,7 @@ final class SelectionTheme {
 /// - [cursor].shape: initial cursor shape (terminal programs may override)
 /// - [cursor].blinkInterval, [cursor].opacity: cursor animation
 /// - [boldIsBright], [faintOpacity], [minimumContrast]: text rendering
+/// - [backgroundOpacity], [backgroundOpacityCells]: transparent background
 ///
 /// ```dart
 /// final theme = TerminalTheme.dark();
@@ -315,6 +316,29 @@ final class TerminalTheme {
   /// A value of 1.0 disables contrast enforcement.
   final double minimumContrast;
 
+  /// Opacity multiplier for the default terminal background, from 0.0
+  /// (fully transparent) to 1.0 (fully opaque).
+  ///
+  /// Only applies to cells that use the default background. Cells with an
+  /// explicit background color stay opaque unless [backgroundOpacityCells]
+  /// is also true; inverse cells and the selection highlight always stay
+  /// opaque. Requires a host surface that allows transparency (a
+  /// translucent Flutter window, or placement over other widgets) for
+  /// the effect to be visible.
+  final double backgroundOpacity;
+
+  /// Whether [backgroundOpacity] also applies to cells with an explicit
+  /// (non-default) background color.
+  ///
+  /// Off by default: terminal apps like Neovim and tmux often repaint the
+  /// grid with the theme background color, and making those cells
+  /// translucent leaks the host surface through the editor chrome.
+  final bool backgroundOpacityCells;
+
+  /// [backgroundOpacity] precomputed as an alpha byte in 0 to 255, for
+  /// alpha scaling in the per-cell hot loop of the sprite builder.
+  final int backgroundOpacityAlpha;
+
   /// [ansiColors] must contain exactly 16 entries. The full 256-color palette
   /// uses the standard xterm 6×6×6 cube and grayscale ramp for indices 16–255.
   TerminalTheme({
@@ -331,7 +355,14 @@ final class TerminalTheme {
     this.boldIsBright = true,
     this.faintOpacity = 0.5,
     this.minimumContrast = 1.0,
+    this.backgroundOpacity = 1.0,
+    this.backgroundOpacityCells = false,
   }) : assert(fontSize > 0, 'fontSize must be positive'),
+       assert(
+         backgroundOpacity >= 0.0 && backgroundOpacity <= 1.0,
+         'backgroundOpacity must be >= 0.0 && <= 1.0',
+       ),
+       backgroundOpacityAlpha = (backgroundOpacity * 255).round(),
        palette = .fromAnsiColors(ansiColors);
 
   /// A dark-background terminal theme using the Tomorrow Night color scheme,
@@ -349,7 +380,7 @@ final class TerminalTheme {
     ansiColors: _lightAnsiColors,
   );
 
-  const TerminalTheme._withPalette({
+  TerminalTheme._withPalette({
     required this.foreground,
     required this.background,
     required this.palette,
@@ -363,7 +394,9 @@ final class TerminalTheme {
     required this.boldIsBright,
     required this.faintOpacity,
     required this.minimumContrast,
-  });
+    required this.backgroundOpacity,
+    required this.backgroundOpacityCells,
+  }) : backgroundOpacityAlpha = (backgroundOpacity * 255).round();
 
   @override
   int get hashCode => Object.hash(
@@ -380,6 +413,8 @@ final class TerminalTheme {
     boldIsBright,
     faintOpacity,
     minimumContrast,
+    backgroundOpacity,
+    backgroundOpacityCells,
   );
 
   @override
@@ -397,7 +432,9 @@ final class TerminalTheme {
       other.selection == selection &&
       other.boldIsBright == boldIsBright &&
       other.faintOpacity == faintOpacity &&
-      other.minimumContrast == minimumContrast;
+      other.minimumContrast == minimumContrast &&
+      other.backgroundOpacity == backgroundOpacity &&
+      other.backgroundOpacityCells == backgroundOpacityCells;
 
   /// Returns a copy of this theme with the given fields replaced.
   TerminalTheme copyWith({
@@ -414,6 +451,8 @@ final class TerminalTheme {
     bool? boldIsBright,
     double? faintOpacity,
     double? minimumContrast,
+    double? backgroundOpacity,
+    bool? backgroundOpacityCells,
   }) {
     final newForeground = foreground ?? this.foreground;
     final newBackground = background ?? this.background;
@@ -432,6 +471,9 @@ final class TerminalTheme {
         boldIsBright: boldIsBright ?? this.boldIsBright,
         faintOpacity: faintOpacity ?? this.faintOpacity,
         minimumContrast: minimumContrast ?? this.minimumContrast,
+        backgroundOpacity: backgroundOpacity ?? this.backgroundOpacity,
+        backgroundOpacityCells:
+            backgroundOpacityCells ?? this.backgroundOpacityCells,
         ansiColors: ansiColors,
       );
     }
@@ -450,6 +492,9 @@ final class TerminalTheme {
       boldIsBright: boldIsBright ?? this.boldIsBright,
       faintOpacity: faintOpacity ?? this.faintOpacity,
       minimumContrast: minimumContrast ?? this.minimumContrast,
+      backgroundOpacity: backgroundOpacity ?? this.backgroundOpacity,
+      backgroundOpacityCells:
+          backgroundOpacityCells ?? this.backgroundOpacityCells,
     );
   }
 
@@ -495,6 +540,14 @@ final class TerminalTheme {
       boldIsBright: t < 0.5 ? a.boldIsBright : b.boldIsBright,
       faintOpacity: lerpDouble(a.faintOpacity, b.faintOpacity, t)!,
       minimumContrast: lerpDouble(a.minimumContrast, b.minimumContrast, t)!,
+      backgroundOpacity: lerpDouble(
+        a.backgroundOpacity,
+        b.backgroundOpacity,
+        t,
+      )!,
+      backgroundOpacityCells: t < 0.5
+          ? a.backgroundOpacityCells
+          : b.backgroundOpacityCells,
     );
   }
 }

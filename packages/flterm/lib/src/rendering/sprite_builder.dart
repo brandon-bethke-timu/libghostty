@@ -72,6 +72,8 @@ class SpriteBuilder {
   late double _inverseDpr;
   late int _bgArgb;
   late int _cols;
+  late bool _applyCellOpacity;
+  late int _cellOpacityAlpha;
 
   SpriteBuilder(this._atlas, this._sprites, this._state)
     : _styleCache = _StyleCache(_state),
@@ -98,6 +100,10 @@ class SpriteBuilder {
     _inverseDpr = 1.0 / _atlas.devicePixelRatio;
     _bgArgb = _state.terminalBackgroundArgb;
     _cols = _state.cols;
+    final theme = _state.theme;
+    _applyCellOpacity =
+        theme.backgroundOpacityCells && theme.backgroundOpacity < 1.0;
+    _cellOpacityAlpha = theme.backgroundOpacityAlpha;
     _styleCache.beginFrame();
 
     _rows.reset(renderState);
@@ -134,10 +140,12 @@ class SpriteBuilder {
 
       if (cells.styleId != cursor.prevStyleId) {
         _flushOperatorRun(cursor);
-        final (fg, bg, style) = _styleCache.resolve(cells);
+        final (fg, bg, style, explicitBg) = _styleCache.resolve(cells);
         cursor.prevStyleId = cells.styleId;
         cursor.foreground = fg;
         cursor.background = bg;
+        cursor.backgroundInverse = style.inverse;
+        cursor.backgroundExplicit = explicitBg;
         cursor.style = style;
       }
 
@@ -174,13 +182,13 @@ class SpriteBuilder {
 
     _flushOperatorRun(cursor);
 
-    if (cursor.bgRunArgb != _bgArgb) {
+    if (cursor.bgRunExplicit) {
       _sprites.background.add(
         cursor.bgRunStart * cellWidth,
         cursor.rowY,
         _cols * cellWidth,
         cursor.rowBottom,
-        cursor.bgRunArgb,
+        _resolveBgArgb(cursor.bgRunArgb, cursor.bgRunInverse),
       );
     }
   }
@@ -349,17 +357,19 @@ class SpriteBuilder {
     cursor.col++;
     cursor.spriteX += _cellWidth;
     if (cursor.col < _cols) {
-      if (cursor.bgRunArgb != _bgArgb) {
+      if (cursor.bgRunExplicit) {
         _sprites.background.add(
           cursor.bgRunStart * _cellWidth,
           cursor.rowY,
           (cursor.col + 1) * _cellWidth,
           cursor.rowBottom,
-          cursor.bgRunArgb,
+          _resolveBgArgb(cursor.bgRunArgb, cursor.bgRunInverse),
         );
       }
       cursor.bgRunStart = cursor.col + 1;
       cursor.bgRunArgb = _bgArgb;
+      cursor.bgRunInverse = false;
+      cursor.bgRunExplicit = false;
     }
     cell.next();
   }
@@ -368,18 +378,28 @@ class SpriteBuilder {
   /// differs from the run's color. Only emits if the run isn't the
   /// terminal default background (transparent cells need no rect).
   void _flushBackgroundRun(_RowCursor cursor, double cellWidth) {
-    if (cursor.background == cursor.bgRunArgb) return;
-    if (cursor.bgRunArgb != _bgArgb) {
+    // The run ends when any of the three properties (color, inverse
+    // flag, explicit flag) changes, since all three affect whether and
+    // how a rect must be emitted.
+    final sameRun =
+        cursor.background == cursor.bgRunArgb &&
+        cursor.backgroundExplicit == cursor.bgRunExplicit &&
+        cursor.backgroundInverse == cursor.bgRunInverse;
+    if (sameRun) return;
+
+    if (cursor.bgRunExplicit) {
       _sprites.background.add(
         cursor.bgRunStart * cellWidth,
         cursor.rowY,
         cursor.col * cellWidth,
         cursor.rowBottom,
-        cursor.bgRunArgb,
+        _resolveBgArgb(cursor.bgRunArgb, cursor.bgRunInverse),
       );
     }
     cursor.bgRunArgb = cursor.background;
     cursor.bgRunStart = cursor.col;
+    cursor.bgRunInverse = cursor.backgroundInverse;
+    cursor.bgRunExplicit = cursor.backgroundExplicit;
   }
 
   /// Flushes a consecutive run of ASCII operators into a single atlas entry.
@@ -413,6 +433,16 @@ class SpriteBuilder {
     }
     cursor.operatorRun.clear();
   }
+
+  /// Applies [_cellOpacityAlpha] to [argb] when cell-level opacity is
+  /// enabled and the run is not inverse. Inverse runs stay opaque so
+  /// swapped fg/bg cells remain readable.
+  int _resolveBgArgb(int argb, bool inverse) {
+    if (!_applyCellOpacity || inverse) return argb;
+    final currentAlpha = (argb >>> 24) & 0xFF;
+    final newAlpha = (currentAlpha * _cellOpacityAlpha + 127) ~/ 255;
+    return (newAlpha << 24) | (argb & 0x00FFFFFF);
+  }
 }
 
 /// Mutable position and style state within a single row.
@@ -429,10 +459,29 @@ class _RowCursor {
   var prevStyleId = -1;
   var foreground = 0xFFFFFFFF;
   var background = 0;
+
+  /// Whether [background] came from an inverse cell.
+  ///
+  /// Tracked separately from [Style.inverse] on [style] because the bg
+  /// run may outlive the style context: when emitted, we need to know if
+  /// the run (not the current style) was inverse so we skip opacity.
+  var backgroundInverse = false;
+
+  /// Whether [background] came from a cell with an explicit
+  /// (non-default) background color, or from an inverse cell.
+  ///
+  /// Default background cells skip rect emission and let the backdrop
+  /// show through. Explicit background cells always emit a rect, even
+  /// when the color happens to equal the theme default: this keeps the
+  /// region opaque so apps like Neovim and tmux that repaint the grid
+  /// with the default color don't leak the backdrop through their chrome.
+  var backgroundExplicit = false;
   Style? style;
 
   var bgRunStart = 0;
   var bgRunArgb = 0;
+  var bgRunInverse = false;
+  var bgRunExplicit = false;
 
   var operatorRunX = 0.0;
   final List<int> operatorRun;
@@ -447,9 +496,13 @@ class _RowCursor {
     prevStyleId = -1;
     foreground = 0xFFFFFFFF;
     background = defaultBg;
+    backgroundInverse = false;
+    backgroundExplicit = false;
     style = null;
     bgRunStart = 0;
     bgRunArgb = defaultBg;
+    bgRunInverse = false;
+    bgRunExplicit = false;
     operatorRunX = 0.0;
     operatorRun.clear();
   }
@@ -469,6 +522,7 @@ class _StyleCache {
   final Int32List _gen;
   final Int32List _foreground;
   final Int32List _background;
+  final Uint8List _explicitBg;
   final List<Style?> _styles;
   var _generation = 0;
 
@@ -480,6 +534,7 @@ class _StyleCache {
     : _gen = Int32List(_maxEntries),
       _foreground = Int32List(_maxEntries),
       _background = Int32List(_maxEntries),
+      _explicitBg = Uint8List(_maxEntries),
       _styles = List<Style?>.filled(_maxEntries, null);
 
   void beginFrame() {
@@ -488,17 +543,30 @@ class _StyleCache {
     _defaultBg = _state.terminalBackgroundArgb;
   }
 
-  /// Returns cached or freshly resolved (fg, bg, style) for [cell].
-  (int foreground, int background, Style style) resolve(CellIterator cell) {
+  /// Returns cached or freshly resolved (fg, bg, style, explicitBg) for
+  /// [cell].
+  ///
+  /// `explicitBg` is true when the cell's style carries a non-default
+  /// background color or when the cell is inverse. Inverse always
+  /// produces an opaque rect so swapped fg/bg cells stay readable.
+  (int foreground, int background, Style style, bool explicitBg) resolve(
+    CellIterator cell,
+  ) {
     final id = cell.styleId;
 
     if (id < _maxEntries && _gen[id] == _generation) {
-      return (_foreground[id], _background[id], _styles[id]!);
+      return (
+        _foreground[id],
+        _background[id],
+        _styles[id]!,
+        _explicitBg[id] != 0,
+      );
     }
 
     final style = cell.style;
     var foreground = cell.foregroundArgb ?? _defaultFg;
     var background = cell.backgroundArgb ?? _defaultBg;
+    var explicitBg = style.background is! DefaultColor;
 
     if (style.bold && _state.theme.boldIsBright) {
       final raw = style.foreground;
@@ -507,7 +575,12 @@ class _StyleCache {
       }
     }
 
-    if (style.inverse) (foreground, background) = (background, foreground);
+    if (style.inverse) {
+      (foreground, background) = (background, foreground);
+      // Post-swap bg is the cell's foreground, which always needs a
+      // rect even if the pre-swap bg was default.
+      explicitBg = true;
+    }
 
     if (style.faint) {
       foreground = (_state.faintAlpha << 24) | (foreground & 0x00FFFFFF);
@@ -517,9 +590,10 @@ class _StyleCache {
       _gen[id] = _generation;
       _foreground[id] = foreground;
       _background[id] = background;
+      _explicitBg[id] = explicitBg ? 1 : 0;
       _styles[id] = style;
     }
 
-    return (foreground, background, style);
+    return (foreground, background, style, explicitBg);
   }
 }

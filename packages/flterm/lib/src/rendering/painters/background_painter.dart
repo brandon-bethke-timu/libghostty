@@ -8,9 +8,16 @@ import 'terminal_painter.dart';
 
 /// Paints the terminal background layer.
 ///
-/// First fills the entire grid area with the terminal background color.
-/// Then draws per-cell background color runs via a single batched
-/// [Canvas.drawVertices] call from pre-built vertex data.
+/// At full opacity, fills the grid with the opaque terminal background
+/// color and then draws per-cell explicit background rects on top via a
+/// batched [Canvas.drawVertices] call.
+///
+/// When [TerminalPaintState.backgroundOpacity] is less than 1.0, skips
+/// the grid fill so the backdrop behind the repaint boundary layer
+/// shows through on default background cells; filling here would
+/// composite twice against that backdrop. Per-cell explicit background
+/// rects still render on top, with alpha scaled by [SpriteBuilder] when
+/// [TerminalPaintState.backgroundOpacityCells] is true.
 class BackgroundPainter implements TerminalPainter {
   final Paint _fillPaint;
   final Paint _vertexPaint;
@@ -23,16 +30,18 @@ class BackgroundPainter implements TerminalPainter {
 
   @override
   void paint(Canvas canvas) {
-    _fillPaint.color = Color(_state.terminalBackgroundArgb);
-    canvas.drawRect(
-      .fromLTWH(
-        0,
-        0,
-        _state.cols * _state.metrics.cellWidth,
-        _state.rows * _state.metrics.cellHeight,
-      ),
-      _fillPaint,
-    );
+    if (_state.theme.backgroundOpacity >= 1.0) {
+      _fillPaint.color = Color(_state.terminalBackgroundArgb);
+      canvas.drawRect(
+        .fromLTWH(
+          0,
+          0,
+          _state.cols * _state.metrics.cellWidth,
+          _state.rows * _state.metrics.cellHeight,
+        ),
+        _fillPaint,
+      );
+    }
 
     final vertices = _sprites.backgroundVertices;
     if (vertices == null) return;

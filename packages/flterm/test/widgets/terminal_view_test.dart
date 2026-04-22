@@ -646,6 +646,47 @@ void main() {
         expect(rows.last, lessThan(noPaddingRows));
       });
     });
+
+    group('transparent background', () {
+      testWidgets('opaque theme paints ColoredBox with theme.background', (
+        tester,
+      ) async {
+        final theme = TerminalTheme.dark();
+        await tester.pumpWidget(
+          _wrapInApp(controller: controller, theme: theme),
+        );
+        await tester.pumpAndSettle();
+
+        final box = tester.widget<ColoredBox>(
+          find.descendant(
+            of: find.byType(TerminalView),
+            matching: find.byType(ColoredBox),
+          ),
+        );
+        expect(box.color, theme.background);
+      });
+
+      testWidgets('backgroundOpacity < 1 scales backdrop alpha to match', (
+        tester,
+      ) async {
+        final theme = TerminalTheme.dark().copyWith(backgroundOpacity: 0.5);
+        await tester.pumpWidget(
+          _wrapInApp(controller: controller, theme: theme),
+        );
+        await tester.pumpAndSettle();
+
+        final box = tester.widget<ColoredBox>(
+          find.descendant(
+            of: find.byType(TerminalView),
+            matching: find.byType(ColoredBox),
+          ),
+        );
+        expect(box.color.a, closeTo(0.5, 0.01));
+        expect(box.color.r, theme.background.r);
+        expect(box.color.g, theme.background.g);
+        expect(box.color.b, theme.background.b);
+      });
+    });
   });
 }
 

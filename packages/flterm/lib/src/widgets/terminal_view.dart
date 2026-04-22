@@ -148,7 +148,12 @@ class _TerminalViewState extends State<TerminalView> {
       behavior: .translucent,
       onTap: _controller.requestFocus,
       child: ColoredBox(
-        color: _theme.background,
+        // Backdrop tinted by backgroundOpacity. The repaint boundary
+        // TerminalRenderBox skips its own grid fill below 1.0 and
+        // relies on this as the sole tint source, so default background
+        // cells show through to whatever sits behind the widget without
+        // composing twice across the two layers.
+        color: _theme.background.withValues(alpha: _theme.backgroundOpacity),
         child: Padding(
           padding: widget.padding,
           child: Focus(

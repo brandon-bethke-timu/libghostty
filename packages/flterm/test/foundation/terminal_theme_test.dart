@@ -252,6 +252,39 @@ void main() {
       );
     });
 
+    test('defaults: fully opaque background, per-cell opacity off', () {
+      final theme = TerminalTheme.dark();
+      expect(theme.backgroundOpacity, 1.0);
+      expect(theme.backgroundOpacityCells, isFalse);
+      expect(theme.backgroundOpacityAlpha, 255);
+    });
+
+    test('backgroundOpacityAlpha precomputes opacity as a 0-255 byte', () {
+      final dim = TerminalTheme.dark().copyWith(backgroundOpacity: 0.5);
+      expect(dim.backgroundOpacityAlpha, 128);
+    });
+
+    test('backgroundOpacity must be in [0.0, 1.0]', () {
+      expect(
+        () => TerminalTheme(
+          foreground: const Color(0xFFFFFFFF),
+          background: const Color(0xFF000000),
+          ansiColors: List.filled(16, const Color(0xFF000000)),
+          backgroundOpacity: -0.1,
+        ),
+        throwsAssertionError,
+      );
+      expect(
+        () => TerminalTheme(
+          foreground: const Color(0xFFFFFFFF),
+          background: const Color(0xFF000000),
+          ansiColors: List.filled(16, const Color(0xFF000000)),
+          backgroundOpacity: 1.1,
+        ),
+        throwsAssertionError,
+      );
+    });
+
     test('dark and light have different foreground and background', () {
       final dark = TerminalTheme.dark();
       final light = TerminalTheme.light();
@@ -290,6 +323,8 @@ void main() {
       expect(a, isNot(equals(a.copyWith(faintOpacity: 0.3))));
       expect(a, isNot(equals(a.copyWith(minimumContrast: 4.5))));
       expect(a, isNot(equals(a.copyWith(fontFamilyFallback: ['Menlo']))));
+      expect(a, isNot(equals(a.copyWith(backgroundOpacity: 0.5))));
+      expect(a, isNot(equals(a.copyWith(backgroundOpacityCells: true))));
       expect(
         a,
         isNot(
@@ -353,14 +388,17 @@ void main() {
       final a = TerminalTheme.dark().copyWith(
         faintOpacity: 0.0,
         minimumContrast: 1.0,
+        backgroundOpacity: 0.0,
       );
       final b = TerminalTheme.dark().copyWith(
         faintOpacity: 1.0,
         minimumContrast: 7.0,
+        backgroundOpacity: 1.0,
       );
       final mid = TerminalTheme.lerp(a, b, 0.5)!;
       expect(mid.faintOpacity, 0.5);
       expect(mid.minimumContrast, 4.0);
+      expect(mid.backgroundOpacity, 0.5);
     });
 
     test('lerp snaps discrete fields at midpoint', () {
@@ -380,6 +418,11 @@ void main() {
       expect(TerminalTheme.lerp(a, b, 0.5)!.fontFamily, 'Consolas');
       expect(TerminalTheme.lerp(a, b, 0.49)!.fontFamilyFallback, ['Menlo']);
       expect(TerminalTheme.lerp(a, b, 0.5)!.fontFamilyFallback, ['Consolas']);
+
+      final c = TerminalTheme.dark().copyWith(backgroundOpacityCells: false);
+      final d = TerminalTheme.dark().copyWith(backgroundOpacityCells: true);
+      expect(TerminalTheme.lerp(c, d, 0.49)!.backgroundOpacityCells, isFalse);
+      expect(TerminalTheme.lerp(c, d, 0.5)!.backgroundOpacityCells, isTrue);
     });
 
     test('lerp with null returns other at boundary', () {
