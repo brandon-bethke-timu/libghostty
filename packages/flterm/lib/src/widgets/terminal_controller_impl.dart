@@ -264,7 +264,10 @@ class TerminalControllerImpl extends TerminalController
       ..action = event.action
       ..button = event.button
       ..mods = _currentMods()
-      ..setPosition(x: event.pixelX, y: event.pixelY);
+      ..setPosition(
+        x: event.pixelX * _lastDevicePixelRatio,
+        y: event.pixelY * _lastDevicePixelRatio,
+      );
     _mouseEncoder.sync(terminal);
     final result = _mouseEncoder.encode(_mouseEvent);
     if (result.isEmpty) return;

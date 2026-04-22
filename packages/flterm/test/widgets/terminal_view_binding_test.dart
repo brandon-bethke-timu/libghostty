@@ -274,6 +274,41 @@ void main() {
 
         expect(output, isEmpty);
       });
+
+      test('scales pixel coordinates by devicePixelRatio', () {
+        controller.terminal.writeUtf8('\x1b[?1000h');
+        binding.handleResize(
+          cols: 80,
+          rows: 24,
+          metrics: const CellMetrics(
+            cellWidth: 8,
+            cellHeight: 16,
+            baseline: 12,
+          ),
+          padding: EdgeInsets.zero,
+          devicePixelRatio: 2.0,
+        );
+
+        final output = <Uint8List>[];
+        controller.onOutput = output.add;
+
+        binding.handleMouseEvent((
+          action: .press,
+          button: .left,
+          pixelX: 8.0,
+          pixelY: 16.0,
+        ));
+
+        expect(output, hasLength(1));
+        expect(output.single, [
+          0x1b,
+          0x5b,
+          0x4d,
+          ' '.codeUnitAt(0),
+          '!'.codeUnitAt(0) + 1,
+          '!'.codeUnitAt(0) + 1,
+        ]);
+      });
     });
 
     test('mouseTracking reflects mode changes', () {
