@@ -612,10 +612,12 @@ void main() {
         await pump(
           tester,
           overrideTheme: TerminalTheme(
-            foreground: theme.foreground,
-            background: theme.background,
+            palette: ColorPalette(
+              ansiColors: _customAnsiColors,
+              background: theme.background,
+              foreground: theme.foreground,
+            ),
             fontSize: 24.0,
-            ansiColors: _customAnsiColors,
           ),
         );
         await expectLater(
@@ -629,10 +631,12 @@ void main() {
         await pump(
           tester,
           overrideTheme: TerminalTheme(
-            foreground: const Color(0xFF00FF00),
-            background: const Color(0xFF000080),
+            palette: ColorPalette(
+              ansiColors: _customAnsiColors,
+              background: const Color(0xFF000080),
+              foreground: const Color(0xFF00FF00),
+            ),
             fontSize: 24.0,
-            ansiColors: _customAnsiColors,
           ),
         );
         await expectLater(
@@ -661,13 +665,13 @@ void main() {
         final buf = StringBuffer();
 
         for (var i = 0; i < 8; i++) {
-          final fg = _needsWhiteFg(i) ? '38;5;15' : '38;5;0';
+          final fg = _needsWhiteFg(theme.palette, i) ? '38;5;15' : '38;5;0';
           buf.write('\x1b[$fg;48;5;${i}m${i.toString().padLeft(3)} \x1b[0m');
         }
         buf.write('\r\n');
 
         for (var i = 8; i < 16; i++) {
-          final fg = _needsWhiteFg(i) ? '38;5;15' : '38;5;0';
+          final fg = _needsWhiteFg(theme.palette, i) ? '38;5;15' : '38;5;0';
           buf.write('\x1b[$fg;48;5;${i}m${i.toString().padLeft(3)} \x1b[0m');
         }
         buf.write('\r\n');
@@ -675,7 +679,7 @@ void main() {
         buf.write('\r\n');
 
         for (var i = 16; i < 232; i++) {
-          final fg = _needsWhiteFg(i) ? '38;5;15' : '38;5;0';
+          final fg = _needsWhiteFg(theme.palette, i) ? '38;5;15' : '38;5;0';
           buf.write('\x1b[$fg;48;5;${i}m${i.toString().padLeft(3)} \x1b[0m');
           if ((i - 16 + 1) % 18 == 0) buf.write('\r\n');
         }
@@ -683,7 +687,7 @@ void main() {
         buf.write('\r\n');
 
         for (var i = 232; i < 256; i++) {
-          final fg = _needsWhiteFg(i) ? '38;5;15' : '38;5;0';
+          final fg = _needsWhiteFg(theme.palette, i) ? '38;5;15' : '38;5;0';
           buf.write('\x1b[$fg;48;5;${i}m${i.toString().padLeft(3)} \x1b[0m');
           if ((i - 232 + 1) % 12 == 0 && i < 255) buf.write('\r\n');
         }
@@ -739,25 +743,12 @@ final _emojiTheme = TerminalTheme.dark().copyWith(
   fontFamilyFallback: const ['Noto Emoji', 'JetBrains Mono'],
 );
 
-/// Returns true if the 256-color palette index has a dark background
-/// that needs white foreground text for readability.
-bool _needsWhiteFg(int colorIndex) {
-  if (colorIndex < 16) {
-    // Standard + bright: dark set needs white fg.
-    const dark = {0, 1, 2, 3, 4, 5, 6, 8, 12};
-    return dark.contains(colorIndex);
-  } else if (colorIndex < 232) {
-    // 6×6×6 RGB cube.
-    const levels = [0, 0x5F, 0x87, 0xAF, 0xD7, 0xFF];
-    final idx = colorIndex - 16;
-    final r = levels[idx ~/ 36];
-    final g = levels[(idx % 36) ~/ 6];
-    final b = levels[idx % 6];
-    return (0.299 * r + 0.587 * g + 0.114 * b) < 128;
-  } else {
-    // Grayscale ramp.
-    return (8 + 10 * (colorIndex - 232)) < 128;
-  }
+/// Returns true if the cell at [colorIndex] has a dark enough background
+/// that white foreground text reads better than black.
+bool _needsWhiteFg(ColorPalette palette, int colorIndex) {
+  final c = palette[colorIndex];
+  // sRGB luma (< 128 on 0-255 scale).
+  return (0.299 * c.r * 255 + 0.587 * c.g * 255 + 0.114 * c.b * 255) < 128;
 }
 
 Widget _wrap(

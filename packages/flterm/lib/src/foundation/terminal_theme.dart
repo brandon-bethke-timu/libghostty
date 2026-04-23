@@ -254,8 +254,7 @@ final class SelectionTheme {
 ///
 /// **Terminal-configuring properties** (pushed to the terminal on creation
 /// and theme change via the renderer):
-/// - [foreground], [background]: default text and canvas colors
-/// - [ansiColors] / [palette]: 256-color palette
+/// - [palette]: background, foreground, and the 256-color palette
 /// - [cursor].color: cursor color
 ///
 /// **Rendering-only properties** (used by Flutter painters directly):
@@ -273,13 +272,8 @@ final class SelectionTheme {
 /// ```
 @immutable
 final class TerminalTheme {
-  /// Default foreground color when a cell uses [DefaultColor].
-  final Color foreground;
-
-  /// Default background color when a cell uses [DefaultColor].
-  final Color background;
-
-  /// The resolved 256-color palette.
+  /// Background, foreground, and the 256-color palette as a single bundle.
+  /// See [ColorPalette] for how indices 16–255 are produced.
   final ColorPalette palette;
 
   /// Cursor appearance settings.
@@ -339,12 +333,8 @@ final class TerminalTheme {
   /// alpha scaling in the per-cell hot loop of the sprite builder.
   final int backgroundOpacityAlpha;
 
-  /// [ansiColors] must contain exactly 16 entries. The full 256-color palette
-  /// uses the standard xterm 6×6×6 cube and grayscale ramp for indices 16–255.
   TerminalTheme({
-    required this.foreground,
-    required this.background,
-    required List<Color> ansiColors,
+    required this.palette,
     this.cursor = const CursorTheme(),
     this.hyperlink = const HyperlinkTheme(),
     this.fontSize = 14.0,
@@ -362,46 +352,39 @@ final class TerminalTheme {
          backgroundOpacity >= 0.0 && backgroundOpacity <= 1.0,
          'backgroundOpacity must be >= 0.0 && <= 1.0',
        ),
-       backgroundOpacityAlpha = (backgroundOpacity * 255).round(),
-       palette = .fromAnsiColors(ansiColors);
+       backgroundOpacityAlpha = (backgroundOpacity * 255).round();
 
   /// A dark-background terminal theme using the Tomorrow Night color scheme,
   /// matching Ghostty's defaults.
   factory TerminalTheme.dark() => TerminalTheme(
-    foreground: const Color(0xFFC5C8C6),
-    background: const Color(0xFF1D1F21),
-    ansiColors: _darkAnsiColors,
+    palette: ColorPalette(
+      ansiColors: _darkAnsiColors,
+      background: const Color(0xFF1D1F21),
+      foreground: const Color(0xFFC5C8C6),
+    ),
   );
 
   /// A light-background terminal theme using the Atom One Light color scheme.
   factory TerminalTheme.light() => TerminalTheme(
-    foreground: const Color(0xFF383A42),
-    background: const Color(0xFFFAFAFA),
-    ansiColors: _lightAnsiColors,
+    palette: ColorPalette(
+      ansiColors: _lightAnsiColors,
+      background: const Color(0xFFFAFAFA),
+      foreground: const Color(0xFF383A42),
+    ),
   );
 
-  TerminalTheme._withPalette({
-    required this.foreground,
-    required this.background,
-    required this.palette,
-    required this.cursor,
-    required this.fontSize,
-    required this.fontWeight,
-    required this.hyperlink,
-    required this.fontFamily,
-    required this.fontFamilyFallback,
-    required this.selection,
-    required this.boldIsBright,
-    required this.faintOpacity,
-    required this.minimumContrast,
-    required this.backgroundOpacity,
-    required this.backgroundOpacityCells,
-  }) : backgroundOpacityAlpha = (backgroundOpacity * 255).round();
+  /// Default background color when a cell uses [DefaultColor].
+  ///
+  /// Shorthand for `palette.background`.
+  Color get background => palette.background;
+
+  /// Default foreground color when a cell uses [DefaultColor].
+  ///
+  /// Shorthand for `palette.foreground`.
+  Color get foreground => palette.foreground;
 
   @override
   int get hashCode => Object.hash(
-    foreground,
-    background,
     palette,
     cursor,
     hyperlink,
@@ -420,8 +403,6 @@ final class TerminalTheme {
   @override
   bool operator ==(Object other) =>
       other is TerminalTheme &&
-      other.foreground == foreground &&
-      other.background == background &&
       other.palette == palette &&
       other.cursor == cursor &&
       other.hyperlink == hyperlink &&
@@ -437,10 +418,11 @@ final class TerminalTheme {
       other.backgroundOpacityCells == backgroundOpacityCells;
 
   /// Returns a copy of this theme with the given fields replaced.
+  ///
+  /// To change colors, build a new [palette] (often via
+  /// `palette.copyWith(...)`) and pass it here.
   TerminalTheme copyWith({
-    Color? foreground,
-    Color? background,
-    List<Color>? ansiColors,
+    ColorPalette? palette,
     CursorTheme? cursor,
     HyperlinkTheme? hyperlink,
     double? fontSize,
@@ -453,50 +435,22 @@ final class TerminalTheme {
     double? minimumContrast,
     double? backgroundOpacity,
     bool? backgroundOpacityCells,
-  }) {
-    final newForeground = foreground ?? this.foreground;
-    final newBackground = background ?? this.background;
-
-    if (ansiColors != null) {
-      return TerminalTheme(
-        foreground: newForeground,
-        background: newBackground,
-        cursor: cursor ?? this.cursor,
-        hyperlink: hyperlink ?? this.hyperlink,
-        fontSize: fontSize ?? this.fontSize,
-        fontWeight: fontWeight ?? this.fontWeight,
-        fontFamily: fontFamily ?? this.fontFamily,
-        fontFamilyFallback: fontFamilyFallback ?? this.fontFamilyFallback,
-        selection: selection ?? this.selection,
-        boldIsBright: boldIsBright ?? this.boldIsBright,
-        faintOpacity: faintOpacity ?? this.faintOpacity,
-        minimumContrast: minimumContrast ?? this.minimumContrast,
-        backgroundOpacity: backgroundOpacity ?? this.backgroundOpacity,
-        backgroundOpacityCells:
-            backgroundOpacityCells ?? this.backgroundOpacityCells,
-        ansiColors: ansiColors,
-      );
-    }
-
-    return TerminalTheme._withPalette(
-      palette: palette,
-      foreground: newForeground,
-      background: newBackground,
-      cursor: cursor ?? this.cursor,
-      hyperlink: hyperlink ?? this.hyperlink,
-      fontSize: fontSize ?? this.fontSize,
-      fontWeight: fontWeight ?? this.fontWeight,
-      fontFamily: fontFamily ?? this.fontFamily,
-      fontFamilyFallback: fontFamilyFallback ?? this.fontFamilyFallback,
-      selection: selection ?? this.selection,
-      boldIsBright: boldIsBright ?? this.boldIsBright,
-      faintOpacity: faintOpacity ?? this.faintOpacity,
-      minimumContrast: minimumContrast ?? this.minimumContrast,
-      backgroundOpacity: backgroundOpacity ?? this.backgroundOpacity,
-      backgroundOpacityCells:
-          backgroundOpacityCells ?? this.backgroundOpacityCells,
-    );
-  }
+  }) => TerminalTheme(
+    palette: palette ?? this.palette,
+    cursor: cursor ?? this.cursor,
+    hyperlink: hyperlink ?? this.hyperlink,
+    fontSize: fontSize ?? this.fontSize,
+    fontWeight: fontWeight ?? this.fontWeight,
+    fontFamily: fontFamily ?? this.fontFamily,
+    fontFamilyFallback: fontFamilyFallback ?? this.fontFamilyFallback,
+    selection: selection ?? this.selection,
+    boldIsBright: boldIsBright ?? this.boldIsBright,
+    faintOpacity: faintOpacity ?? this.faintOpacity,
+    minimumContrast: minimumContrast ?? this.minimumContrast,
+    backgroundOpacity: backgroundOpacity ?? this.backgroundOpacity,
+    backgroundOpacityCells:
+        backgroundOpacityCells ?? this.backgroundOpacityCells,
+  );
 
   /// Resolves a [CellColor] to a Flutter [Color] using this theme's palette.
   ///
@@ -526,9 +480,7 @@ final class TerminalTheme {
   static TerminalTheme? lerp(TerminalTheme? a, TerminalTheme? b, double t) {
     if (identical(a, b)) return a;
     if (a == null || b == null) return t < 0.5 ? a : b;
-    return TerminalTheme._withPalette(
-      foreground: Color.lerp(a.foreground, b.foreground, t)!,
-      background: Color.lerp(a.background, b.background, t)!,
+    return TerminalTheme(
       palette: ColorPalette.lerp(a.palette, b.palette, t)!,
       cursor: CursorTheme.lerp(a.cursor, b.cursor, t)!,
       hyperlink: HyperlinkTheme.lerp(a.hyperlink, b.hyperlink, t)!,

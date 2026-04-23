@@ -86,9 +86,11 @@ void main() {
       await tester.pumpWidget(_wrapInApp(controller: controller));
 
       final largeTheme = TerminalTheme(
-        foreground: const Color(0xFFFFFFFF),
-        background: const Color(0xFF000000),
-        ansiColors: List.generate(16, (_) => const Color(0xFF888888)),
+        palette: ColorPalette(
+          ansiColors: List.generate(16, (_) => const Color(0xFF888888)),
+          background: const Color(0xFF000000),
+          foreground: const Color(0xFFFFFFFF),
+        ),
         fontSize: 24.0,
       );
 
