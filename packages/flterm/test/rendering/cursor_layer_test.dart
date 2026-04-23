@@ -284,7 +284,7 @@ TerminalTheme _cursorTheme(
     fontFamilyFallback: fallback ?? bundledFontFamilyFallback,
     cursor: CursorTheme(
       shape: shape,
-      color: color,
+      color: color == null ? null : DynamicColor.fixed(color),
       blinkInterval: const Duration(hours: 1),
     ),
   );

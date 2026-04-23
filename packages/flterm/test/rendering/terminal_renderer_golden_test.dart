@@ -555,7 +555,9 @@ void main() {
         await pump(
           tester,
           overrideTheme: theme.copyWith(
-            selection: const SelectionTheme(background: Color(0x80FF0000)),
+            selection: const SelectionTheme(
+              background: DynamicColor.fixed(Color(0x80FF0000)),
+            ),
           ),
           selection: const TerminalSelection(
             startRow: 0,
@@ -598,12 +600,105 @@ void main() {
         await pump(
           tester,
           overrideTheme: theme.copyWith(
-            cursor: const CursorTheme(color: Color(0xFFFF0000)),
+            cursor: const CursorTheme(
+              color: DynamicColor.fixed(Color(0xFFFF0000)),
+            ),
           ),
         );
         await expectLater(
           find.byType(TerminalRenderer),
           matchesGoldenFile('goldens/theme_cursor_color.png'),
+        );
+      });
+
+      testWidgets('cursor text color', (tester) async {
+        terminal.writeUtf8('AB');
+        await pump(
+          tester,
+          overrideTheme: theme.copyWith(
+            cursor: const CursorTheme(
+              color: DynamicColor.fixed(Color(0xFFFFFFFF)),
+              text: DynamicColor.fixed(Color(0xFFFF00FF)),
+            ),
+          ),
+        );
+        await expectLater(
+          find.byType(TerminalRenderer),
+          matchesGoldenFile('goldens/theme_cursor_text.png'),
+        );
+      });
+
+      testWidgets('cursor color tracks cell foreground', (tester) async {
+        terminal.writeUtf8('\x1b[31mR\x1b[0m\x1b[34mB\x1b[0m');
+        await pump(
+          tester,
+          overrideTheme: theme.copyWith(
+            cursor: const CursorTheme(color: DynamicColor.cellForeground()),
+          ),
+        );
+        await expectLater(
+          find.byType(TerminalRenderer),
+          matchesGoldenFile('goldens/theme_cursor_cell_fg.png'),
+        );
+      });
+
+      testWidgets('selection foreground tints selected text', (tester) async {
+        terminal.writeUtf8('\x1b[31mRed\x1b[0m \x1b[32mGreen\x1b[0m');
+        await pump(
+          tester,
+          overrideTheme: theme.copyWith(
+            selection: const SelectionTheme(
+              background: DynamicColor.fixed(Color(0x80888888)),
+              foreground: DynamicColor.fixed(Color(0xFFFFFF00)),
+            ),
+          ),
+          selection: const TerminalSelection(
+            startRow: 0,
+            startCol: 0,
+            endRow: 0,
+            endCol: 9,
+          ),
+        );
+        await expectLater(
+          find.byType(TerminalRenderer),
+          matchesGoldenFile('goldens/theme_selection_fg.png'),
+        );
+      });
+
+      testWidgets('selection foreground tracks cell background', (
+        tester,
+      ) async {
+        terminal.writeUtf8('\x1b[41mA\x1b[0m\x1b[44mB\x1b[0m');
+        await pump(
+          tester,
+          overrideTheme: theme.copyWith(
+            selection: const SelectionTheme(
+              background: DynamicColor.fixed(Color(0x80888888)),
+              foreground: DynamicColor.cellBackground(),
+            ),
+          ),
+          selection: const TerminalSelection(
+            startRow: 0,
+            startCol: 0,
+            endRow: 0,
+            endCol: 2,
+          ),
+        );
+        await expectLater(
+          find.byType(TerminalRenderer),
+          matchesGoldenFile('goldens/theme_selection_fg_cell_bg.png'),
+        );
+      });
+
+      testWidgets('boldColor overrides bold foreground', (tester) async {
+        terminal.writeUtf8('\x1b[31mRed\x1b[0m \x1b[1;31mBold Red\x1b[0m');
+        await pump(
+          tester,
+          overrideTheme: theme.copyWith(boldColor: const Color(0xFF00FFFF)),
+        );
+        await expectLater(
+          find.byType(TerminalRenderer),
+          matchesGoldenFile('goldens/theme_bold_color.png'),
         );
       });
 

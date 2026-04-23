@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:libghostty/libghostty.dart';
 
 import 'color_palette.dart';
+import 'dynamic_color.dart';
 
 /// Default dark ANSI palette (Tomorrow Night), matching Ghostty's defaults.
 const _darkAnsiColors = [
@@ -67,8 +68,13 @@ final class CursorTheme {
   /// Cursor shape: block, underline, bar, or block-hollow.
   final CursorShape shape;
 
-  /// Explicit cursor color. When null, defaults to the foreground color.
-  final Color? color;
+  /// Cursor fill color. When null, defaults to the terminal foreground.
+  /// See [DynamicColor] for per-cell variants.
+  final DynamicColor? color;
+
+  /// Character color under a block cursor. When null, defaults to the
+  /// terminal background. See [DynamicColor] for per-cell variants.
+  final DynamicColor? text;
 
   /// Time between blink state toggles.
   final Duration blinkInterval;
@@ -79,35 +85,38 @@ final class CursorTheme {
   const CursorTheme({
     this.shape = CursorShape.block,
     this.color,
+    this.text,
     this.blinkInterval = const Duration(milliseconds: 600),
     this.opacity = 1.0,
   });
 
   @override
-  int get hashCode => Object.hash(shape, color, blinkInterval, opacity);
+  int get hashCode => Object.hash(shape, color, text, blinkInterval, opacity);
 
   @override
   bool operator ==(Object other) =>
       other is CursorTheme &&
       other.shape == shape &&
       other.color == color &&
+      other.text == text &&
       other.blinkInterval == blinkInterval &&
       other.opacity == opacity;
 
   @override
   String toString() =>
-      'CursorTheme(shape: $shape, color: $color, '
+      'CursorTheme(shape: $shape, color: $color, text: $text, '
       'blinkInterval: $blinkInterval, opacity: $opacity)';
 
   /// Linearly interpolates between two cursor themes.
   ///
-  /// Non-interpolable fields ([shape]) snap at `t >= 0.5`.
+  /// Non-interpolable fields ([shape], [color], [text]) snap at `t >= 0.5`.
   static CursorTheme? lerp(CursorTheme? a, CursorTheme? b, double t) {
     if (identical(a, b)) return a;
     if (a == null || b == null) return t < 0.5 ? a : b;
     return CursorTheme(
       shape: t < 0.5 ? a.shape : b.shape,
-      color: Color.lerp(a.color, b.color, t),
+      color: t < 0.5 ? a.color : b.color,
+      text: t < 0.5 ? a.text : b.text,
       blinkInterval: Duration(
         microseconds: lerpDouble(
           a.blinkInterval.inMicroseconds.toDouble(),
@@ -213,17 +222,15 @@ final class HyperlinkTheme {
   }
 }
 
-/// Selection highlight colors.
-///
-/// When null, selection background defaults to the terminal foreground color
-/// and selection foreground defaults to the terminal background color.
+/// Selection highlight colors. See [DynamicColor] for per-cell variants.
 @immutable
 final class SelectionTheme {
-  /// Selection background color. When null, uses the terminal foreground.
-  final Color? background;
+  /// Selection highlight fill. When null, uses the terminal foreground.
+  final DynamicColor? background;
 
-  /// Selection text color. When null, uses the terminal background.
-  final Color? foreground;
+  /// Color of selected text. When null, selected text keeps its original
+  /// foreground.
+  final DynamicColor? foreground;
 
   const SelectionTheme({this.background, this.foreground});
 
@@ -240,12 +247,16 @@ final class SelectionTheme {
   String toString() =>
       'SelectionTheme(background: $background, foreground: $foreground)';
 
+  /// Linearly interpolates between two selection themes.
+  ///
+  /// [background] and [foreground] snap at `t >= 0.5` since DynamicColor
+  /// variants don't interpolate meaningfully.
   static SelectionTheme? lerp(SelectionTheme? a, SelectionTheme? b, double t) {
     if (identical(a, b)) return a;
     if (a == null || b == null) return t < 0.5 ? a : b;
     return SelectionTheme(
-      background: Color.lerp(a.background, b.background, t),
-      foreground: Color.lerp(a.foreground, b.foreground, t),
+      background: t < 0.5 ? a.background : b.background,
+      foreground: t < 0.5 ? a.foreground : b.foreground,
     );
   }
 }
@@ -263,7 +274,8 @@ final class SelectionTheme {
 /// - [hyperlink]: idle and highlighted hyperlink styling
 /// - [cursor].shape: initial cursor shape (terminal programs may override)
 /// - [cursor].blinkInterval, [cursor].opacity: cursor animation
-/// - [boldIsBright], [faintOpacity], [minimumContrast]: text rendering
+/// - [boldIsBright], [boldColor], [faintOpacity], [minimumContrast]: text
+///   rendering
 /// - [backgroundOpacity], [backgroundOpacityCells]: transparent background
 ///
 /// ```dart
@@ -303,6 +315,11 @@ final class TerminalTheme {
   /// When true, bold text uses bright palette colors (indices 8-15).
   final bool boldIsBright;
 
+  /// Explicit color for bold text. When non-null, takes precedence over
+  /// [boldIsBright]: bold cells render in this color regardless of their
+  /// original foreground.
+  final Color? boldColor;
+
   /// Opacity multiplier for faint (dim) text, from 0.0 to 1.0.
   final double faintOpacity;
 
@@ -341,8 +358,9 @@ final class TerminalTheme {
     this.fontWeight = FontWeight.normal,
     this.fontFamily = 'JetBrains Mono',
     this.fontFamilyFallback = _defaultFontFamilyFallback,
-    this.selection = const SelectionTheme(background: Color(0x3D7AA2F7)),
+    this.selection = const SelectionTheme(),
     this.boldIsBright = false,
+    this.boldColor,
     this.faintOpacity = 0.5,
     this.minimumContrast = 1.0,
     this.backgroundOpacity = 1.0,
@@ -394,6 +412,7 @@ final class TerminalTheme {
     Object.hashAll(fontFamilyFallback),
     selection,
     boldIsBright,
+    boldColor,
     faintOpacity,
     minimumContrast,
     backgroundOpacity,
@@ -412,6 +431,7 @@ final class TerminalTheme {
       listEquals(other.fontFamilyFallback, fontFamilyFallback) &&
       other.selection == selection &&
       other.boldIsBright == boldIsBright &&
+      other.boldColor == boldColor &&
       other.faintOpacity == faintOpacity &&
       other.minimumContrast == minimumContrast &&
       other.backgroundOpacity == backgroundOpacity &&
@@ -431,6 +451,7 @@ final class TerminalTheme {
     List<String>? fontFamilyFallback,
     SelectionTheme? selection,
     bool? boldIsBright,
+    Color? boldColor,
     double? faintOpacity,
     double? minimumContrast,
     double? backgroundOpacity,
@@ -445,6 +466,7 @@ final class TerminalTheme {
     fontFamilyFallback: fontFamilyFallback ?? this.fontFamilyFallback,
     selection: selection ?? this.selection,
     boldIsBright: boldIsBright ?? this.boldIsBright,
+    boldColor: boldColor ?? this.boldColor,
     faintOpacity: faintOpacity ?? this.faintOpacity,
     minimumContrast: minimumContrast ?? this.minimumContrast,
     backgroundOpacity: backgroundOpacity ?? this.backgroundOpacity,
@@ -490,6 +512,7 @@ final class TerminalTheme {
       fontFamilyFallback: t < 0.5 ? a.fontFamilyFallback : b.fontFamilyFallback,
       selection: SelectionTheme.lerp(a.selection, b.selection, t)!,
       boldIsBright: t < 0.5 ? a.boldIsBright : b.boldIsBright,
+      boldColor: Color.lerp(a.boldColor, b.boldColor, t),
       faintOpacity: lerpDouble(a.faintOpacity, b.faintOpacity, t)!,
       minimumContrast: lerpDouble(a.minimumContrast, b.minimumContrast, t)!,
       backgroundOpacity: lerpDouble(

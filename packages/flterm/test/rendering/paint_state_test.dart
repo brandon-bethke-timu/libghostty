@@ -12,17 +12,9 @@ void main() {
 
       expect(state.theme, theme);
       expect(state.metrics, metrics);
-      expect(state.selectionBackground, theme.selection.background);
       expect(state.faintAlpha, (theme.faintOpacity * 255).ceil());
       expect(state.terminalForegroundArgb, theme.foreground.toARGB32());
       expect(state.terminalBackgroundArgb, theme.background.toARGB32());
-    });
-
-    test('selectionBackground falls back to foreground when null', () {
-      final noSelBg = theme.copyWith(selection: const SelectionTheme());
-      final state = TerminalPaintState(noSelBg, metrics);
-
-      expect(state.selectionBackground, noSelBg.foreground);
     });
 
     group('updateTheme', () {
@@ -33,7 +25,6 @@ void main() {
         state.updateTheme(light);
 
         expect(state.theme, light);
-        expect(state.selectionBackground, light.selection.background);
         expect(state.faintAlpha, (light.faintOpacity * 255).ceil());
       });
 

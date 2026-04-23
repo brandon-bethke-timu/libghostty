@@ -12,7 +12,6 @@ import 'painters/cursor_painter.dart';
 import 'painters/decoration_painter.dart';
 import 'painters/emoji_painter.dart';
 import 'painters/kitty_graphics_painter.dart';
-import 'painters/selection_painter.dart';
 import 'painters/terminal_text_painter.dart';
 import 'painters/underline_painter.dart';
 import 'sprite_builder.dart';
@@ -204,7 +203,6 @@ class TerminalRenderBox extends RenderBox {
   late final CursorPainter _cursorPainter;
   late final TerminalPaintState _paintState;
   late final TerminalTextPainter _textPainter;
-  late final SelectionPainter _selectionPainter;
   late final UnderlinePainter _underlinePainter;
   late final BackgroundPainter _backgroundPainter;
   late final DecorationPainter _decorationPainter;
@@ -245,7 +243,6 @@ class TerminalRenderBox extends RenderBox {
     _emojiPainter = EmojiPainter(_atlas, _sprites);
     _underlinePainter = UnderlinePainter(_atlas, _sprites);
     _decorationPainter = DecorationPainter(_sprites);
-    _selectionPainter = SelectionPainter(_paintState);
     _kittyImageCache = KittyImageCache(onImageReady: markNeedsPaint);
     _kittyBelowBgPainter = KittyGraphicsPainter(
       state: _paintState,
@@ -418,7 +415,6 @@ class TerminalRenderBox extends RenderBox {
     // crosses through glyphs.
     _decorationPainter.paint(canvas);
     _kittyAbovePainter.paint(canvas);
-    _selectionPainter.paint(canvas);
     canvas.restore();
   }
 
@@ -479,7 +475,11 @@ class TerminalRenderBox extends RenderBox {
   void _applyThemeColors() {
     _terminal.foreground = _paintState.theme.foreground.toRgbColor();
     _terminal.background = _paintState.theme.background.toRgbColor();
-    _terminal.cursorColor = _paintState.theme.cursor.color?.toRgbColor();
+    // Sentinel cursor colors (cellForeground/cellBackground) can't be
+    // reported as a single RGB, so we only push a fixed color down to
+    // libghostty; the flterm cursor painter resolves sentinels locally.
+    _terminal.cursorColor = _paintState.theme.cursor.color?.fixedColor
+        ?.toRgbColor();
     _terminal.palette = [
       for (var i = 0; i < 256; i++) _paintState.theme.palette[i].toRgbColor(),
     ];
@@ -491,8 +491,13 @@ class TerminalRenderBox extends RenderBox {
   }
 
   void _onRenderObserverChanged() {
-    _paintState.selection = _renderObserver.selection;
+    final previousSelection = _paintState.selection;
+    final newSelection = _renderObserver.selection;
+    _paintState.selection = newSelection;
     _paintState.cursorFocused = _renderObserver.hasFocus;
+    // Selection membership changes each cell's bg and fg, so rebuild
+    // sprites when the selection actually moves.
+    if (previousSelection != newSelection) _needsSpriteRebuild = true;
     _resolveCursorGlyph();
     markNeedsPaint();
   }
@@ -554,6 +559,7 @@ class TerminalRenderBox extends RenderBox {
       _paintState.cursor = cursor.copyWith(visible: false);
       _paintState.cursorWide = false;
       _paintState.cursorGlyphEntry = null;
+      _resolveCursorFillColor(null);
       return;
     }
 
@@ -570,7 +576,35 @@ class TerminalRenderBox extends RenderBox {
     _lastCursorCell = cursorCell;
     _paintState.cursor = effectiveCursor;
     _paintState.cursorWide = cursorCell.wide;
+    _resolveCursorFillColor(cursorCell);
     _resolveCursorGlyph();
+  }
+
+  // An OSC 12 color reported by libghostty overrides the theme cursor color.
+  void _resolveCursorFillColor(CursorCell? cell) {
+    final osc = _terminal.cursorColor;
+    if (osc != null) {
+      _paintState.cursorColorArgb = osc.toArgb32;
+      return;
+    }
+    final themeCursor = _paintState.theme.cursor.color;
+    if (themeCursor == null) {
+      _paintState.cursorColorArgb = _paintState.terminalForegroundArgb;
+      return;
+    }
+    final (cellFg, cellBg) = _resolveCellColors(cell);
+    _paintState.cursorColorArgb = themeCursor
+        .resolve(cellForeground: cellFg, cellBackground: cellBg)
+        .toARGB32();
+  }
+
+  (Color, Color) _resolveCellColors(CursorCell? cell) {
+    final theme = _paintState.theme;
+    if (cell == null) return (theme.foreground, theme.background);
+    var fg = theme.resolveColor(cell.style.foreground, isForeground: true);
+    var bg = theme.resolveColor(cell.style.background, isForeground: false);
+    if (cell.style.inverse) (fg, bg) = (bg, fg);
+    return (fg, bg);
   }
 
   // Builds the block cursor glyph from cached cursor cell data.
@@ -595,12 +629,18 @@ class TerminalRenderBox extends RenderBox {
       italic: style.italic,
     ), span: cell.wide ? 2 : 1);
 
-    // The glyph shows in the terminal background color so it contrasts
-    // with the cursor (which uses the terminal foreground / cursor color).
-    // This matches standard terminal behavior: the block cursor always
-    // inverts to bg/fg regardless of the cell's own styling.
+    // The character under a block cursor paints in [CursorTheme.text] (or
+    // the terminal background when unset) so it contrasts with the cursor
+    // fill, matching standard terminal invert-on-cursor behavior.
+    final (cellFg, cellBg) = _resolveCellColors(cell);
+    final glyphColor =
+        _paintState.theme.cursor.text?.resolve(
+          cellForeground: cellFg,
+          cellBackground: cellBg,
+        ) ??
+        Color(_paintState.terminalBackgroundArgb);
     _paintState.cursorGlyphPaint.colorFilter = ColorFilter.mode(
-      Color(_paintState.terminalBackgroundArgb),
+      glyphColor,
       BlendMode.modulate,
     );
   }
@@ -673,8 +713,6 @@ class TerminalRenderBox extends RenderBox {
       _paintState.terminalBackgroundArgb =
           _terminal.background?.toArgb32 ??
           _paintState.theme.background.toARGB32();
-      _paintState.cursorColorArgb =
-          _terminal.cursorColor?.toArgb32 ?? _paintState.terminalForegroundArgb;
 
       _spriteBuilder.build(_renderState);
       _renderState.dirty = DirtyState.clean;

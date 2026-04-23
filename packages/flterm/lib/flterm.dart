@@ -23,6 +23,7 @@ export 'package:libghostty/libghostty.dart'
 
 export 'src/foundation/callbacks.dart' show OnResize;
 export 'src/foundation/color_palette.dart' show ColorPalette;
+export 'src/foundation/dynamic_color.dart' show DynamicColor;
 export 'src/foundation/input_types.dart' show KeyboardState, MouseAutoHide;
 export 'src/foundation/terminal_config.dart'
     show ScrollToBottom, TerminalConfig;

@@ -32,7 +32,6 @@ class TerminalPaintState {
   int faintAlpha;
 
   TerminalSelection? selection;
-  Color selectionBackground;
   var viewportOffset = 0;
 
   var cursor = const Cursor();
@@ -43,15 +42,13 @@ class TerminalPaintState {
   final cursorGlyphPaint = Paint();
 
   TerminalPaintState(this.theme, this.metrics)
-    : selectionBackground = theme.selection.background ?? theme.foreground,
-      faintAlpha = (theme.faintOpacity * 255).ceil() {
+    : faintAlpha = (theme.faintOpacity * 255).ceil() {
     terminalForegroundArgb = theme.foreground.toARGB32();
     terminalBackgroundArgb = theme.background.toARGB32();
   }
 
   void updateTheme(TerminalTheme newTheme) {
     theme = newTheme;
-    selectionBackground = newTheme.selection.background ?? newTheme.foreground;
     faintAlpha = (newTheme.faintOpacity * 255).ceil();
   }
 }

@@ -1,7 +1,10 @@
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:libghostty/libghostty.dart';
 
+import '../foundation/dynamic_color.dart';
+import '../foundation/terminal_selection.dart';
 import 'atlas/glyph_atlas.dart';
 import 'atlas/sprite_buffer.dart';
 import 'paint_state.dart';
@@ -75,6 +78,11 @@ class SpriteBuilder {
   late bool _applyCellOpacity;
   late int _cellOpacityAlpha;
 
+  // Null short-circuits the per-cell selection-membership check in the hot
+  // loop; the override fields and viewport offset are read directly from
+  // _state when resolving a selected cell's colors.
+  TerminalSelection? _selection;
+
   SpriteBuilder(this._atlas, this._sprites, this._state)
     : _styleCache = _StyleCache(_state),
       _cursor = _RowCursor(),
@@ -104,6 +112,7 @@ class SpriteBuilder {
     _applyCellOpacity =
         theme.backgroundOpacityCells && theme.backgroundOpacity < 1.0;
     _cellOpacityAlpha = theme.backgroundOpacityAlpha;
+    _selection = _state.selection;
     _styleCache.beginFrame();
 
     _rows.reset(renderState);
@@ -137,16 +146,42 @@ class SpriteBuilder {
 
     while (cells.next() && cursor.col < _cols) {
       final isWide = cells.wide == .wide;
+      final selected = _isCellSelected(cursor.row, cursor.col);
+      final styleChanged = cells.styleId != cursor.prevStyleId;
+      final selectionChanged = selected != cursor.prevSelected;
 
-      if (cells.styleId != cursor.prevStyleId) {
-        _flushOperatorRun(cursor);
+      if (styleChanged || selectionChanged) _flushOperatorRun(cursor);
+
+      if (styleChanged) {
         final (fg, bg, style, explicitBg) = _styleCache.resolve(cells);
         cursor.prevStyleId = cells.styleId;
-        cursor.foreground = fg;
-        cursor.background = bg;
+        cursor.baseForeground = fg;
+        cursor.baseBackground = bg;
+        cursor.baseBackgroundExplicit = explicitBg;
         cursor.backgroundInverse = style.inverse;
-        cursor.backgroundExplicit = explicitBg;
         cursor.style = style;
+      }
+
+      if (styleChanged || selectionChanged) {
+        if (selected) {
+          final sel = _state.theme.selection;
+          cursor.foreground = _resolveSelectionColor(
+            cursor,
+            sel.foreground,
+            _state.terminalBackgroundArgb,
+          );
+          cursor.background = _resolveSelectionColor(
+            cursor,
+            sel.background,
+            _state.terminalForegroundArgb,
+          );
+          cursor.backgroundExplicit = true;
+        } else {
+          cursor.foreground = cursor.baseForeground;
+          cursor.background = cursor.baseBackground;
+          cursor.backgroundExplicit = cursor.baseBackgroundExplicit;
+        }
+        cursor.prevSelected = selected;
       }
 
       _flushBackgroundRun(cursor, cellWidth);
@@ -191,6 +226,30 @@ class SpriteBuilder {
         _resolveBgArgb(cursor.bgRunArgb, cursor.bgRunInverse),
       );
     }
+  }
+
+  bool _isCellSelected(int row, int col) {
+    final sel = _selection;
+    if (sel == null) return false;
+    return sel.contains(row + _state.viewportOffset, col);
+  }
+
+  // Resolves a selection override (foreground or background) against the
+  // current cell. Defaults let selection invert the cell visually: when no
+  // override is set, selection fg falls back to the terminal background and
+  // selection bg to the terminal foreground.
+  int _resolveSelectionColor(
+    _RowCursor cursor,
+    DynamicColor? override,
+    int fallbackArgb,
+  ) {
+    if (override == null) return fallbackArgb;
+    return override
+        .resolve(
+          cellForeground: Color(cursor.baseForeground),
+          cellBackground: Color(cursor.baseBackground),
+        )
+        .toARGB32();
   }
 
   void _emitCodepoint(int codepoint, double x, Style style, _RowCursor cursor) {
@@ -449,6 +508,7 @@ class SpriteBuilder {
 ///
 /// Allocated once by [SpriteBuilder] and reused across rows via [reset].
 class _RowCursor {
+  var row = 0;
   var col = 0;
   var spriteX = 0.0;
   var rowY = 0.0;
@@ -457,8 +517,22 @@ class _RowCursor {
   var rowBottom = 0.0;
 
   var prevStyleId = -1;
+
+  /// Style-resolved foreground and background before any per-cell overrides.
+  ///
+  /// Distinct from [foreground]/[background] because a run of cells may
+  /// share a styleId (skipping the style cache) while alternating selection
+  /// membership, which overrides both the emitted foreground and background
+  /// per cell.
+  var baseForeground = 0xFFFFFFFF;
+  var baseBackground = 0;
+  var baseBackgroundExplicit = false;
   var foreground = 0xFFFFFFFF;
   var background = 0;
+
+  /// Whether the previous cell was inside the selection. Flips trigger a
+  /// flush and recompute of [foreground]/[background] at cell boundaries.
+  var prevSelected = false;
 
   /// Whether [background] came from an inverse cell.
   ///
@@ -489,15 +563,20 @@ class _RowCursor {
   _RowCursor() : operatorRun = <int>[];
 
   void reset(int row, double cellHeight, int defaultBg) {
+    this.row = row;
     rowY = row * cellHeight;
     rowBottom = rowY + cellHeight;
     col = 0;
     spriteX = 0.0;
     prevStyleId = -1;
+    baseForeground = 0xFFFFFFFF;
+    baseBackground = defaultBg;
+    baseBackgroundExplicit = false;
     foreground = 0xFFFFFFFF;
     background = defaultBg;
     backgroundInverse = false;
     backgroundExplicit = false;
+    prevSelected = false;
     style = null;
     bgRunStart = 0;
     bgRunArgb = defaultBg;
@@ -568,10 +647,15 @@ class _StyleCache {
     var background = cell.backgroundArgb ?? _defaultBg;
     var explicitBg = style.background is! DefaultColor;
 
-    if (style.bold && _state.theme.boldIsBright) {
-      final raw = style.foreground;
-      if (raw is PaletteColor && raw.index < 8) {
-        foreground = _state.theme.palette[raw.index + 8].toARGB32();
+    if (style.bold) {
+      final boldColor = _state.theme.boldColor;
+      if (boldColor != null) {
+        foreground = boldColor.toARGB32();
+      } else if (_state.theme.boldIsBright) {
+        final raw = style.foreground;
+        if (raw is PaletteColor && raw.index < 8) {
+          foreground = _state.theme.palette[raw.index + 8].toARGB32();
+        }
       }
     }
 

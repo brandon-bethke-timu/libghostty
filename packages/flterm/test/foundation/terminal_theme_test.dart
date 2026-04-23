@@ -16,12 +16,14 @@ void main() {
     test('stores custom values', () {
       const cursor = CursorTheme(
         shape: CursorShape.bar,
-        color: Color(0xFFFF0000),
+        color: DynamicColor.fixed(Color(0xFFFF0000)),
+        text: DynamicColor.cellBackground(),
         blinkInterval: Duration(milliseconds: 500),
         opacity: 0.7,
       );
       expect(cursor.shape, CursorShape.bar);
-      expect(cursor.color, const Color(0xFFFF0000));
+      expect(cursor.color, const DynamicColor.fixed(Color(0xFFFF0000)));
+      expect(cursor.text, const DynamicColor.cellBackground());
       expect(cursor.blinkInterval, const Duration(milliseconds: 500));
       expect(cursor.opacity, 0.7);
     });
@@ -33,17 +35,21 @@ void main() {
       expect(a.hashCode, b.hashCode);
       expect(a, isNot(equals(const CursorTheme(shape: CursorShape.bar))));
       expect(a, isNot(equals(const CursorTheme(opacity: 0.5))));
+      expect(
+        a,
+        isNot(equals(const CursorTheme(text: DynamicColor.cellBackground()))),
+      );
     });
 
     test('lerp at boundaries returns endpoints', () {
       const a = CursorTheme(
-        color: Color(0xFF000000),
+        color: DynamicColor.fixed(Color(0xFF000000)),
         blinkInterval: Duration(milliseconds: 400),
         opacity: 0.2,
       );
       const b = CursorTheme(
         shape: CursorShape.bar,
-        color: Color(0xFFFFFFFF),
+        color: DynamicColor.fixed(Color(0xFFFFFFFF)),
         blinkInterval: Duration(milliseconds: 800),
         opacity: 0.8,
       );
@@ -85,11 +91,11 @@ void main() {
 
     test('stores custom values', () {
       const theme = SelectionTheme(
-        background: Color(0xFF112233),
-        foreground: Color(0xFFAABBCC),
+        background: DynamicColor.fixed(Color(0xFF112233)),
+        foreground: DynamicColor.cellBackground(),
       );
-      expect(theme.background, const Color(0xFF112233));
-      expect(theme.foreground, const Color(0xFFAABBCC));
+      expect(theme.background, const DynamicColor.fixed(Color(0xFF112233)));
+      expect(theme.foreground, const DynamicColor.cellBackground());
     });
 
     test('equality and hashCode', () {
@@ -99,27 +105,44 @@ void main() {
       expect(a.hashCode, b.hashCode);
       expect(
         a,
-        isNot(equals(const SelectionTheme(background: Color(0xFFFF0000)))),
+        isNot(
+          equals(
+            const SelectionTheme(
+              background: DynamicColor.fixed(Color(0xFFFF0000)),
+            ),
+          ),
+        ),
       );
       expect(
         a,
-        isNot(equals(const SelectionTheme(foreground: Color(0xFF00FF00)))),
+        isNot(
+          equals(
+            const SelectionTheme(
+              foreground: DynamicColor.fixed(Color(0xFF00FF00)),
+            ),
+          ),
+        ),
       );
     });
 
     test('lerp at boundaries returns endpoints', () {
-      const a = SelectionTheme(background: Color(0xFF000000));
-      const b = SelectionTheme(background: Color(0xFFFFFFFF));
+      const a = SelectionTheme(
+        background: DynamicColor.fixed(Color(0xFF000000)),
+      );
+      const b = SelectionTheme(
+        background: DynamicColor.fixed(Color(0xFFFFFFFF)),
+      );
       expect(SelectionTheme.lerp(a, b, 0.0), a);
       expect(SelectionTheme.lerp(a, b, 1.0), b);
     });
 
-    test('lerp interpolates colors', () {
-      const a = SelectionTheme(background: Color(0xFF000000));
-      const b = SelectionTheme(background: Color(0xFFFFFFFF));
-      final mid = SelectionTheme.lerp(a, b, 0.5)!;
-      expect(mid.background, isNot(equals(a.background)));
-      expect(mid.background, isNot(equals(b.background)));
+    test('lerp snaps background at midpoint', () {
+      const a = SelectionTheme(
+        background: DynamicColor.fixed(Color(0xFF000000)),
+      );
+      const b = SelectionTheme(background: DynamicColor.cellForeground());
+      expect(SelectionTheme.lerp(a, b, 0.49)!.background, a.background);
+      expect(SelectionTheme.lerp(a, b, 0.5)!.background, b.background);
     });
 
     test('lerp with null returns other at boundary', () {
@@ -243,13 +266,11 @@ void main() {
         'fontFamilyFallback', () {
       final theme = TerminalTheme.dark();
       expect(theme.boldIsBright, isFalse);
+      expect(theme.boldColor, isNull);
       expect(theme.faintOpacity, 0.5);
       expect(theme.minimumContrast, 1.0);
       expect(theme.fontFamilyFallback, isNotEmpty);
-      expect(
-        theme.selection,
-        const SelectionTheme(background: Color(0x3D7AA2F7)),
-      );
+      expect(theme.selection, const SelectionTheme());
     });
 
     test('defaults: fully opaque background, per-cell opacity off', () {
@@ -324,6 +345,7 @@ void main() {
         ),
       );
       expect(a, isNot(equals(a.copyWith(boldIsBright: true))));
+      expect(a, isNot(equals(a.copyWith(boldColor: const Color(0xFF123456)))));
       expect(a, isNot(equals(a.copyWith(faintOpacity: 0.3))));
       expect(a, isNot(equals(a.copyWith(minimumContrast: 4.5))));
       expect(a, isNot(equals(a.copyWith(fontFamilyFallback: ['Menlo']))));
@@ -334,7 +356,9 @@ void main() {
         isNot(
           equals(
             a.copyWith(
-              selection: const SelectionTheme(background: Color(0xFFFF0000)),
+              selection: const SelectionTheme(
+                background: DynamicColor.fixed(Color(0xFFFF0000)),
+              ),
             ),
           ),
         ),
@@ -350,7 +374,9 @@ void main() {
         minimumContrast: 4.5,
         fontFamily: 'Fira Code',
         fontFamilyFallback: const ['Fira Code', 'Menlo'],
-        selection: const SelectionTheme(foreground: Color(0xFF000000)),
+        selection: const SelectionTheme(
+          foreground: DynamicColor.fixed(Color(0xFF000000)),
+        ),
       );
       expect(modified.foreground, const Color(0xFFFFFFFF));
       expect(modified.boldIsBright, isTrue);
