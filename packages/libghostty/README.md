@@ -15,7 +15,7 @@ the terminal emulator library from [Ghostty](https://ghostty.org).
 ```yaml
 # pubspec.yaml
 dependencies:
-  libghostty: ^0.0.7
+  libghostty: ^0.0.8
 ```
 
 On web, initialize the WASM module once before using any bindings:

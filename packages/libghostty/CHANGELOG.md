@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.0.8
+
+### Breaking
+
+- **Standalone companions**: rendering, grid lookups, formatting, and
+  encoding moved off `Terminal`. `RenderState` with `RowIterator` /
+  `CellIterator`, `GridRef.at`, `Formatter`, `KittyGraphics.of`, and
+  standalone `KeyEncoder` / `MouseEncoder` replace their `Terminal`
+  method and getter equivalents.
+
+### Added
+
+- **Kitty graphics**: image and placement lookup with resolved render
+  geometry, plus a process-global PNG decoder hook.
+- **Log callback**: process-global sink for the native library's
+  internal log output.
+- **Formatter selection**: restrict output to a coordinate region,
+  including block selections.
+- **Terminal data**: `cursorStyle`, `isMouseTracking`, and Kitty image
+  configuration accessors.
+- **Grid references**: `hyperlinkUri` and `pointIn()` for OSC 8 lookup
+  and coordinate round-tripping.
+
 ## 0.0.7
 
 ### Fixed
