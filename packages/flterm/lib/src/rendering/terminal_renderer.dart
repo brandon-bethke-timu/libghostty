@@ -575,9 +575,12 @@ class TerminalRenderBox extends RenderBox {
       return;
     }
 
-    final effectiveCursor = cursor.wideTail && cursor.col > 0
+    final adjustedCursor = cursor.wideTail && cursor.col > 0
         ? cursor.copyWith(col: cursor.col - 1)
         : cursor;
+    final effectiveCursor = adjustedCursor.shape == CursorShape.block
+        ? adjustedCursor.copyWith(shape: _paintState.theme.cursor.shape)
+        : adjustedCursor;
     final ref = GridRef.at(
       _terminal,
       col: effectiveCursor.col,
