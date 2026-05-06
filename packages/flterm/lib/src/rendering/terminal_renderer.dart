@@ -382,13 +382,18 @@ class TerminalRenderBox extends RenderBox {
     _offset.removeListener(_onScroll);
     _renderObserver.removeListener(_onRenderObserverChanged);
     _terminal.removeListener(_onTerminalChanged);
+    super.detach();
+  }
+
+  @override
+  void dispose() {
     _atlas.dispose();
     _paintState.rows = 0;
     _paintState.cols = 0;
     _spriteBuilder.dispose();
     _sprites.dispose();
     _renderState.dispose();
-    super.detach();
+    super.dispose();
   }
 
   @override
