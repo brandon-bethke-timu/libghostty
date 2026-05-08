@@ -388,6 +388,7 @@ class TerminalRenderBox extends RenderBox {
   @override
   void dispose() {
     _atlas.dispose();
+    _kittyImageCache.dispose();
     _paintState.rows = 0;
     _paintState.cols = 0;
     _spriteBuilder.dispose();

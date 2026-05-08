@@ -73,9 +73,11 @@ class KittyImageCache {
   }
 
   void _beginDecode(KittyImage image) {
+    final imageId = image.id;
+    final fingerprint = _fingerprints[imageId];
     final rgba = _ensureRgba(image);
     if (rgba == null) {
-      _entries[image.id] = KittyImageUnsupported();
+      _entries[imageId] = KittyImageUnsupported();
       return;
     }
     decodeImageFromPixels(
@@ -84,7 +86,12 @@ class KittyImageCache {
       image.height,
       PixelFormat.rgba8888,
       (decoded) {
-        _entries[image.id] = KittyImageReady(decoded);
+        if (_fingerprints[imageId] != fingerprint ||
+            _entries[imageId] is! KittyImagePending) {
+          decoded.dispose();
+          return;
+        }
+        _entries[imageId] = KittyImageReady(decoded);
         _onImageReady();
       },
     );
