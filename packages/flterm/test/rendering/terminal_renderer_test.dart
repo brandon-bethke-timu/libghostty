@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:flterm/src/foundation.dart';
 import 'package:flterm/src/rendering.dart';
+import 'package:flterm/src/rendering/terminal_render_cache.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -75,15 +76,36 @@ void main() {
     });
 
     testWidgets('theme change triggers layout', (tester) async {
-      await tester.pumpWidget(_wrap(terminal));
+      final renderCache = _TrackingRenderCache();
+      addTearDown(renderCache.dispose);
+      await tester.pumpWidget(_wrap(terminal, renderCache: renderCache));
       final box = tester.renderObject<TerminalRenderBox>(
         find.byType(TerminalRenderer),
       );
       expect(box.theme, TerminalTheme.dark());
+      final acquisitionsBefore = renderCache.acquiredKeys.length;
 
       final light = TerminalTheme.light();
-      await tester.pumpWidget(_wrap(terminal, theme: light));
+      await tester.pumpWidget(
+        _wrap(terminal, theme: light, renderCache: renderCache),
+      );
       expect(box.theme, light);
+      expect(renderCache.acquiredKeys, hasLength(acquisitionsBefore));
+    });
+
+    testWidgets('font theme change reacquires atlas', (tester) async {
+      final renderCache = _TrackingRenderCache();
+      addTearDown(renderCache.dispose);
+      await tester.pumpWidget(_wrap(terminal, renderCache: renderCache));
+      final keyBefore = renderCache.acquiredKeys.last;
+
+      final larger = TerminalTheme.dark().copyWith(fontSize: 18);
+      await tester.pumpWidget(
+        _wrap(terminal, theme: larger, renderCache: renderCache),
+      );
+      await tester.pump();
+
+      expect(renderCache.acquiredKeys.last, isNot(keyBefore));
     });
 
     testWidgets('selection change does not trigger layout', (tester) async {
@@ -157,7 +179,9 @@ Widget _wrap(
   bool focused = true,
   bool blinkVisible = true,
   OnResize? onResize,
+  TerminalRenderCache? renderCache,
 }) {
+  renderCache ??= _renderCache();
   final width = maxWidth ?? _cols * metrics.cellWidth;
   final height = maxHeight ?? _rows * metrics.cellHeight;
   return Directionality(
@@ -171,6 +195,7 @@ Widget _wrap(
           theme: theme ?? TerminalTheme.dark(),
           metrics: metrics,
           offset: ViewportOffset.zero(),
+          renderCache: renderCache,
           renderObserver: _TestRenderObserver(
             selection: selection,
             hasFocus: focused,
@@ -181,6 +206,22 @@ Widget _wrap(
       ),
     ),
   );
+}
+
+TerminalRenderCache _renderCache() {
+  final cache = TerminalRenderCache();
+  addTearDown(cache.dispose);
+  return cache;
+}
+
+class _TrackingRenderCache extends TerminalRenderCache {
+  final acquiredKeys = <TerminalRenderCacheKey>[];
+
+  @override
+  TerminalGlyphAtlasHandle acquireGlyphAtlas(TerminalRenderCacheKey key) {
+    acquiredKeys.add(key);
+    return super.acquireGlyphAtlas(key);
+  }
 }
 
 class _TestRenderObserver implements TerminalRenderObserver {

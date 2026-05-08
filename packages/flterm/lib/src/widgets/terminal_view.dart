@@ -5,8 +5,10 @@ import 'package:flutter/widgets.dart';
 
 import '../foundation.dart';
 import '../rendering.dart';
+import '../rendering/terminal_render_cache.dart';
 import 'terminal_controller.dart';
 import 'terminal_gesture_detector.dart';
+import 'terminal_scope.dart';
 import 'terminal_scroll_controller.dart';
 import 'terminal_shortcut_scope.dart';
 import 'terminal_view_binding.dart';
@@ -144,60 +146,21 @@ class _TerminalViewState extends State<TerminalView> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: .translucent,
-      onTap: _controller.requestFocus,
-      child: ColoredBox(
-        // Backdrop tinted by backgroundOpacity. The repaint boundary
-        // TerminalRenderBox skips its own grid fill below 1.0 and
-        // relies on this as the sole tint source, so default background
-        // cells show through to whatever sits behind the widget without
-        // composing twice across the two layers.
-        color: _theme.background.withValues(alpha: _theme.backgroundOpacity),
-        child: Padding(
-          padding: widget.padding,
-          child: Focus(
-            onKeyEvent: _handleKeyEvent,
-            child: TerminalShortcutScope(
-              onPaste: _handlePaste,
-              controller: _controller,
-              shortcuts: widget.shortcuts,
-              enableSelectAll: widget.gestureSettings.enabledSelections
-                  .contains(SelectionGesture.selectAll),
-              child: MouseRegion(
-                onHover: _handleMouseHover,
-                cursor: _effectiveMouseCursor(),
-                child: Focus(
-                  focusNode: _focusNode,
-                  autofocus: widget.autofocus,
-                  onFocusChange: _handleFocusChange,
-                  child: TerminalGestureDetector(
-                    metrics: _metrics,
-                    binding: _binding,
-                    visibleRows: _visibleRows,
-                    settings: widget.gestureSettings,
-                    scrollController: _scrollController,
-                    child: Scrollable(
-                      controller: _scrollController,
-                      physics: widget.scrollPhysics,
-                      viewportBuilder: (_, offset) => TerminalRenderer(
-                        theme: _theme,
-                        offset: offset,
-                        metrics: _metrics,
-                        renderObserver: _controller,
-                        terminal: _binding.terminal,
-                        blinkVisible: _blinkVisible,
-                        onResize: _handleResize,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
+    final cache = terminalScopeRenderCacheOf(context);
+    if (cache != null) return _build(context, cache);
+
+    return TerminalScope(
+      child: Builder(
+        builder: (context) =>
+            _build(context, terminalScopeRenderCacheOf(context)!),
       ),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
   }
 
   @override
@@ -303,10 +266,62 @@ class _TerminalViewState extends State<TerminalView> {
     _controller.addListener(_onControllerChanged);
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+  Widget _build(BuildContext context, TerminalRenderCache cache) {
+    return GestureDetector(
+      behavior: .translucent,
+      onTap: _controller.requestFocus,
+      child: ColoredBox(
+        // Backdrop tinted by backgroundOpacity. The repaint boundary
+        // TerminalRenderBox skips its own grid fill below 1.0 and
+        // relies on this as the sole tint source, so default background
+        // cells show through to whatever sits behind the widget without
+        // composing twice across the two layers.
+        color: _theme.background.withValues(alpha: _theme.backgroundOpacity),
+        child: Padding(
+          padding: widget.padding,
+          child: Focus(
+            onKeyEvent: _handleKeyEvent,
+            child: TerminalShortcutScope(
+              onPaste: _handlePaste,
+              controller: _controller,
+              shortcuts: widget.shortcuts,
+              enableSelectAll: widget.gestureSettings.enabledSelections
+                  .contains(SelectionGesture.selectAll),
+              child: MouseRegion(
+                onHover: _handleMouseHover,
+                cursor: _effectiveMouseCursor(),
+                child: Focus(
+                  focusNode: _focusNode,
+                  autofocus: widget.autofocus,
+                  onFocusChange: _handleFocusChange,
+                  child: TerminalGestureDetector(
+                    metrics: _metrics,
+                    binding: _binding,
+                    visibleRows: _visibleRows,
+                    settings: widget.gestureSettings,
+                    scrollController: _scrollController,
+                    child: Scrollable(
+                      controller: _scrollController,
+                      physics: widget.scrollPhysics,
+                      viewportBuilder: (_, offset) => TerminalRenderer(
+                        theme: _theme,
+                        offset: offset,
+                        metrics: _metrics,
+                        renderObserver: _controller,
+                        terminal: _binding.terminal,
+                        renderCache: cache,
+                        blinkVisible: _blinkVisible,
+                        onResize: _handleResize,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   MouseCursor _effectiveMouseCursor() {

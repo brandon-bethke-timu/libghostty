@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flterm/src/foundation.dart';
+import 'package:flterm/src/rendering.dart';
 import 'package:flterm/src/widgets.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/gestures.dart';
@@ -20,6 +21,40 @@ void main() {
     testWidgets('renders with controller', (tester) async {
       await tester.pumpWidget(_wrapInApp(controller: controller));
       expect(find.byType(TerminalView), findsOneWidget);
+    });
+
+    testWidgets('creates an isolated render cache without explicit scope', (
+      tester,
+    ) async {
+      final controller2 = TerminalController();
+      addTearDown(controller2.dispose);
+
+      await tester.pumpWidget(
+        _wrapSplitTerminals(controller: controller, controller2: controller2),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TerminalRenderer), findsNWidgets(2));
+      expect(find.byType(TerminalScope), findsNWidgets(2));
+    });
+
+    testWidgets('uses explicit TerminalScope for descendant terminals', (
+      tester,
+    ) async {
+      final controller2 = TerminalController();
+      addTearDown(controller2.dispose);
+
+      await tester.pumpWidget(
+        _wrapSplitTerminals(
+          controller: controller,
+          controller2: controller2,
+          scoped: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TerminalRenderer), findsNWidgets(2));
+      expect(find.byType(TerminalScope), findsOneWidget);
     });
 
     testWidgets('onResize fires with dimensions from layout', (tester) async {
@@ -737,6 +772,32 @@ Widget _wrapInApp({
           gestureSettings: gestureSettings,
           padding: padding,
         ),
+      ),
+    ),
+  );
+}
+
+Widget _wrapSplitTerminals({
+  required TerminalController controller,
+  required TerminalController controller2,
+  bool scoped = false,
+}) {
+  final terminals = Column(
+    children: [
+      Expanded(
+        child: TerminalView(controller: controller, padding: EdgeInsets.zero),
+      ),
+      Expanded(
+        child: TerminalView(controller: controller2, padding: EdgeInsets.zero),
+      ),
+    ],
+  );
+  return MaterialApp(
+    home: Scaffold(
+      body: SizedBox(
+        width: 800,
+        height: 480,
+        child: scoped ? TerminalScope(child: terminals) : terminals,
       ),
     ),
   );

@@ -3,7 +3,6 @@ import 'package:flutter/widgets.dart';
 import 'package:libghostty/libghostty.dart';
 
 import '../foundation.dart';
-import 'atlas/glyph_atlas.dart';
 import 'atlas/sprite_buffer.dart';
 import 'kitty_image_cache.dart';
 import 'paint_state.dart';
@@ -15,6 +14,7 @@ import 'painters/kitty_graphics_painter.dart';
 import 'painters/terminal_text_painter.dart';
 import 'painters/underline_painter.dart';
 import 'sprite_builder.dart';
+import 'terminal_render_cache.dart';
 
 /// Pre-fetched cell data at the cursor position.
 ///
@@ -98,6 +98,9 @@ class TerminalRenderer extends LeafRenderObjectWidget {
   /// backend (PTY, SSH) of the new dimensions.
   final OnResize? onResize;
 
+  /// Internal render cache used to share compatible atlas state.
+  final TerminalRenderCache renderCache;
+
   const TerminalRenderer({
     super.key,
     required this.terminal,
@@ -105,6 +108,7 @@ class TerminalRenderer extends LeafRenderObjectWidget {
     required this.metrics,
     required this.offset,
     required this.renderObserver,
+    required this.renderCache,
     this.blinkVisible = true,
     this.onResize,
   });
@@ -116,6 +120,7 @@ class TerminalRenderer extends LeafRenderObjectWidget {
       offset: offset,
       metrics: metrics,
       terminal: terminal,
+      renderCache: renderCache,
       onResize: onResize,
       blinkVisible: blinkVisible,
       renderObserver: renderObserver,
@@ -153,6 +158,7 @@ class TerminalRenderer extends LeafRenderObjectWidget {
     renderObject
       ..terminal = terminal
       ..theme = theme
+      ..renderCache = renderCache
       ..offset = offset
       ..metrics = metrics
       ..onResize = onResize
@@ -186,6 +192,8 @@ class TerminalRenderBox extends RenderBox {
   ViewportOffset _offset;
   TerminalRenderObserver _renderObserver;
   OnResize? _onResize;
+  TerminalRenderCache _renderCache;
+  late TerminalGlyphAtlasHandle _atlasHandle;
   var _performingLayout = false;
   var _needsContentSync = false;
   var _stickToBottom = true;
@@ -193,16 +201,15 @@ class TerminalRenderBox extends RenderBox {
   var _lastCursor = const Cursor();
   CursorCell? _lastCursorCell;
 
-  late final GlyphAtlas _atlas;
   late final SpriteBuffer _sprites;
-  late final SpriteBuilder _spriteBuilder;
+  late SpriteBuilder _spriteBuilder;
   final _renderState = RenderState();
 
-  late final EmojiPainter _emojiPainter;
-  late final CursorPainter _cursorPainter;
+  late EmojiPainter _emojiPainter;
+  late CursorPainter _cursorPainter;
+  late TerminalTextPainter _textPainter;
+  late UnderlinePainter _underlinePainter;
   late final TerminalPaintState _paintState;
-  late final TerminalTextPainter _textPainter;
-  late final UnderlinePainter _underlinePainter;
   late final BackgroundPainter _backgroundPainter;
   late final DecorationPainter _decorationPainter;
   late final KittyImageCache _kittyImageCache;
@@ -217,31 +224,29 @@ class TerminalRenderBox extends RenderBox {
     required CellMetrics metrics,
     required ViewportOffset offset,
     required TerminalRenderObserver renderObserver,
+    required TerminalRenderCache renderCache,
     bool blinkVisible = true,
     OnResize? onResize,
   }) : _terminal = terminal,
        _offset = offset,
        _onResize = onResize,
-       _renderObserver = renderObserver {
+       _renderObserver = renderObserver,
+       _renderCache = renderCache {
     _paintState = TerminalPaintState(theme, metrics)
       ..blinkVisible = blinkVisible
       ..selection = renderObserver.selection
       ..cursorFocused = renderObserver.hasFocus;
-    _atlas = GlyphAtlas(
-      fontSize: theme.fontSize,
-      fontWeight: theme.fontWeight,
-      fontFamily: theme.fontFamily,
-      fontFamilyFallback: theme.fontFamilyFallback,
+    _atlasHandle = _renderCache.acquireGlyphAtlas(
+      .fromTheme(
+        theme: theme,
+        metrics: metrics,
+        devicePixelRatio: _currentDevicePixelRatio,
+      ),
     );
-
     _sprites = SpriteBuffer();
-    _spriteBuilder = SpriteBuilder(_atlas, _sprites, _paintState);
-    _backgroundPainter = BackgroundPainter(_paintState, _sprites);
-    _textPainter = TerminalTextPainter(_atlas, _sprites.wide, _sprites.regular);
-    _cursorPainter = CursorPainter(_paintState, _atlas);
-    _emojiPainter = EmojiPainter(_atlas, _sprites);
-    _underlinePainter = UnderlinePainter(_atlas, _sprites);
+    _bindAtlasDependents();
     _decorationPainter = DecorationPainter(_sprites);
+    _backgroundPainter = BackgroundPainter(_paintState, _sprites);
     _kittyImageCache = KittyImageCache(onImageReady: markNeedsPaint);
     _kittyBelowBgPainter = KittyGraphicsPainter(
       state: _paintState,
@@ -280,7 +285,6 @@ class TerminalRenderBox extends RenderBox {
   set metrics(CellMetrics value) {
     if (_paintState.metrics == value) return;
     _paintState.metrics = value;
-    _atlas.clear();
     markNeedsLayout();
   }
 
@@ -300,6 +304,17 @@ class TerminalRenderBox extends RenderBox {
     _renderObserver = value;
     if (attached) _renderObserver.addListener(_onRenderObserverChanged);
     _onRenderObserverChanged();
+  }
+
+  set renderCache(TerminalRenderCache value) {
+    if (identical(value, _renderCache)) return;
+
+    _renderCache = value;
+    final atlasChanged = _acquireAtlasForCurrentConfig(force: true);
+    if (atlasChanged) {
+      _spriteBuilder.dirtyRows.markAll();
+      _markTerminalDirty();
+    }
   }
 
   set terminal(Terminal value) {
@@ -322,12 +337,12 @@ class TerminalRenderBox extends RenderBox {
   /// the grid, and pre-seeds glyphs.
   set theme(TerminalTheme value) {
     if (_paintState.theme == value) return;
-    final fontChanged = _atlas.updateFont(
-      fontSize: value.fontSize,
-      fontWeight: value.fontWeight,
-      fontFamily: value.fontFamily,
-      fontFamilyFallback: value.fontFamilyFallback,
-    );
+    final oldTheme = _paintState.theme;
+    final fontChanged =
+        oldTheme.fontSize != value.fontSize ||
+        oldTheme.fontWeight != value.fontWeight ||
+        oldTheme.fontFamily != value.fontFamily ||
+        !_listEquals(oldTheme.fontFamilyFallback, value.fontFamilyFallback);
     _paintState.updateTheme(value);
     _applyThemeColors();
     _needsContentSync = true;
@@ -387,13 +402,13 @@ class TerminalRenderBox extends RenderBox {
 
   @override
   void dispose() {
-    _atlas.dispose();
     _kittyImageCache.dispose();
     _paintState.rows = 0;
     _paintState.cols = 0;
     _spriteBuilder.dispose();
     _sprites.dispose();
     _renderState.dispose();
+    _atlasHandle.release();
     super.dispose();
   }
 
@@ -439,12 +454,8 @@ class TerminalRenderBox extends RenderBox {
       ),
     );
 
-    final dpr =
-        WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
-    final atlasReconfigured = _atlas.configure(
-      dpr: dpr,
-      metrics: _paintState.metrics,
-    );
+    final dpr = _currentDevicePixelRatio;
+    final atlasReconfigured = _acquireAtlasForCurrentConfig(dpr: dpr);
 
     final gridChanged =
         newCols != _paintState.cols || newRows != _paintState.rows;
@@ -493,6 +504,55 @@ class TerminalRenderBox extends RenderBox {
     _terminal.palette = [
       for (var i = 0; i < 256; i++) _paintState.theme.palette[i].toRgbColor(),
     ];
+  }
+
+  bool _acquireAtlasForCurrentConfig({double? dpr, bool force = false}) {
+    final key = TerminalRenderCacheKey.fromTheme(
+      theme: _paintState.theme,
+      metrics: _paintState.metrics,
+      devicePixelRatio: dpr ?? _currentDevicePixelRatio,
+    );
+    if (!force && key == _atlasHandle.key) return false;
+
+    final previousHandle = _atlasHandle;
+    final previousBuilder = _spriteBuilder;
+
+    _atlasHandle = _renderCache.acquireGlyphAtlas(key);
+    _bindAtlasDependents();
+    if (_paintState.rows > 0 && _paintState.cols > 0) {
+      _spriteBuilder.configure(_paintState.rows, _paintState.cols);
+    }
+
+    previousBuilder.dispose();
+    previousHandle.release();
+    return true;
+  }
+
+  void _bindAtlasDependents() {
+    final atlas = _atlasHandle.atlas;
+    _spriteBuilder = SpriteBuilder(atlas, _sprites, _paintState);
+    _textPainter = TerminalTextPainter(atlas, _sprites.wide, _sprites.regular);
+    _cursorPainter = CursorPainter(_paintState, atlas);
+    _emojiPainter = EmojiPainter(atlas, _sprites);
+    _underlinePainter = UnderlinePainter(atlas, _sprites);
+  }
+
+  double get _currentDevicePixelRatio {
+    return WidgetsBinding
+        .instance
+        .platformDispatcher
+        .views
+        .first
+        .devicePixelRatio;
+  }
+
+  static bool _listEquals(List<String> a, List<String> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   void _markTerminalDirty() {
@@ -648,14 +708,14 @@ class TerminalRenderBox extends RenderBox {
     }
     final runes = cell.content.runes;
     if (runes.length == 1) {
-      _paintState.cursorGlyphEntry = _atlas.addCodepoint(
+      _paintState.cursorGlyphEntry = _atlasHandle.atlas.addCodepoint(
         runes.first,
         bold: style.bold,
         italic: style.italic,
         span: cell.wide ? 2 : 1,
       );
     } else {
-      _paintState.cursorGlyphEntry = _atlas.add((
+      _paintState.cursorGlyphEntry = _atlasHandle.atlas.add((
         text: cell.content,
         bold: style.bold,
         italic: style.italic,

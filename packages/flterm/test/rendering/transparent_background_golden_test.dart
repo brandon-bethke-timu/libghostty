@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:flterm/src/foundation.dart';
 import 'package:flterm/src/rendering.dart';
+import 'package:flterm/src/rendering/terminal_render_cache.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -130,6 +131,7 @@ Future<void> _pumpScene(
                   theme: theme,
                   metrics: _metrics,
                   offset: ViewportOffset.zero(),
+                  renderCache: _renderCache(),
                   renderObserver: const _Observer(),
                 ),
               ),
@@ -139,6 +141,12 @@ Future<void> _pumpScene(
       ),
     ),
   );
+}
+
+TerminalRenderCache _renderCache() {
+  final cache = TerminalRenderCache();
+  addTearDown(cache.dispose);
+  return cache;
 }
 
 class _Observer implements TerminalRenderObserver {
