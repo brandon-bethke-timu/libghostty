@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:libghostty/libghostty.dart' show UnderlineStyle;
 
 import '../../foundation.dart';
+import '../sprite/sprite_face.dart';
 import 'glyph_entry.dart';
 
 /// Rasterizes glyphs into a packed atlas texture.
@@ -24,8 +25,10 @@ class GlyphRasterizer {
   static const _padding = 1.0;
 
   final List<(Paragraph, GlyphEntry)> _pending = [];
+  final List<(SpriteGlyph, GlyphEntry)> _pendingSprites = [];
   final List<(UnderlineStyle, GlyphEntry)> _pendingDecorations = [];
   final _compositePaint = Paint();
+  final _spriteContext = SpriteContext();
 
   var _width = _initialSize;
   var _height = _initialSize;
@@ -59,6 +62,7 @@ class GlyphRasterizer {
 
   void clear() {
     _disposePending();
+    _pendingSprites.clear();
     _pendingDecorations.clear();
     image?.dispose();
     image = null;
@@ -96,13 +100,20 @@ class GlyphRasterizer {
 
   void dispose() {
     _disposePending();
+    _pendingSprites.clear();
+    _pendingDecorations.clear();
     image?.dispose();
     image = null;
   }
 
   /// Composites pending glyphs and decorations into the atlas image.
   void ensureImage() {
-    if (!_dirty || (_pending.isEmpty && _pendingDecorations.isEmpty)) return;
+    if (!_dirty ||
+        (_pending.isEmpty &&
+            _pendingSprites.isEmpty &&
+            _pendingDecorations.isEmpty)) {
+      return;
+    }
     _dirty = false;
 
     final recorder = PictureRecorder();
@@ -132,6 +143,21 @@ class GlyphRasterizer {
     }
     _pending.clear();
 
+    for (final (glyph, entry) in _pendingSprites) {
+      final rect = Rect.fromLTRB(
+        entry.srcLeft,
+        entry.srcTop,
+        entry.srcRight,
+        entry.srcBottom,
+      );
+      canvas.save();
+      canvas.clipRect(rect);
+      _spriteContext.reset();
+      glyph.paint(canvas, rect, _spriteContext);
+      canvas.restore();
+    }
+    _pendingSprites.clear();
+
     for (final (style, entry) in _pendingDecorations) {
       canvas.save();
       canvas.clipRect(
@@ -159,7 +185,61 @@ class GlyphRasterizer {
   /// The glyph is not composited into the atlas image until [ensureImage]
   /// is called. [span] controls how many cell widths the glyph occupies
   /// (2 for wide/CJK characters).
-  GlyphEntry rasterize(
+  GlyphEntry rasterizeText(
+    String text, {
+    required bool bold,
+    required bool italic,
+    int span = 1,
+  }) {
+    return _rasterizeText(text, bold: bold, italic: italic, span: span);
+  }
+
+  /// Builds a full-color emoji paragraph for [text], packs it into the
+  /// atlas, and returns a [GlyphEntry] with its source coordinates.
+  ///
+  /// Emoji are rasterized in color and composited with uniform scaling to
+  /// fit within the cell bounds; tinting is not applied at draw time.
+  GlyphEntry rasterizeEmoji(
+    String text, {
+    required bool bold,
+    required bool italic,
+    int span = 1,
+  }) {
+    return _rasterizeText(
+      text,
+      bold: bold,
+      italic: italic,
+      span: span,
+      emoji: true,
+    );
+  }
+
+  /// Reserves an atlas slot for [glyph] and returns its [GlyphEntry].
+  ///
+  /// The sprite is painted by its own geometry (no font rasterization) into
+  /// the reserved rect on the next [ensureImage]. [span] controls how many
+  /// cell widths the glyph occupies.
+  GlyphEntry rasterizeSprite(SpriteGlyph glyph, {int span = 1}) {
+    final pxWidth = (_pxCellWidth * span).ceil().toDouble();
+    final pxHeight = _pxCellHeight.ceil().toDouble();
+    _pack(pxWidth, pxHeight);
+
+    final entry = GlyphEntry(
+      srcLeft: _packX,
+      srcTop: _packY,
+      srcRight: _packX + pxWidth,
+      srcBottom: _packY + pxHeight,
+      bearingY: 0,
+    );
+
+    _pendingSprites.add((glyph, entry));
+    _packX += pxWidth + _padding;
+    _rowHeight = max(_rowHeight, pxHeight);
+    _dirty = true;
+    return entry;
+  }
+
+  GlyphEntry _rasterizeText(
     String text, {
     required bool bold,
     required bool italic,
@@ -433,7 +513,7 @@ class GlyphRasterizer {
   ///
   /// The emoji is uniformly scaled by whichever axis is tighter (width
   /// or height), then centered on both axes. This pairs with the
-  /// `textAlign: .start` choice in [rasterize]: the paragraph is
+  /// `textAlign: .start` choice in [_rasterizeText]: the paragraph is
   /// left-aligned so all centering happens here. Using `.center` would
   /// double-center and shift the glyph off its intended position.
   ///

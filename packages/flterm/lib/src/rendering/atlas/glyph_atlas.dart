@@ -3,6 +3,7 @@ import 'dart:ui' show FontWeight, Image;
 import 'package:libghostty/libghostty.dart';
 
 import '../../foundation.dart';
+import '../sprite/sprite_face.dart';
 import 'glyph_entry.dart';
 import 'glyph_rasterizer.dart';
 
@@ -10,23 +11,36 @@ export 'glyph_entry.dart';
 
 /// Lookup key for a cached glyph. Two glyphs with the same text, bold,
 /// and italic state share the same atlas entry.
-typedef GlyphKey = ({String text, bool bold, bool italic});
+typedef TextGlyphKey = ({String text, bool bold, bool italic});
+
+typedef _GlyphCacheKey = ({String text, bool bold, bool italic, int span});
+typedef _CodepointGlyphKey = ({
+  int codepoint,
+  bool bold,
+  bool italic,
+  int span,
+});
+typedef _SpriteKey = ({int codepoint, int span});
 
 /// Glyph cache backed by a [GlyphRasterizer] atlas texture.
 ///
-/// Caches rasterized glyphs by [GlyphKey] (multi-codepoint graphemes) or
-/// encoded int key (single-codepoint fast path). On first use with new
-/// cell dimensions, pre-seeds all printable ASCII (0x21-0x7E) in all four
-/// bold/italic combinations plus box-drawing characters (U+2500-U+259F).
+/// Caches rasterized glyphs by [TextGlyphKey] for text/emoji runs and by
+/// codepoint for the single-codepoint fast path. On first use with new
+/// cell dimensions, pre-seeds all printable ASCII (0x21-0x7E) in every
+/// bold/italic combination, the entire built-in sprite registry, and every
+/// underline decoration style.
 ///
 /// Lifecycle: construct, [configure] with DPR and cell dimensions,
-/// [add]/[addCodepoint] per frame, [ensureImage] to composite pending
-/// glyphs, [updateFont] on theme change, [dispose] when detached.
+/// [addText]/[addEmoji]/[addCodepoint] per frame, [ensureImage] to
+/// composite pending glyphs, [updateFont] on theme change, [dispose] when
+/// detached.
 class GlyphAtlas {
-  final Map<GlyphKey, GlyphEntry> _glyphs = {};
-  final Map<int, GlyphEntry> _codepoints = {};
+  final Map<_GlyphCacheKey, GlyphEntry> _glyphs = {};
   final Map<UnderlineStyle, GlyphEntry> _decorations = {};
+  final Map<_SpriteKey, GlyphEntry> _spriteCodepoints = {};
+  final Map<_CodepointGlyphKey, GlyphEntry> _codepoints = {};
   final _rasterizer = GlyphRasterizer();
+  final _spriteFace = SpriteFace();
 
   double _fontSize;
   String _fontFamily;
@@ -45,41 +59,104 @@ class GlyphAtlas {
        _fontWeight = fontWeight,
        _fontFamilyFallback = fontFamilyFallback;
 
-  int get cacheSize => _glyphs.length;
+  int get cacheSize => _glyphs.length + _spriteCodepoints.length;
 
   double get devicePixelRatio => _dpr;
 
   Image? get image => _rasterizer.image;
 
-  /// Returns or creates a glyph for [key].
-  GlyphEntry add(GlyphKey key, {int span = 1, bool emoji = false}) {
-    return _glyphs[key] ??= _rasterizer.rasterize(
+  /// Whether [codepoint] has a built-in sprite glyph.
+  ///
+  /// Sprite codepoints render from geometry regardless of how libghostty
+  /// classifies the cell (wide, emoji, etc.). Callers route through
+  /// [addCodepoint] to retrieve the entry; this predicate lets callers
+  /// pick the right output channel before calling.
+  bool hasSprite(int codepoint) => _spriteFace.hasCodepoint(codepoint);
+
+  /// Returns or creates a text glyph for [key].
+  GlyphEntry addText(TextGlyphKey key, {int span = 1}) {
+    final cacheKey = (
+      text: key.text,
+      bold: key.bold,
+      italic: key.italic,
+      span: span,
+    );
+    return _glyphs[cacheKey] ??= _rasterizer.rasterizeText(
       key.text,
       bold: key.bold,
       italic: key.italic,
       span: span,
-      emoji: emoji,
     );
+  }
+
+  /// Returns or creates an emoji glyph for [key].
+  ///
+  /// Shares the same cache slot as [addText] for matching
+  /// `(text, bold, italic, span)`: classification of a given grapheme is
+  /// consistent within a frame, so the first writer wins and later
+  /// callers reuse the same atlas region. This is what lets the cursor
+  /// reuse the cell's atlas slot instead of rasterizing a duplicate that
+  /// wouldn't be composited yet.
+  GlyphEntry addEmoji(TextGlyphKey key, {int span = 1}) {
+    final cacheKey = (
+      text: key.text,
+      bold: key.bold,
+      italic: key.italic,
+      span: span,
+    );
+    return _glyphs[cacheKey] ??= _rasterizer.rasterizeEmoji(
+      key.text,
+      bold: key.bold,
+      italic: key.italic,
+      span: span,
+    );
+  }
+
+  /// Dispatches to [addEmoji] when [emoji] is true, otherwise [addText].
+  ///
+  /// Convenience for call sites that classify text vs. emoji at runtime
+  /// (e.g. wide-cell dispatch) and want to defer the branch to the atlas.
+  GlyphEntry add(TextGlyphKey key, {int span = 1, bool emoji = false}) {
+    return emoji ? addEmoji(key, span: span) : addText(key, span: span);
   }
 
   /// Returns or creates a glyph for a single [codepoint].
   ///
-  /// Uses an int-encoded key (codepoint + bold/italic flags) to avoid
-  /// String and record allocation on the per-cell hot path. Also
-  /// populates the GlyphKey cache so that [add] finds the same entry.
+  /// Built-in sprite codepoints bypass font rasterization entirely and
+  /// render from geometry. For non-sprite codepoints, [_codepoints] acts
+  /// as a write-through memo over [addText]: a fast path that avoids
+  /// allocating `String.fromCharCode` on cache hit, with the actual entry
+  /// living in `_glyphs` so it stays shared with text-keyed callers.
   GlyphEntry addCodepoint(
     int codepoint, {
     required bool bold,
     required bool italic,
+    int span = 1,
   }) {
-    final intKey = _encodeKey(codepoint, bold: bold, italic: italic);
-    final existing = _codepoints[intKey];
+    final glyph = _spriteFace.glyphFor(codepoint);
+    if (glyph != null) {
+      final spriteKey = (codepoint: codepoint, span: span);
+      return _spriteCodepoints[spriteKey] ??= _rasterizer.rasterizeSprite(
+        glyph,
+        span: span,
+      );
+    }
+
+    final codepointKey = (
+      codepoint: codepoint,
+      bold: bold,
+      italic: italic,
+      span: span,
+    );
+    final existing = _codepoints[codepointKey];
     if (existing != null) return existing;
 
-    final text = String.fromCharCode(codepoint);
-    final entry = _rasterizer.rasterize(text, bold: bold, italic: italic);
-    _codepoints[intKey] = entry;
-    _glyphs[(text: text, bold: bold, italic: italic)] = entry;
+    final entry = addText((
+      text: String.fromCharCode(codepoint),
+      bold: bold,
+      italic: italic,
+    ), span: span);
+    _codepoints[codepointKey] = entry;
     return entry;
   }
 
@@ -91,6 +168,7 @@ class GlyphAtlas {
   void clear() {
     _glyphs.clear();
     _codepoints.clear();
+    _spriteCodepoints.clear();
     _decorations.clear();
     _rasterizer.clear();
   }
@@ -110,6 +188,7 @@ class GlyphAtlas {
   void dispose() {
     _glyphs.clear();
     _codepoints.clear();
+    _spriteCodepoints.clear();
     _decorations.clear();
     _rasterizer.dispose();
   }
@@ -144,10 +223,12 @@ class GlyphAtlas {
   ///
   /// Rasterizing all printable ASCII in every bold/italic combination up
   /// front avoids per-frame cache misses for the most common characters.
-  /// Box-drawing characters (U+2500-U+259F) are seeded in normal style
-  /// only since they rarely appear bold/italic. All underline styles are
-  /// also pre-rasterized so decoration rendering never triggers a
-  /// mid-frame atlas composite.
+  /// The entire sprite registry is also pre-seeded: lazy-rasterizing
+  /// sprites would shift every later glyph's atlas position, and Skia's
+  /// hinted text rasterization is not invariant under that shift, which
+  /// drifts emoji/CJK anti-aliasing and breaks goldens that have nothing
+  /// to do with the sprite path. All underline styles are pre-seeded too
+  /// so decoration rendering never triggers a mid-frame atlas composite.
   void _preseed() {
     for (final (bold, italic) in [
       (false, false),
@@ -160,7 +241,7 @@ class GlyphAtlas {
       }
     }
 
-    for (var cp = 0x2500; cp <= 0x259F; cp++) {
+    for (final cp in _spriteFace.supportedCodepoints) {
       addCodepoint(cp, bold: false, italic: false);
     }
 
@@ -185,13 +266,6 @@ class GlyphAtlas {
     clear();
     if (_metrics.cellWidth > 0 && _metrics.cellHeight > 0) _preseed();
   }
-
-  /// Bits 0-19: codepoint, bit 20: bold, bit 21: italic.
-  static int _encodeKey(
-    int codepoint, {
-    required bool bold,
-    required bool italic,
-  }) => codepoint | (bold ? 0x100000 : 0) | (italic ? 0x200000 : 0);
 
   static bool _listEquals(List<String> a, List<String> b) {
     if (identical(a, b)) return true;

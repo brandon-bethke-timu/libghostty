@@ -645,11 +645,21 @@ class TerminalRenderBox extends RenderBox {
         (style.blink && !_paintState.blinkVisible)) {
       return;
     }
-    _paintState.cursorGlyphEntry = _atlas.add((
-      text: cell.content,
-      bold: style.bold,
-      italic: style.italic,
-    ), span: cell.wide ? 2 : 1);
+    final runes = cell.content.runes;
+    if (runes.length == 1) {
+      _paintState.cursorGlyphEntry = _atlas.addCodepoint(
+        runes.first,
+        bold: style.bold,
+        italic: style.italic,
+        span: cell.wide ? 2 : 1,
+      );
+    } else {
+      _paintState.cursorGlyphEntry = _atlas.add((
+        text: cell.content,
+        bold: style.bold,
+        italic: style.italic,
+      ), span: cell.wide ? 2 : 1);
+    }
 
     // The character under a block cursor paints in [CursorTheme.text] (or
     // the terminal background when unset) so it contrasts with the cursor

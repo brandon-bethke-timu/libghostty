@@ -436,26 +436,31 @@ class SpriteBuilder {
     _flushOperatorRun(cursor);
   }
 
-  /// Emits a wide (2-cell) glyph as either CJK text or emoji.
+  /// Emits a wide (2-cell) glyph as a built-in sprite, CJK text, or emoji.
   ///
-  /// The distinction matters for rendering: CJK text gets foreground
-  /// color tinting (BlendMode.modulate) and bearingX centering via
-  /// rasterize(), while emoji get full-color rendering (no tinting)
-  /// and are scaled/centered via _compositeEmoji. Misclassifying a
-  /// CJK character as emoji would lose its foreground color; misclassifying
-  /// an emoji as CJK would tint away its colors.
+  /// Routing rules, in priority order:
+  /// 1. Single-codepoint cells whose codepoint is in the sprite face
+  ///    (e.g. legacy computing supplement) render as tinted geometry
+  ///    sprites.
+  /// 2. CJK-range codepoints render as foreground-tinted text.
+  /// 3. Everything else renders as full-color emoji (no tinting,
+  ///    scaled and centered to the cell).
+  ///
+  /// Misclassifying CJK as emoji would lose foreground color;
+  /// misclassifying emoji as CJK would tint away the emoji colors.
   void _emitWide(CellIterator cell, _RowCursor cursor) {
     _flushOperatorRun(cursor);
     final content = cell.content;
     if (content.isNotEmpty && content != ' ') {
       final cp = cell.codepoint;
-      final isEmoji = !_isCjk(cp);
       final style = cursor.style!;
-      final key = (text: content, bold: style.bold, italic: style.italic);
-      final entry = _atlas.add(key, span: 2, emoji: isEmoji);
-      if (isEmoji) {
-        _sprites.emoji.add(cursor.spriteX, cursor.rowY, entry, _inverseDpr);
-      } else {
+      if (cell.graphemeLength == 1 && _atlas.hasSprite(cp)) {
+        final entry = _atlas.addCodepoint(
+          cp,
+          bold: style.bold,
+          italic: style.italic,
+          span: 2,
+        );
         _sprites.wide.add(
           cursor.spriteX,
           cursor.rowY,
@@ -463,6 +468,21 @@ class SpriteBuilder {
           _inverseDpr,
           cursor.foreground,
         );
+      } else {
+        final isEmoji = !_isCjk(cp);
+        final key = (text: content, bold: style.bold, italic: style.italic);
+        final entry = _atlas.add(key, span: 2, emoji: isEmoji);
+        if (isEmoji) {
+          _sprites.emoji.add(cursor.spriteX, cursor.rowY, entry, _inverseDpr);
+        } else {
+          _sprites.wide.add(
+            cursor.spriteX,
+            cursor.rowY,
+            entry,
+            _inverseDpr,
+            cursor.foreground,
+          );
+        }
       }
     }
     // Advance past the spacer tail. Flush the background run through

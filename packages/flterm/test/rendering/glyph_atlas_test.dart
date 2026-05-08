@@ -17,10 +17,11 @@ void main() {
     tearDown(() => atlas.dispose());
 
     group('configure', () {
-      test('sets dimensions and creates atlas image', () {
+      test('sets dimensions, pre-seeds glyphs, and creates atlas image', () {
         atlas.configure(dpr: 2.0, metrics: _metrics);
 
         expect(atlas.devicePixelRatio, 2.0);
+        expect(atlas.cacheSize, greaterThan(0));
         expect(atlas.image, isNotNull);
       });
 
@@ -43,13 +44,6 @@ void main() {
         expect(atlas.cacheSize, sizeBefore);
         expect(atlas.image, isNot(same(imageBefore)));
       });
-
-      test('pre-seeds box drawing chars', () {
-        atlas.configure(dpr: 1.0, metrics: _metrics);
-
-        final entry = atlas.addCodepoint(0x2500, bold: false, italic: false);
-        expect(entry.srcLeft, greaterThanOrEqualTo(0));
-      });
     });
 
     group('addCodepoint', () {
@@ -69,6 +63,43 @@ void main() {
         final plain = atlas.addCodepoint(0x41, bold: false, italic: false);
         final bold = atlas.addCodepoint(0x41, bold: true, italic: false);
         expect(identical(plain, bold), isFalse);
+      });
+
+      test('sprite codepoints reuse geometry across styles', () {
+        atlas.configure(dpr: 1.0, metrics: _metrics);
+
+        for (final codepoint in _spriteSamples) {
+          final plain = atlas.addCodepoint(
+            codepoint,
+            bold: false,
+            italic: false,
+          );
+          final boldItalic = atlas.addCodepoint(
+            codepoint,
+            bold: true,
+            italic: true,
+          );
+
+          expect(identical(plain, boldItalic), isTrue, reason: '$codepoint');
+        }
+      });
+
+      test('span participates in sprite cache key', () {
+        atlas.configure(dpr: 1.0, metrics: _metrics);
+
+        final single = atlas.addCodepoint(0xE0B0, bold: false, italic: false);
+        final doubleWidth = atlas.addCodepoint(
+          0xE0B0,
+          bold: false,
+          italic: false,
+          span: 2,
+        );
+
+        expect(identical(single, doubleWidth), isFalse);
+        expect(
+          doubleWidth.srcRight - doubleWidth.srcLeft,
+          greaterThan(single.srcRight - single.srcLeft),
+        );
       });
     });
 
@@ -178,6 +209,16 @@ void main() {
         expect(atlas.image, isNotNull);
       });
 
+      test('composites pending sprite glyphs into atlas image', () {
+        atlas.configure(dpr: 1.0, metrics: _metrics);
+
+        for (final codepoint in _spriteSamples) {
+          atlas.addCodepoint(codepoint, bold: false, italic: false);
+        }
+        atlas.ensureImage();
+        expect(atlas.image, isNotNull);
+      });
+
       test('is no-op when no pending glyphs', () {
         atlas.configure(dpr: 1.0, metrics: _metrics);
         final imageBefore = atlas.image;
@@ -214,3 +255,17 @@ void main() {
 }
 
 const _metrics = CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12);
+
+// One representative codepoint from each sprite family in the registry.
+// dart format off
+const _spriteSamples = [
+  0x2500, // ─ box drawing
+  0x25E2, // ◢ geometric shapes
+  0xF5D6, //   branch drawing
+  0x1CC21, //   legacy supplement (box dash combo)
+  0x1CC30, //   legacy supplement (circle piece)
+  0x1CE0B, //   legacy supplement (block stub)
+  0x1FB95, //   legacy computing (checkerboard)
+  0x1FBBD, //   legacy computing (filled polygon)
+];
+// dart format on
