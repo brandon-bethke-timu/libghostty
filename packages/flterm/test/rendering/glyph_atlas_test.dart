@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flterm/src/foundation/cell_metrics.dart';
 import 'package:flterm/src/rendering/atlas/glyph_atlas.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,49 +9,40 @@ void main() {
     late GlyphAtlas atlas;
 
     setUp(() {
-      atlas = GlyphAtlas(
-        fontFamily: 'monospace',
-        fontFamilyFallback: const [],
-        fontSize: 14,
-      );
+      atlas = GlyphAtlas(_config());
     });
 
     tearDown(() => atlas.dispose());
 
-    group('configure', () {
-      test('sets dimensions, pre-seeds glyphs, and creates atlas image', () {
-        atlas.configure(dpr: 2.0, metrics: _metrics);
+    group('construction', () {
+      test('applies config, pre-seeds glyphs, and creates atlas image', () {
+        atlas.dispose();
+        atlas = GlyphAtlas(_config(dpr: 2.0));
 
         expect(atlas.devicePixelRatio, 2.0);
         expect(atlas.cacheSize, greaterThan(0));
         expect(atlas.image, isNotNull);
       });
 
-      test('is no-op when called with same values', () {
-        atlas.configure(dpr: 2.0, metrics: _metrics);
-        final sizeAfterFirst = atlas.cacheSize;
-        final imageAfterFirst = atlas.image;
+      test('defers preseed when cell dimensions are not available', () {
+        atlas.dispose();
+        atlas = GlyphAtlas(
+          _config(
+            metrics: const CellMetrics(
+              cellWidth: 0,
+              cellHeight: 0,
+              baseline: 0,
+            ),
+          ),
+        );
 
-        atlas.configure(dpr: 2.0, metrics: _metrics);
-        expect(atlas.cacheSize, sizeAfterFirst);
-        expect(atlas.image, same(imageAfterFirst));
-      });
-
-      test('clears and re-seeds on DPR change', () {
-        atlas.configure(dpr: 1.0, metrics: _metrics);
-        final sizeBefore = atlas.cacheSize;
-        final imageBefore = atlas.image;
-
-        atlas.configure(dpr: 2.0, metrics: _metrics);
-        expect(atlas.cacheSize, sizeBefore);
-        expect(atlas.image, isNot(same(imageBefore)));
+        expect(atlas.cacheSize, 0);
+        expect(atlas.image, isNull);
       });
     });
 
     group('addCodepoint', () {
       test('creates entry and returns cached on second call', () {
-        atlas.configure(dpr: 1.0, metrics: _metrics);
-
         final entry1 = atlas.addCodepoint(0x100, bold: false, italic: false);
         final entry2 = atlas.addCodepoint(0x100, bold: false, italic: false);
 
@@ -58,16 +51,12 @@ void main() {
       });
 
       test('different styles produce different entries', () {
-        atlas.configure(dpr: 1.0, metrics: _metrics);
-
         final plain = atlas.addCodepoint(0x41, bold: false, italic: false);
         final bold = atlas.addCodepoint(0x41, bold: true, italic: false);
         expect(identical(plain, bold), isFalse);
       });
 
       test('sprite codepoints reuse geometry across styles', () {
-        atlas.configure(dpr: 1.0, metrics: _metrics);
-
         for (final codepoint in _spriteSamples) {
           final plain = atlas.addCodepoint(
             codepoint,
@@ -85,8 +74,6 @@ void main() {
       });
 
       test('span participates in sprite cache key', () {
-        atlas.configure(dpr: 1.0, metrics: _metrics);
-
         final single = atlas.addCodepoint(0xE0B0, bold: false, italic: false);
         final doubleWidth = atlas.addCodepoint(
           0xE0B0,
@@ -105,7 +92,6 @@ void main() {
 
     group('add', () {
       test('creates entry and returns cached on second call', () {
-        atlas.configure(dpr: 1.0, metrics: _metrics);
         final sizeBefore = atlas.cacheSize;
 
         const key = (text: '\u{1234}', bold: false, italic: false);
@@ -117,8 +103,6 @@ void main() {
       });
 
       test('wide entry spans 2 cells', () {
-        atlas.configure(dpr: 1.0, metrics: _metrics);
-
         const key = (text: '\u{4e00}', bold: false, italic: false);
         final entry = atlas.add(key, span: 2);
 
@@ -128,16 +112,12 @@ void main() {
       });
 
       test('emoji entry has isEmoji true', () {
-        atlas.configure(dpr: 1.0, metrics: _metrics);
-
         const key = (text: '\u{1F600}', bold: false, italic: false);
         final entry = atlas.add(key, emoji: true);
         expect(entry.isEmoji, isTrue);
       });
 
       test('sequential adds produce non-overlapping positions', () {
-        atlas.configure(dpr: 1.0, metrics: _metrics);
-
         final entries = <GlyphEntry>[];
         for (var code = 0x300; code < 0x310; code++) {
           entries.add(
@@ -164,8 +144,6 @@ void main() {
       });
 
       test('early positions remain stable after many adds', () {
-        atlas.configure(dpr: 1.0, metrics: _metrics);
-
         final earlyEntries = <GlyphEntry>[];
         for (var code = 0x400; code < 0x410; code++) {
           earlyEntries.add(
@@ -202,16 +180,12 @@ void main() {
 
     group('ensureImage', () {
       test('composites pending glyphs into atlas image', () {
-        atlas.configure(dpr: 1.0, metrics: _metrics);
-
         atlas.add((text: '\u{1234}', bold: false, italic: false));
         atlas.ensureImage();
         expect(atlas.image, isNotNull);
       });
 
       test('composites pending sprite glyphs into atlas image', () {
-        atlas.configure(dpr: 1.0, metrics: _metrics);
-
         for (final codepoint in _spriteSamples) {
           atlas.addCodepoint(codepoint, bold: false, italic: false);
         }
@@ -220,7 +194,6 @@ void main() {
       });
 
       test('is no-op when no pending glyphs', () {
-        atlas.configure(dpr: 1.0, metrics: _metrics);
         final imageBefore = atlas.image;
 
         atlas.ensureImage();
@@ -228,23 +201,8 @@ void main() {
       });
     });
 
-    group('clear', () {
-      test('resets caches and image', () {
-        atlas.configure(dpr: 1.0, metrics: _metrics);
-        atlas.add((text: 'X', bold: false, italic: false));
-        expect(atlas.cacheSize, greaterThan(0));
-        expect(atlas.image, isNotNull);
-
-        atlas.clear();
-
-        expect(atlas.cacheSize, 0);
-        expect(atlas.image, isNull);
-      });
-    });
-
     group('dispose', () {
       test('releases image', () {
-        atlas.configure(dpr: 1.0, metrics: _metrics);
         expect(atlas.image, isNotNull);
 
         atlas.dispose();
@@ -255,6 +213,17 @@ void main() {
 }
 
 const _metrics = CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12);
+
+GlyphAtlasConfig _config({double dpr = 1, CellMetrics metrics = _metrics}) {
+  return GlyphAtlasConfig(
+    fontSize: 14,
+    fontWeight: FontWeight.normal,
+    fontFamily: 'monospace',
+    fontFamilyFallback: const [],
+    metrics: metrics,
+    devicePixelRatio: dpr,
+  );
+}
 
 // One representative codepoint from each sprite family in the registry.
 // dart format off

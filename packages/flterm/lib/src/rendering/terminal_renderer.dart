@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:libghostty/libghostty.dart';
 
 import '../foundation.dart';
+import 'atlas/glyph_atlas_config.dart';
 import 'atlas/sprite_buffer.dart';
 import 'kitty_image_cache.dart';
 import 'paint_state.dart';
@@ -507,17 +508,17 @@ class TerminalRenderBox extends RenderBox {
   }
 
   bool _acquireAtlasForCurrentConfig({double? dpr, bool force = false}) {
-    final key = TerminalRenderCacheKey.fromTheme(
+    final config = GlyphAtlasConfig.fromTheme(
       theme: _paintState.theme,
       metrics: _paintState.metrics,
       devicePixelRatio: dpr ?? _currentDevicePixelRatio,
     );
-    if (!force && key == _atlasHandle.key) return false;
+    if (!force && config == _atlasHandle.config) return false;
 
     final previousHandle = _atlasHandle;
     final previousBuilder = _spriteBuilder;
 
-    _atlasHandle = _renderCache.acquireGlyphAtlas(key);
+    _atlasHandle = _renderCache.acquireGlyphAtlas(config);
     _bindAtlasDependents();
     if (_paintState.rows > 0 && _paintState.cols > 0) {
       _spriteBuilder.configure(_paintState.rows, _paintState.cols);

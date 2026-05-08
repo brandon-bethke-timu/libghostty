@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flterm/src/foundation.dart';
+import 'package:flterm/src/rendering/atlas/glyph_atlas_config.dart';
 import 'package:flterm/src/rendering/terminal_render_cache.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -47,8 +48,8 @@ void main() {
   });
 }
 
-TerminalRenderCacheKey _key({double fontSize = 14}) {
-  return TerminalRenderCacheKey(
+GlyphAtlasConfig _key({double fontSize = 14}) {
+  return GlyphAtlasConfig(
     fontSize: fontSize,
     fontWeight: FontWeight.normal,
     fontFamily: 'monospace',

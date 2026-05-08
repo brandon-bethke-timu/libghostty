@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flterm/src/foundation/cell_metrics.dart';
+import 'package:flterm/src/rendering/atlas/glyph_atlas_config.dart';
 import 'package:flterm/src/rendering/atlas/glyph_rasterizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -10,16 +11,13 @@ void main() {
       test('grows until a large slot fits within bounds', () {
         final rasterizer = GlyphRasterizer(initialSize: 16, maxSize: 64)
           ..configure(
-            fontSize: 8,
-            fontFamily: 'monospace',
-            fontWeight: FontWeight.normal,
-            fontFamilyFallback: const [],
-            metrics: const CellMetrics(
-              cellWidth: 40,
-              cellHeight: 8,
-              baseline: 6,
+            _config(
+              metrics: const CellMetrics(
+                cellWidth: 40,
+                cellHeight: 8,
+                baseline: 6,
+              ),
             ),
-            dpr: 1.0,
           );
         addTearDown(rasterizer.dispose);
 
@@ -33,16 +31,13 @@ void main() {
       test('throws when a single slot exceeds the max atlas size', () {
         final rasterizer = GlyphRasterizer(initialSize: 16, maxSize: 32)
           ..configure(
-            fontSize: 8,
-            fontFamily: 'monospace',
-            fontWeight: FontWeight.normal,
-            fontFamilyFallback: const [],
-            metrics: const CellMetrics(
-              cellWidth: 32,
-              cellHeight: 8,
-              baseline: 6,
+            _config(
+              metrics: const CellMetrics(
+                cellWidth: 32,
+                cellHeight: 8,
+                baseline: 6,
+              ),
             ),
-            dpr: 1.0,
           );
         addTearDown(rasterizer.dispose);
 
@@ -55,16 +50,13 @@ void main() {
       test('throws before returning out-of-bounds entries when full', () {
         final rasterizer = GlyphRasterizer(initialSize: 16, maxSize: 32)
           ..configure(
-            fontSize: 8,
-            fontFamily: 'monospace',
-            fontWeight: FontWeight.normal,
-            fontFamilyFallback: const [],
-            metrics: const CellMetrics(
-              cellWidth: 8,
-              cellHeight: 8,
-              baseline: 6,
+            _config(
+              metrics: const CellMetrics(
+                cellWidth: 8,
+                cellHeight: 8,
+                baseline: 6,
+              ),
             ),
-            dpr: 1.0,
           );
         addTearDown(rasterizer.dispose);
 
@@ -91,4 +83,15 @@ void main() {
       });
     });
   });
+}
+
+GlyphAtlasConfig _config({required CellMetrics metrics}) {
+  return GlyphAtlasConfig(
+    fontSize: 8,
+    fontWeight: FontWeight.normal,
+    fontFamily: 'monospace',
+    fontFamilyFallback: const [],
+    metrics: metrics,
+    devicePixelRatio: 1.0,
+  );
 }

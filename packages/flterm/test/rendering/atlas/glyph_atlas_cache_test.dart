@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flterm/src/foundation/cell_metrics.dart';
 import 'package:flterm/src/rendering/atlas/glyph_atlas_cache.dart';
+import 'package:flterm/src/rendering/atlas/glyph_atlas_config.dart';
 import 'package:flterm/src/rendering/atlas/glyph_rasterizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -11,19 +12,7 @@ void main() {
     late GlyphAtlasCache cache;
 
     setUp(() {
-      rasterizer = GlyphRasterizer()
-        ..configure(
-          fontSize: 14,
-          fontFamily: 'monospace',
-          fontWeight: FontWeight.normal,
-          fontFamilyFallback: const [],
-          metrics: const CellMetrics(
-            cellWidth: 8,
-            cellHeight: 16,
-            baseline: 12,
-          ),
-          dpr: 1.0,
-        );
+      rasterizer = GlyphRasterizer()..configure(_config());
       cache = GlyphAtlasCache(rasterizer);
     });
 
@@ -66,4 +55,15 @@ void main() {
       expect(cache.size, 0);
     });
   });
+}
+
+GlyphAtlasConfig _config() {
+  return GlyphAtlasConfig(
+    fontSize: 14,
+    fontWeight: FontWeight.normal,
+    fontFamily: 'monospace',
+    fontFamilyFallback: const [],
+    metrics: const CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12),
+    devicePixelRatio: 1.0,
+  );
 }

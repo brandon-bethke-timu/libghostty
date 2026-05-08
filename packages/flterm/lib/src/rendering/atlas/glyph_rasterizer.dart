@@ -3,8 +3,8 @@ import 'dart:ui';
 
 import 'package:libghostty/libghostty.dart' show UnderlineStyle;
 
-import '../../foundation.dart';
 import '../sprite/sprite_face.dart';
+import 'glyph_atlas_config.dart';
 import 'glyph_atlas_texture.dart';
 import 'glyph_entry.dart';
 
@@ -64,25 +64,20 @@ class GlyphRasterizer {
     _dirty = false;
   }
 
-  void configure({
-    required double fontSize,
-    required String fontFamily,
-    required FontWeight fontWeight,
-    required List<String> fontFamilyFallback,
-    required CellMetrics metrics,
-    required double dpr,
-  }) {
-    _fontFamily = fontFamily;
-    _fontWeight = fontWeight;
-    _fontFamilyFallback = fontFamilyFallback;
-    _pxCellWidth = metrics.cellWidth * dpr;
-    _pxCellHeight = metrics.cellHeight * dpr;
-    _pxBaseline = metrics.baseline * dpr;
-    _pxFontSize = fontSize * dpr;
-    _pxUnderlinePosition = metrics.underlinePosition * dpr;
+  void configure(GlyphAtlasConfig config) {
+    _fontFamily = config.fontFamily;
+    _fontWeight = config.fontWeight;
+    _fontFamilyFallback = config.fontFamilyFallback;
+    _pxCellWidth = config.metrics.cellWidth * config.devicePixelRatio;
+    _pxCellHeight = config.metrics.cellHeight * config.devicePixelRatio;
+    _pxBaseline = config.metrics.baseline * config.devicePixelRatio;
+    _pxFontSize = config.fontSize * config.devicePixelRatio;
+    _pxUnderlinePosition =
+        config.metrics.underlinePosition * config.devicePixelRatio;
     _pxUnderlineThickness = max(
       1.0,
-      (metrics.underlineThickness * dpr).ceilToDouble(),
+      (config.metrics.underlineThickness * config.devicePixelRatio)
+          .ceilToDouble(),
     );
     _pxDecorationPadding = (_pxCellHeight / 4).ceilToDouble();
     _pxItalicOverhang = max(1.0, (_pxFontSize * 0.15).ceilToDouble());
