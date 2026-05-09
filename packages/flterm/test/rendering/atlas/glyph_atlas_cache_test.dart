@@ -16,7 +16,9 @@ void main() {
       rasterizer = GlyphRasterizer()..configure(_config());
       cache = GlyphAtlasCache(
         textRasterizer: rasterizer.textRasterizer,
+        emojiRasterizer: rasterizer.emojiRasterizer,
         spriteRasterizer: rasterizer.spriteRasterizer,
+        decorationRasterizer: rasterizer.decorationRasterizer,
       );
     });
 
@@ -42,14 +44,14 @@ void main() {
       expect(cache.size, 1);
     });
 
-    test('shares text and emoji entries for matching keys', () {
+    test('keeps text and emoji entries separate for matching keys', () {
       const key = (text: '\u{1F600}', bold: false, italic: false);
 
       final text = cache.add(key);
       final emoji = cache.add(key, emoji: true);
 
-      expect(emoji, same(text));
-      expect(cache.size, 1);
+      expect(emoji, isNot(same(text)));
+      expect(cache.size, 2);
     });
 
     test('sprite codepoints are independent from text style', () {

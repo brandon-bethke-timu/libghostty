@@ -14,7 +14,10 @@ void main() {
 
     setUp(() {
       rasterizer = GlyphRasterizer()..configure(_config());
-      lane = GlyphSpriteAtlasLane(rasterizer.spriteRasterizer);
+      lane = GlyphSpriteAtlasLane(
+        spriteRasterizer: rasterizer.spriteRasterizer,
+        decorationRasterizer: rasterizer.decorationRasterizer,
+      );
     });
 
     tearDown(() => rasterizer.dispose());
@@ -54,12 +57,13 @@ void main() {
       final second = lane.addDecoration(UnderlineStyle.single);
 
       expect(second, same(first));
+      expect(lane.size, 1);
     });
 
     test('clear removes cached sprites and decorations', () {
       final spriteBefore = lane.addCodepoint(0x2500);
       final decorationBefore = lane.addDecoration(UnderlineStyle.single);
-      expect(lane.size, 1);
+      expect(lane.size, 2);
 
       lane.clear();
 
@@ -93,6 +97,7 @@ void main() {
 
       expect(singleAgain, same(single));
       expect(curly, isNot(same(single)));
+      expect(lane.size, UnderlineStyle.values.length - 1);
     });
   });
 }

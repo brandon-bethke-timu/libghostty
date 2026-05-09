@@ -24,7 +24,9 @@ class GlyphAtlas {
   final _rasterizer = GlyphRasterizer();
   late final _cache = GlyphAtlasCache(
     textRasterizer: _rasterizer.textRasterizer,
+    emojiRasterizer: _rasterizer.emojiRasterizer,
     spriteRasterizer: _rasterizer.spriteRasterizer,
+    decorationRasterizer: _rasterizer.decorationRasterizer,
   );
 
   final GlyphAtlasConfig _config;
@@ -50,7 +52,7 @@ class GlyphAtlas {
 
   Image? get textImage => _rasterizer.textImage;
 
-  /// Dispatches to [addEmoji] when [emoji] is true, otherwise [addText].
+  /// Returns or creates a glyph for [key].
   ///
   /// Convenience for call sites that classify text vs. emoji at runtime
   /// (e.g. wide-cell dispatch) and want to defer the branch to the atlas.

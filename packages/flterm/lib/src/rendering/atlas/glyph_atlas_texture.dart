@@ -29,7 +29,7 @@ class GlyphAtlasFullException implements Exception {
 
 /// Owns glyph atlas storage, slot allocation, and image replacement.
 class GlyphAtlasTexture {
-  static const defaultInitialSize = 1024;
+  static const defaultInitialSize = 256;
   static const defaultMaxSize = 4096;
 
   // Gap between atlas cells prevents sub-pixel bleed between sprites.

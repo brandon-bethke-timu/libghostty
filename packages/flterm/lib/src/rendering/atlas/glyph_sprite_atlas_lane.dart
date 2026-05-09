@@ -9,14 +9,20 @@ typedef _SpriteKey = ({int codepoint, int span});
 /// Atlas lane for built-in sprite glyphs and generated decoration sprites.
 class GlyphSpriteAtlasLane {
   final SpriteFace _spriteFace;
-  final GlyphSpriteRasterizer _rasterizer;
+  final GlyphSpriteRasterizer _spriteRasterizer;
+  final GlyphSpriteRasterizer _decorationRasterizer;
   final Map<_SpriteKey, GlyphEntry> _codepoints = {};
   final Map<UnderlineStyle, GlyphEntry> _decorations = {};
 
-  GlyphSpriteAtlasLane(this._rasterizer, {SpriteFace? spriteFace})
-    : _spriteFace = spriteFace ?? SpriteFace();
+  GlyphSpriteAtlasLane({
+    required GlyphSpriteRasterizer spriteRasterizer,
+    required GlyphSpriteRasterizer decorationRasterizer,
+    SpriteFace? spriteFace,
+  }) : _spriteRasterizer = spriteRasterizer,
+       _decorationRasterizer = decorationRasterizer,
+       _spriteFace = spriteFace ?? SpriteFace();
 
-  int get size => _codepoints.length;
+  int get size => _codepoints.length + _decorations.length;
 
   Iterable<int> get supportedCodepoints => _spriteFace.supportedCodepoints;
 
@@ -25,12 +31,17 @@ class GlyphSpriteAtlasLane {
     if (glyph == null) return null;
 
     final key = (codepoint: codepoint, span: span);
-    return _codepoints[key] ??= _rasterizer.rasterizeSprite(glyph, span: span);
+    return _codepoints[key] ??= _spriteRasterizer.rasterizeSprite(
+      glyph,
+      span: span,
+    );
   }
 
   /// Returns or creates a decoration sprite for the given underline [style].
   GlyphEntry addDecoration(UnderlineStyle style) {
-    return _decorations[style] ??= _rasterizer.rasterizeDecoration(style);
+    return _decorations[style] ??= _decorationRasterizer.rasterizeDecoration(
+      style,
+    );
   }
 
   void clear() {

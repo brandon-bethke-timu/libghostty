@@ -15,13 +15,19 @@ typedef _GlyphCacheKey = ({String text, bool bold, bool italic, int span});
 
 /// Atlas lane for font-rasterized text and emoji glyphs.
 class GlyphTextAtlasLane {
-  final GlyphTextRasterizer _rasterizer;
-  final Map<_GlyphCacheKey, GlyphEntry> _glyphs = {};
+  final GlyphTextRasterizer _textRasterizer;
+  final GlyphTextRasterizer _emojiRasterizer;
+  final Map<_GlyphCacheKey, GlyphEntry> _text = {};
+  final Map<_GlyphCacheKey, GlyphEntry> _emoji = {};
   final Map<_CodepointGlyphKey, GlyphEntry> _codepoints = {};
 
-  GlyphTextAtlasLane(this._rasterizer);
+  GlyphTextAtlasLane({
+    required GlyphTextRasterizer textRasterizer,
+    required GlyphTextRasterizer emojiRasterizer,
+  }) : _textRasterizer = textRasterizer,
+       _emojiRasterizer = emojiRasterizer;
 
-  int get size => _glyphs.length;
+  int get size => _text.length + _emoji.length;
 
   /// Dispatches to [addEmoji] when [emoji] is true, otherwise [addText].
   GlyphEntry add(TextGlyphKey key, {int span = 1, bool emoji = false}) {
@@ -54,13 +60,6 @@ class GlyphTextAtlasLane {
   }
 
   /// Returns or creates an emoji glyph for [key].
-  ///
-  /// Shares the same cache slot as [addText] for matching
-  /// `(text, bold, italic, span)`: classification of a given grapheme is
-  /// consistent within a frame, so the first writer wins and later
-  /// callers reuse the same atlas region. This is what lets the cursor
-  /// reuse the cell's atlas slot instead of rasterizing a duplicate that
-  /// wouldn't be composited yet.
   GlyphEntry addEmoji(TextGlyphKey key, {int span = 1}) {
     final cacheKey = (
       text: key.text,
@@ -68,7 +67,7 @@ class GlyphTextAtlasLane {
       italic: key.italic,
       span: span,
     );
-    return _glyphs[cacheKey] ??= _rasterizer.rasterizeEmoji(
+    return _emoji[cacheKey] ??= _emojiRasterizer.rasterizeEmoji(
       key.text,
       bold: key.bold,
       italic: key.italic,
@@ -84,7 +83,7 @@ class GlyphTextAtlasLane {
       italic: key.italic,
       span: span,
     );
-    return _glyphs[cacheKey] ??= _rasterizer.rasterizeText(
+    return _text[cacheKey] ??= _textRasterizer.rasterizeText(
       key.text,
       bold: key.bold,
       italic: key.italic,
@@ -93,7 +92,8 @@ class GlyphTextAtlasLane {
   }
 
   void clear() {
-    _glyphs.clear();
+    _text.clear();
+    _emoji.clear();
     _codepoints.clear();
   }
 

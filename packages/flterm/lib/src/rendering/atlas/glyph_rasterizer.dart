@@ -7,59 +7,98 @@ import 'glyph_text_rasterizer.dart';
 
 export 'glyph_atlas_texture.dart' show GlyphAtlasFullException;
 
-/// Rasterizes glyphs into a packed atlas texture.
+/// Rasterizes glyphs into lane-specific packed atlas textures.
 ///
-/// Owns the shared [GlyphAtlasTexture] and coordinates specialized
-/// rasterizers for text/emoji and built-in sprites/decorations. The atlas
-/// starts at 1024x1024 and grows up to 4096x4096 as glyphs are added.
+/// Owns the backing textures for text, emoji, built-in sprites, and
+/// decorations. Each texture starts at 256x256 and grows up to 4096x4096
+/// as glyphs are added.
 class GlyphRasterizer {
-  final GlyphAtlasTexture _texture;
-  late final _text = GlyphTextRasterizer(_texture);
-  late final _sprites = GlyphSpriteRasterizer(_texture);
+  final GlyphAtlasTexture _textTexture;
+  final GlyphAtlasTexture _emojiTexture;
+  final GlyphAtlasTexture _spriteTexture;
+  final GlyphAtlasTexture _decorationTexture;
+
+  late final _text = GlyphTextRasterizer(_textTexture);
+  late final _emoji = GlyphTextRasterizer(_emojiTexture);
+  late final _sprites = GlyphSpriteRasterizer(_spriteTexture);
+  late final _decorations = GlyphSpriteRasterizer(_decorationTexture);
 
   GlyphRasterizer({
     int initialSize = GlyphAtlasTexture.defaultInitialSize,
     int maxSize = GlyphAtlasTexture.defaultMaxSize,
-  }) : _texture = GlyphAtlasTexture(initialSize: initialSize, maxSize: maxSize);
+  }) : _textTexture = GlyphAtlasTexture(
+         initialSize: initialSize,
+         maxSize: maxSize,
+       ),
+       _emojiTexture = GlyphAtlasTexture(
+         initialSize: initialSize,
+         maxSize: maxSize,
+       ),
+       _spriteTexture = GlyphAtlasTexture(
+         initialSize: initialSize,
+         maxSize: maxSize,
+       ),
+       _decorationTexture = GlyphAtlasTexture(
+         initialSize: initialSize,
+         maxSize: maxSize,
+       );
 
-  Image? get decorationImage => _texture.image;
+  GlyphSpriteRasterizer get decorationRasterizer => _decorations;
 
-  Image? get emojiImage => _texture.image;
+  Image? get decorationImage => _decorationTexture.image;
 
-  Image? get image => _texture.image;
+  GlyphTextRasterizer get emojiRasterizer => _emoji;
 
-  Image? get spriteImage => _texture.image;
+  Image? get emojiImage => _emojiTexture.image;
+
+  Image? get image => textImage;
+
+  Image? get spriteImage => _spriteTexture.image;
 
   GlyphSpriteRasterizer get spriteRasterizer => _sprites;
 
-  Image? get textImage => _texture.image;
+  Image? get textImage => _textTexture.image;
 
   GlyphTextRasterizer get textRasterizer => _text;
 
   void clear() {
     _text.clear();
+    _emoji.clear();
     _sprites.clear();
-    _texture.clear();
+    _decorations.clear();
+    _textTexture.clear();
+    _emojiTexture.clear();
+    _spriteTexture.clear();
+    _decorationTexture.clear();
   }
 
   void configure(GlyphAtlasConfig config) {
     _text.configure(config);
+    _emoji.configure(config);
     _sprites.configure(config);
+    _decorations.configure(config);
   }
 
   void dispose() {
     _text.clear();
+    _emoji.clear();
     _sprites.clear();
-    _texture.dispose();
+    _decorations.clear();
+    _textTexture.dispose();
+    _emojiTexture.dispose();
+    _spriteTexture.dispose();
+    _decorationTexture.dispose();
   }
 
-  /// Composites pending glyphs and decorations into the atlas image.
+  /// Composites pending glyphs and decorations into their lane images.
   void ensureImage() {
-    if (!_text.hasPending && !_sprites.hasPending) return;
-
-    _texture.replaceImage((canvas) {
-      _text.compositePending(canvas);
-      _sprites.compositePending(canvas);
-    });
+    if (_text.hasPending) _textTexture.replaceImage(_text.compositePending);
+    if (_emoji.hasPending) _emojiTexture.replaceImage(_emoji.compositePending);
+    if (_sprites.hasPending) {
+      _spriteTexture.replaceImage(_sprites.compositePending);
+    }
+    if (_decorations.hasPending) {
+      _decorationTexture.replaceImage(_decorations.compositePending);
+    }
   }
 }

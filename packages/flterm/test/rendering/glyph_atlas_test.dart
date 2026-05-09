@@ -24,13 +24,19 @@ void main() {
         expect(atlas.image, isNotNull);
       });
 
-      test('lane image accessors expose the shared atlas texture', () {
-        final image = atlas.image;
+      test('lane image accessors expose separate atlas textures', () {
+        expect(atlas.image, same(atlas.textImage));
+        expect(atlas.textImage, isNotNull);
+        expect(atlas.spriteImage, isNotNull);
+        expect(atlas.decorationImage, isNotNull);
+        expect(atlas.spriteImage, isNot(same(atlas.textImage)));
+        expect(atlas.decorationImage, isNot(same(atlas.spriteImage)));
 
-        expect(atlas.textImage, same(image));
-        expect(atlas.emojiImage, same(image));
-        expect(atlas.spriteImage, same(image));
-        expect(atlas.decorationImage, same(image));
+        atlas.add((text: '\u{1F600}', bold: false, italic: false), emoji: true);
+        atlas.ensureImage();
+
+        expect(atlas.emojiImage, isNotNull);
+        expect(atlas.emojiImage, isNot(same(atlas.textImage)));
       });
 
       test('defers preseed when cell dimensions are not available', () {
@@ -194,12 +200,12 @@ void main() {
         expect(atlas.image, isNotNull);
       });
 
-      test('composites pending sprite glyphs into atlas image', () {
+      test('composites pending sprite glyphs into sprite image', () {
         for (final codepoint in _spriteSamples) {
           atlas.addCodepoint(codepoint, bold: false, italic: false);
         }
         atlas.ensureImage();
-        expect(atlas.image, isNotNull);
+        expect(atlas.spriteImage, isNotNull);
       });
 
       test('is no-op when no pending glyphs', () {
@@ -216,6 +222,10 @@ void main() {
 
         atlas.dispose();
         expect(atlas.image, isNull);
+        expect(atlas.textImage, isNull);
+        expect(atlas.emojiImage, isNull);
+        expect(atlas.spriteImage, isNull);
+        expect(atlas.decorationImage, isNull);
       });
     });
   });

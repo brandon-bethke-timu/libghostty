@@ -13,7 +13,10 @@ void main() {
 
     setUp(() {
       rasterizer = GlyphRasterizer()..configure(_config());
-      lane = GlyphTextAtlasLane(rasterizer.textRasterizer);
+      lane = GlyphTextAtlasLane(
+        textRasterizer: rasterizer.textRasterizer,
+        emojiRasterizer: rasterizer.emojiRasterizer,
+      );
     });
 
     tearDown(() => rasterizer.dispose());
@@ -48,14 +51,14 @@ void main() {
       expect(lane.size, 3);
     });
 
-    test('shares text and emoji entries for matching keys', () {
+    test('keeps text and emoji entries separate for matching keys', () {
       const key = (text: '\u{1F600}', bold: false, italic: false);
 
       final text = lane.addText(key);
       final emoji = lane.addEmoji(key);
 
-      expect(emoji, same(text));
-      expect(lane.size, 1);
+      expect(emoji, isNot(same(text)));
+      expect(lane.size, 2);
     });
 
     test('dispatches add through the requested text or emoji path', () {

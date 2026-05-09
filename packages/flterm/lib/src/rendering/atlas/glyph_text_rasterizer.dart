@@ -5,7 +5,7 @@ import 'glyph_atlas_config.dart';
 import 'glyph_atlas_texture.dart';
 import 'glyph_entry.dart';
 
-/// Rasterizes font-backed text and emoji glyphs into a shared atlas texture.
+/// Rasterizes font-backed text or emoji glyphs into an atlas texture.
 class GlyphTextRasterizer {
   final GlyphAtlasTexture _texture;
   final List<(Paragraph, GlyphEntry)> _pending = [];

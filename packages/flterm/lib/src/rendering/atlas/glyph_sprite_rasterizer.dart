@@ -8,8 +8,7 @@ import 'glyph_atlas_config.dart';
 import 'glyph_atlas_texture.dart';
 import 'glyph_entry.dart';
 
-/// Rasterizes built-in sprite glyphs and decoration sprites into a shared
-/// atlas.
+/// Rasterizes built-in sprite glyphs or decoration sprites into an atlas.
 class GlyphSpriteRasterizer {
   final GlyphAtlasTexture _texture;
   final List<(SpriteGlyph, GlyphEntry)> _pendingSprites = [];

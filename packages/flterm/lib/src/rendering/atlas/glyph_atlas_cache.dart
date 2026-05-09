@@ -15,13 +15,21 @@ class GlyphAtlasCache {
 
   GlyphAtlasCache({
     required GlyphTextRasterizer textRasterizer,
+    required GlyphTextRasterizer emojiRasterizer,
     required GlyphSpriteRasterizer spriteRasterizer,
-  }) : _text = GlyphTextAtlasLane(textRasterizer),
-       _sprites = GlyphSpriteAtlasLane(spriteRasterizer);
+    required GlyphSpriteRasterizer decorationRasterizer,
+  }) : _text = GlyphTextAtlasLane(
+         textRasterizer: textRasterizer,
+         emojiRasterizer: emojiRasterizer,
+       ),
+       _sprites = GlyphSpriteAtlasLane(
+         spriteRasterizer: spriteRasterizer,
+         decorationRasterizer: decorationRasterizer,
+       );
 
   int get size => _text.size + _sprites.size;
 
-  /// Dispatches to [addEmoji] when [emoji] is true, otherwise [addText].
+  /// Returns or creates a text or emoji glyph for [key].
   GlyphEntry add(TextGlyphKey key, {int span = 1, bool emoji = false}) {
     return _text.add(key, span: span, emoji: emoji);
   }
