@@ -63,8 +63,7 @@ class GlyphAtlasTexture {
     required double height,
     required double bearingY,
     double bearingX = 0.0,
-    bool isEmoji = false,
-    bool isSprite = false,
+    GlyphEntryLane lane = GlyphEntryLane.text,
   }) {
     _pack(width, height);
 
@@ -75,8 +74,7 @@ class GlyphAtlasTexture {
       srcBottom: _packY + height,
       bearingY: bearingY,
       bearingX: bearingX,
-      isEmoji: isEmoji,
-      isSprite: isSprite,
+      lane: lane,
     );
 
     _packX += width + padding;

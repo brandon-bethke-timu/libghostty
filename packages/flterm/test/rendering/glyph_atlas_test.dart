@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flterm/src/foundation/cell_metrics.dart';
 import 'package:flterm/src/rendering/atlas/glyph_atlas.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:libghostty/libghostty.dart';
 
 void main() {
   group('GlyphAtlas', () {
@@ -21,12 +22,11 @@ void main() {
 
         expect(atlas.devicePixelRatio, 2.0);
         expect(atlas.cacheSize, greaterThan(0));
-        expect(atlas.image, isNotNull);
+        expect(atlas.textImage, isNotNull);
         expect(atlas.spriteImage, isNull);
       });
 
       test('lane image accessors expose separate atlas textures', () {
-        expect(atlas.image, same(atlas.textImage));
         expect(atlas.textImage, isNotNull);
         expect(atlas.spriteImage, isNull);
         expect(atlas.decorationImage, isNotNull);
@@ -56,7 +56,7 @@ void main() {
         );
 
         expect(atlas.cacheSize, 0);
-        expect(atlas.image, isNull);
+        expect(atlas.textImage, isNull);
       });
     });
 
@@ -147,6 +147,15 @@ void main() {
         const key = (text: '\u{1F600}', bold: false, italic: false);
         final entry = atlas.add(key, emoji: true);
         expect(entry.isEmoji, isTrue);
+        expect(entry.lane, GlyphEntryLane.emoji);
+      });
+
+      test('sprite and decoration entries expose their owning lane', () {
+        final sprite = atlas.addCodepoint(0x2500, bold: false, italic: false);
+        final decoration = atlas.addDecoration(UnderlineStyle.single);
+
+        expect(sprite.lane, GlyphEntryLane.sprite);
+        expect(decoration.lane, GlyphEntryLane.decoration);
       });
 
       test('sequential adds produce non-overlapping positions', () {
@@ -214,7 +223,7 @@ void main() {
       test('composites pending glyphs into atlas image', () {
         atlas.add((text: '\u{1234}', bold: false, italic: false));
         atlas.ensureImage();
-        expect(atlas.image, isNotNull);
+        expect(atlas.textImage, isNotNull);
       });
 
       test('composites pending sprite glyphs into sprite image', () {
@@ -226,19 +235,18 @@ void main() {
       });
 
       test('is no-op when no pending glyphs', () {
-        final imageBefore = atlas.image;
+        final imageBefore = atlas.textImage;
 
         atlas.ensureImage();
-        expect(atlas.image, same(imageBefore));
+        expect(atlas.textImage, same(imageBefore));
       });
     });
 
     group('dispose', () {
       test('releases image', () {
-        expect(atlas.image, isNotNull);
+        expect(atlas.textImage, isNotNull);
 
         atlas.dispose();
-        expect(atlas.image, isNull);
         expect(atlas.textImage, isNull);
         expect(atlas.emojiImage, isNull);
         expect(atlas.spriteImage, isNull);

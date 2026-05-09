@@ -95,6 +95,7 @@ class GlyphSpriteRasterizer {
       width: pxWidth,
       height: pxHeight,
       bearingY: 0,
+      lane: GlyphEntryLane.decoration,
     );
 
     _pendingDecorations.add((style, entry));
@@ -113,7 +114,7 @@ class GlyphSpriteRasterizer {
       width: pxWidth,
       height: pxHeight,
       bearingY: 0,
-      isSprite: true,
+      lane: GlyphEntryLane.sprite,
     );
 
     _pendingSprites.add((glyph, entry));

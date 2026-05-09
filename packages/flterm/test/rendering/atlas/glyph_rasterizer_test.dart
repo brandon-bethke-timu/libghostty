@@ -35,7 +35,7 @@ void main() {
           entry.srcBottom,
           lessThanOrEqualTo(rasterizer.textImage!.height),
         );
-        expect(rasterizer.image, same(rasterizer.textImage));
+        expect(rasterizer.textImage, isNotNull);
       });
 
       test('keeps lane textures physically separate', () {

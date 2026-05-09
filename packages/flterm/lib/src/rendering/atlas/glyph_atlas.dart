@@ -46,11 +46,16 @@ class GlyphAtlas {
 
   Image? get emojiImage => _rasterizer.emojiImage;
 
-  Image? get image => _rasterizer.image;
-
   Image? get spriteImage => _rasterizer.spriteImage;
 
   Image? get textImage => _rasterizer.textImage;
+
+  Image? imageFor(GlyphEntry entry) => switch (entry.lane) {
+    GlyphEntryLane.text => textImage,
+    GlyphEntryLane.emoji => emojiImage,
+    GlyphEntryLane.sprite => spriteImage,
+    GlyphEntryLane.decoration => decorationImage,
+  };
 
   /// Returns or creates a glyph for [key].
   ///

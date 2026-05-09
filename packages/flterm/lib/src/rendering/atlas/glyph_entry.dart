@@ -1,3 +1,5 @@
+enum GlyphEntryLane { text, emoji, sprite, decoration }
+
 /// Position and metadata of a rendered glyph in the atlas texture.
 ///
 /// Coordinates are in physical pixels (logical pixels * device pixel ratio).
@@ -28,14 +30,17 @@ final class GlyphEntry {
   /// differs from the allocated cell width.
   final double bearingX;
 
+  /// Atlas lane that owns this entry's source pixels.
+  final GlyphEntryLane lane;
+
   /// Whether this glyph is a full-color emoji.
   ///
   /// Emoji glyphs use [BlendMode.src] during painting (no tinting),
   /// while text glyphs use [BlendMode.modulate] for per-sprite coloring.
-  final bool isEmoji;
+  bool get isEmoji => lane == GlyphEntryLane.emoji;
 
   /// Whether this glyph lives in the built-in sprite atlas.
-  final bool isSprite;
+  bool get isSprite => lane == GlyphEntryLane.sprite;
 
   const GlyphEntry({
     required this.srcLeft,
@@ -44,7 +49,6 @@ final class GlyphEntry {
     required this.srcBottom,
     required this.bearingY,
     this.bearingX = 0.0,
-    this.isEmoji = false,
-    this.isSprite = false,
+    this.lane = GlyphEntryLane.text,
   });
 }

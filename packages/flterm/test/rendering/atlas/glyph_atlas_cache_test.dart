@@ -54,6 +54,21 @@ void main() {
       expect(cache.size, 2);
     });
 
+    test('keeps style and span in text cache keys', () {
+      final plain = cache.addCodepoint(0x41, bold: false, italic: false);
+      final bold = cache.addCodepoint(0x41, bold: true, italic: false);
+      final wide = cache.addCodepoint(
+        0x41,
+        bold: false,
+        italic: false,
+        span: 2,
+      );
+
+      expect(bold, isNot(same(plain)));
+      expect(wide, isNot(same(plain)));
+      expect(cache.size, 3);
+    });
+
     test('sprite codepoints are independent from text style', () {
       final plain = cache.addCodepoint(0x2500, bold: false, italic: false);
       final styled = cache.addCodepoint(0x2500, bold: true, italic: true);
@@ -68,6 +83,24 @@ void main() {
 
       expect(sprite, isNot(same(text)));
       expect(cache.size, 2);
+    });
+
+    test('sprite span participates in the cache key', () {
+      final single = cache.addCodepoint(0x2500, bold: false, italic: false);
+      final wide = cache.addCodepoint(
+        0x2500,
+        bold: false,
+        italic: false,
+        span: 2,
+      );
+
+      expect(wide, isNot(same(single)));
+      expect(cache.size, 2);
+    });
+
+    test('reports supported sprite codepoints', () {
+      expect(cache.hasSprite(0x2500), isTrue);
+      expect(cache.hasSprite(0x41), isFalse);
     });
 
     test('shares decoration entries for matching styles', () {
@@ -86,7 +119,34 @@ void main() {
       expect(cache.size, 0);
     });
 
-    test('preseedCommonGlyphs delegates common preseed work to lanes', () {
+    test('clear removes all cache lanes', () {
+      final textBefore = cache.addCodepoint(0x41, bold: false, italic: false);
+      final spriteBefore = cache.addCodepoint(
+        0x2500,
+        bold: false,
+        italic: false,
+      );
+      final decorationBefore = cache.addDecoration(UnderlineStyle.single);
+      expect(cache.size, 3);
+
+      cache.clear();
+
+      expect(cache.size, 0);
+      expect(
+        cache.addCodepoint(0x41, bold: false, italic: false),
+        isNot(same(textBefore)),
+      );
+      expect(
+        cache.addCodepoint(0x2500, bold: false, italic: false),
+        isNot(same(spriteBefore)),
+      );
+      expect(
+        cache.addDecoration(UnderlineStyle.single),
+        isNot(same(decorationBefore)),
+      );
+    });
+
+    test('preseedCommonGlyphs seeds ASCII and decorations only', () {
       cache.preseedCommonGlyphs();
 
       final preseedSize = 94 * 4 + UnderlineStyle.values.length - 1;

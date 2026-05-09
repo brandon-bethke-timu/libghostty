@@ -28,10 +28,10 @@ void main() {
       final atlas = first.atlas;
 
       first.release();
-      expect(atlas.image, isNotNull);
+      expect(atlas.textImage, isNotNull);
 
       second.release();
-      expect(atlas.image, isNull);
+      expect(atlas.textImage, isNull);
     });
 
     test('does not share glyph atlas across font-affecting keys', () {

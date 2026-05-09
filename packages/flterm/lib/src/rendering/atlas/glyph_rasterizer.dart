@@ -51,8 +51,6 @@ class GlyphRasterizer {
 
   Image? get emojiImage => _emojiTexture.image;
 
-  Image? get image => textImage;
-
   Image? get spriteImage => _spriteTexture.image;
 
   GlyphSpriteRasterizer get spriteRasterizer => _sprites;

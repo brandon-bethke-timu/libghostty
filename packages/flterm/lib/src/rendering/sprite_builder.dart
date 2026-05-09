@@ -312,9 +312,7 @@ class SpriteBuilder {
       bold: style.bold,
       italic: style.italic,
     );
-    final sprites = _atlas.hasSprite(codepoint)
-        ? _sprites.sprite
-        : _sprites.regular;
+    final sprites = entry.isSprite ? _sprites.sprite : _sprites.regular;
     sprites.add(x, cursor.rowY, entry, _inverseDpr, cursor.foreground);
   }
 

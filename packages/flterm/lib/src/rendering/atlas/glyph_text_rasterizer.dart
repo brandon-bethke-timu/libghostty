@@ -184,7 +184,7 @@ class GlyphTextRasterizer {
         height: pxHeight,
         bearingY: bearingY,
         bearingX: bearingX,
-        isEmoji: emoji,
+        lane: emoji ? GlyphEntryLane.emoji : GlyphEntryLane.text,
       );
     } catch (_) {
       paragraph.dispose();
