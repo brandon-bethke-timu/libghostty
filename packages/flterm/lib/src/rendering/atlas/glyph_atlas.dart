@@ -18,8 +18,8 @@ export 'glyph_entry.dart';
 /// rendering avoids the most common cache misses.
 ///
 /// Lifecycle: construct with a [GlyphAtlasConfig],
-/// [addText]/[addEmoji]/[addCodepoint] per frame, [ensureImage] to composite
-/// pending glyphs, [dispose] when detached.
+/// [add]/[addCodepoint] per frame, [ensureImage] to composite pending glyphs,
+/// [dispose] when detached.
 class GlyphAtlas {
   final _rasterizer = GlyphRasterizer();
   late final _cache = GlyphAtlasCache(
@@ -71,21 +71,6 @@ class GlyphAtlas {
 
   /// Returns or creates a decoration sprite for the given underline [style].
   GlyphEntry addDecoration(UnderlineStyle style) => _cache.addDecoration(style);
-
-  /// Returns or creates an emoji glyph for [key].
-  ///
-  /// Shares the same cache slot as [addText] for matching
-  /// `(text, bold, italic, span)`: classification of a given grapheme is
-  /// consistent within a frame, so the first writer wins and later
-  /// callers reuse the same atlas region. This is what lets the cursor
-  /// reuse the cell's atlas slot instead of rasterizing a duplicate that
-  /// wouldn't be composited yet.
-  GlyphEntry addEmoji(TextGlyphKey key, {int span = 1}) =>
-      _cache.addEmoji(key, span: span);
-
-  /// Returns or creates a text glyph for [key].
-  GlyphEntry addText(TextGlyphKey key, {int span = 1}) =>
-      _cache.addText(key, span: span);
 
   void dispose() {
     _cache.clear();

@@ -61,16 +61,84 @@ void main() {
       expect(rasterizer.hasPending, isFalse);
       expect(texture.image, isNull);
     });
+
+    test('throws when a single slot exceeds the max atlas size', () {
+      final texture = GlyphAtlasTexture(initialSize: 16, maxSize: 32);
+      final rasterizer = GlyphTextRasterizer(texture)
+        ..configure(
+          _config(
+            metrics: const CellMetrics(
+              cellWidth: 32,
+              cellHeight: 8,
+              baseline: 6,
+            ),
+          ),
+        );
+      addTearDown(() {
+        rasterizer.clear();
+        texture.dispose();
+      });
+
+      expect(
+        () => rasterizer.rasterizeText('A', bold: false, italic: false),
+        throwsA(isA<GlyphAtlasFullException>()),
+      );
+    });
+
+    test('throws before returning out-of-bounds entries when full', () {
+      final texture = GlyphAtlasTexture(initialSize: 16, maxSize: 32);
+      final rasterizer = GlyphTextRasterizer(texture)
+        ..configure(
+          _config(
+            metrics: const CellMetrics(
+              cellWidth: 8,
+              cellHeight: 8,
+              baseline: 6,
+            ),
+          ),
+        );
+      addTearDown(() {
+        rasterizer.clear();
+        texture.dispose();
+      });
+
+      var added = 0;
+      GlyphAtlasFullException? full;
+      for (var i = 0; i < 64; i++) {
+        try {
+          final entry = rasterizer.rasterizeText(
+            String.fromCharCode(0x41 + i),
+            bold: false,
+            italic: false,
+          );
+          expect(entry.srcRight, lessThanOrEqualTo(32));
+          expect(entry.srcBottom, lessThanOrEqualTo(32));
+          added++;
+        } on GlyphAtlasFullException catch (error) {
+          full = error;
+          break;
+        }
+      }
+
+      expect(added, greaterThan(0));
+      expect(full, isNotNull);
+    });
   });
 }
 
-GlyphAtlasConfig _config() {
+GlyphAtlasConfig _config({
+  CellMetrics metrics = const CellMetrics(
+    cellWidth: 8,
+    cellHeight: 16,
+    baseline: 12,
+  ),
+}) {
   return GlyphAtlasConfig(
     fontSize: 14,
     fontWeight: FontWeight.normal,
     fontFamily: 'monospace',
     fontFamilyFallback: const [],
-    metrics: const CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12),
+    metrics: metrics,
     devicePixelRatio: 1.0,
   );
 }

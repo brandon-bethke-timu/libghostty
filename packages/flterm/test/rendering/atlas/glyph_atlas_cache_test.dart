@@ -25,8 +25,8 @@ void main() {
     test('shares text entries for matching keys', () {
       const key = (text: 'A', bold: false, italic: false);
 
-      final first = cache.addText(key);
-      final second = cache.addText(key);
+      final first = cache.add(key);
+      final second = cache.add(key);
 
       expect(second, same(first));
       expect(cache.size, 1);
@@ -35,7 +35,7 @@ void main() {
     test('shares codepoint entries with text entries', () {
       const key = (text: 'A', bold: false, italic: false);
 
-      final text = cache.addText(key);
+      final text = cache.add(key);
       final codepoint = cache.addCodepoint(0x41, bold: false, italic: false);
 
       expect(codepoint, same(text));
@@ -45,8 +45,8 @@ void main() {
     test('shares text and emoji entries for matching keys', () {
       const key = (text: '\u{1F600}', bold: false, italic: false);
 
-      final text = cache.addText(key);
-      final emoji = cache.addEmoji(key);
+      final text = cache.add(key);
+      final emoji = cache.add(key, emoji: true);
 
       expect(emoji, same(text));
       expect(cache.size, 1);
@@ -61,7 +61,7 @@ void main() {
     });
 
     test('sprite and text lanes keep separate entries', () {
-      final text = cache.addText((text: '\u2500', bold: false, italic: false));
+      final text = cache.add((text: '\u2500', bold: false, italic: false));
       final sprite = cache.addCodepoint(0x2500, bold: false, italic: false);
 
       expect(sprite, isNot(same(text)));
@@ -76,7 +76,7 @@ void main() {
     });
 
     test('clear removes cached entries', () {
-      cache.addText((text: 'A', bold: false, italic: false));
+      cache.add((text: 'A', bold: false, italic: false));
       expect(cache.size, 1);
 
       cache.clear();
