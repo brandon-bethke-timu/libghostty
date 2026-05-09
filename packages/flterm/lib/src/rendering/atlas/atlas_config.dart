@@ -5,7 +5,7 @@ import 'package:meta/meta.dart';
 import '../../foundation.dart';
 
 @immutable
-class GlyphAtlasConfig {
+class AtlasConfig {
   final double fontSize;
   final String fontFamily;
   final FontWeight fontWeight;
@@ -13,7 +13,7 @@ class GlyphAtlasConfig {
   final CellMetrics metrics;
   final double devicePixelRatio;
 
-  GlyphAtlasConfig({
+  AtlasConfig({
     required this.fontSize,
     required this.fontFamily,
     required this.fontWeight,
@@ -22,12 +22,12 @@ class GlyphAtlasConfig {
     required this.devicePixelRatio,
   }) : fontFamilyFallback = .unmodifiable(fontFamilyFallback);
 
-  factory GlyphAtlasConfig.fromTheme({
+  factory AtlasConfig.fromTheme({
     required TerminalTheme theme,
     required CellMetrics metrics,
     required double devicePixelRatio,
   }) {
-    return GlyphAtlasConfig(
+    return AtlasConfig(
       fontSize: theme.fontSize,
       fontWeight: theme.fontWeight,
       fontFamily: theme.fontFamily,
@@ -49,7 +49,7 @@ class GlyphAtlasConfig {
 
   @override
   bool operator ==(Object other) =>
-      other is GlyphAtlasConfig &&
+      other is AtlasConfig &&
       other.fontSize == fontSize &&
       other.fontWeight == fontWeight &&
       other.fontFamily == fontFamily &&
@@ -57,7 +57,7 @@ class GlyphAtlasConfig {
       other.metrics == metrics &&
       other.devicePixelRatio == devicePixelRatio;
 
-  GlyphAtlasConfig copyWith({
+  AtlasConfig copyWith({
     double? fontSize,
     FontWeight? fontWeight,
     String? fontFamily,
@@ -65,7 +65,7 @@ class GlyphAtlasConfig {
     CellMetrics? metrics,
     double? devicePixelRatio,
   }) {
-    return GlyphAtlasConfig(
+    return AtlasConfig(
       fontSize: fontSize ?? this.fontSize,
       fontWeight: fontWeight ?? this.fontWeight,
       fontFamily: fontFamily ?? this.fontFamily,

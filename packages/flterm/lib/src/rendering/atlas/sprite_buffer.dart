@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui';
 
-import 'glyph_entry.dart';
+import 'atlas_entry.dart';
 
 /// Sprite data for [Canvas.drawRawAtlas] calls, organized as fixed per-row
 /// slot ranges for incremental row-dirty rebuilds.
@@ -55,7 +55,7 @@ class AtlasSprites {
   void add(
     double x,
     double y,
-    GlyphEntry entry,
+    AtlasEntry entry,
     double inverseDpr, [
     int argb = 0,
   ]) {
@@ -382,16 +382,20 @@ class RectSprites {
 /// channels for [Canvas.drawRawAtlas], rect channels for
 /// [Canvas.drawVertices]).
 ///
-/// Contains six sprite channels, each consumed by a dedicated painter:
-/// [regular] and [wide] for text, [emoji] for full-color glyphs,
-/// [background] for cell color runs, [underline] for underline decoration
-/// sprites, and [decoration] for strikethroughs and overlines.
+/// Contains sprite channels consumed by dedicated painters:
+/// [regular] and [wide] for text, [sprite] for built-in glyph geometry,
+/// [emoji] for full-color glyphs, [background] for cell color runs,
+/// [underline] for underline decoration sprites, and [decoration] for
+/// strikethroughs and overlines.
 class SpriteBuffer {
   /// Regular-width text glyphs.
   final AtlasSprites regular;
 
   /// Wide (2-cell) text glyphs (CJK).
   final AtlasSprites wide;
+
+  /// Built-in sprite glyphs.
+  final AtlasSprites sprite;
 
   /// Full-color emoji glyphs.
   final AtlasSprites emoji;
@@ -410,6 +414,7 @@ class SpriteBuffer {
   SpriteBuffer()
     : regular = AtlasSprites(),
       wide = AtlasSprites(),
+      sprite = AtlasSprites(),
       emoji = AtlasSprites(),
       background = RectSprites(),
       underline = AtlasSprites(),
@@ -428,6 +433,7 @@ class SpriteBuffer {
   void beginRow(int row) {
     regular.beginRow(row);
     wide.beginRow(row);
+    sprite.beginRow(row);
     emoji.beginRow(row);
     background.beginRow(row);
     underline.beginRow(row);
@@ -445,6 +451,7 @@ class SpriteBuffer {
     final atlasStride = cols + 1;
     regular.configure(rows, atlasStride);
     wide.configure(rows, atlasStride);
+    sprite.configure(rows, atlasStride);
     emoji.configure(rows, atlasStride);
     background.configure(rows, atlasStride);
     underline.configure(rows, atlasStride);
@@ -456,6 +463,7 @@ class SpriteBuffer {
   void dispose() {
     regular.dispose();
     wide.dispose();
+    sprite.dispose();
     emoji.dispose();
     background.dispose();
     underline.dispose();
@@ -467,6 +475,7 @@ class SpriteBuffer {
   void endRow() {
     regular.endRow();
     wide.endRow();
+    sprite.endRow();
     emoji.endRow();
     background.endRow();
     underline.endRow();
@@ -477,6 +486,7 @@ class SpriteBuffer {
   void seal() {
     regular.seal();
     wide.seal();
+    sprite.seal();
     emoji.seal();
     underline.seal();
     final maxRects = background.count > decoration.count

@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/painting.dart';
 
-import '../atlas/glyph_atlas.dart';
+import '../atlas/atlas.dart';
 import '../atlas/sprite_buffer.dart';
 import 'terminal_painter.dart';
 
@@ -13,15 +13,15 @@ import 'terminal_painter.dart';
 /// colors, not tinted by a per-sprite color.
 class EmojiPainter implements TerminalPainter {
   final Paint _paint;
-  final GlyphAtlas _atlas;
+  final Atlas _atlas;
   final SpriteBuffer _sprites;
 
   EmojiPainter(this._atlas, this._sprites) : _paint = Paint();
 
   @override
   void paint(Canvas canvas) {
-    final image = _atlas.image;
     final emoji = _sprites.emoji;
+    final image = _atlas.emojiImage;
     if (image == null || !emoji.hasSprites) return;
     canvas.drawRawAtlas(
       image,

@@ -1,18 +1,18 @@
 import 'dart:ui';
 
 import 'package:flterm/src/foundation.dart';
-import 'package:flterm/src/rendering/atlas/glyph_atlas_config.dart';
+import 'package:flterm/src/rendering/atlas/atlas_config.dart';
 import 'package:flterm/src/rendering/terminal_render_cache.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('TerminalRenderCache', () {
-    test('shares glyph atlas for matching keys', () {
+    test('shares atlas for matching keys', () {
       final cache = TerminalRenderCache();
       addTearDown(cache.dispose);
 
-      final first = cache.acquireGlyphAtlas(_key());
-      final second = cache.acquireGlyphAtlas(_key());
+      final first = cache.acquireAtlas(_key());
+      final second = cache.acquireAtlas(_key());
       addTearDown(second.release);
       addTearDown(first.release);
 
@@ -23,23 +23,23 @@ void main() {
       final cache = TerminalRenderCache();
       addTearDown(cache.dispose);
 
-      final first = cache.acquireGlyphAtlas(_key());
-      final second = cache.acquireGlyphAtlas(_key());
+      final first = cache.acquireAtlas(_key());
+      final second = cache.acquireAtlas(_key());
       final atlas = first.atlas;
 
       first.release();
-      expect(atlas.image, isNotNull);
+      expect(atlas.textImage, isNotNull);
 
       second.release();
-      expect(atlas.image, isNull);
+      expect(atlas.textImage, isNull);
     });
 
-    test('does not share glyph atlas across font-affecting keys', () {
+    test('does not share atlas across font-affecting keys', () {
       final cache = TerminalRenderCache();
       addTearDown(cache.dispose);
 
-      final first = cache.acquireGlyphAtlas(_key());
-      final second = cache.acquireGlyphAtlas(_key(fontSize: 16));
+      final first = cache.acquireAtlas(_key());
+      final second = cache.acquireAtlas(_key(fontSize: 16));
       addTearDown(second.release);
       addTearDown(first.release);
 
@@ -48,8 +48,8 @@ void main() {
   });
 }
 
-GlyphAtlasConfig _key({double fontSize = 14}) {
-  return GlyphAtlasConfig(
+AtlasConfig _key({double fontSize = 14}) {
+  return AtlasConfig(
     fontSize: fontSize,
     fontWeight: FontWeight.normal,
     fontFamily: 'monospace',

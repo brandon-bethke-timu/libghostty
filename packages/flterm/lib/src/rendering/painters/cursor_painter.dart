@@ -3,7 +3,7 @@ import 'dart:ui';
 import 'package:flutter/painting.dart';
 import 'package:libghostty/libghostty.dart';
 
-import '../atlas/glyph_atlas.dart';
+import '../atlas/atlas.dart';
 import '../paint_state.dart';
 import 'terminal_painter.dart';
 
@@ -24,7 +24,7 @@ import 'terminal_painter.dart';
 /// Unfocused cursors draw at full opacity.
 class CursorPainter implements TerminalPainter {
   final Paint _paint;
-  final GlyphAtlas _atlas;
+  final Atlas _atlas;
   final TerminalPaintState _state;
 
   CursorPainter(this._state, this._atlas) : _paint = Paint();
@@ -70,9 +70,10 @@ class CursorPainter implements TerminalPainter {
             _paint,
           );
         } else {
-          final entry = _state.cursorGlyphEntry;
-          final atlasImage = _atlas.image;
-          if (entry != null && atlasImage != null) {
+          final entry = _state.cursorAtlasEntry;
+          if (entry != null) {
+            final atlasImage = _atlas.imageFor(entry);
+            if (atlasImage == null) return;
             final inverseDpr = 1.0 / _atlas.devicePixelRatio;
             canvas.drawImageRect(
               atlasImage,

@@ -1,10 +1,10 @@
-import 'package:flterm/src/rendering/atlas/glyph_atlas_texture.dart';
+import 'package:flterm/src/rendering/atlas/atlas_texture.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('GlyphAtlasTexture', () {
+  group('AtlasTexture', () {
     test('allocates non-overlapping slots and grows within bounds', () {
-      final texture = GlyphAtlasTexture(initialSize: 16, maxSize: 64);
+      final texture = AtlasTexture(initialSize: 16, maxSize: 64);
       addTearDown(texture.dispose);
 
       final first = texture.allocate(width: 12, height: 8, bearingY: 0);
@@ -18,7 +18,7 @@ void main() {
     });
 
     test('clear resets allocation to the initial origin', () {
-      final texture = GlyphAtlasTexture(initialSize: 16, maxSize: 64);
+      final texture = AtlasTexture(initialSize: 16, maxSize: 64);
       addTearDown(texture.dispose);
 
       texture.allocate(width: 12, height: 8, bearingY: 0);
@@ -32,12 +32,12 @@ void main() {
     });
 
     test('throws when one slot exceeds the maximum texture size', () {
-      final texture = GlyphAtlasTexture(initialSize: 16, maxSize: 32);
+      final texture = AtlasTexture(initialSize: 16, maxSize: 32);
       addTearDown(texture.dispose);
 
       expect(
         () => texture.allocate(width: 32, height: 8, bearingY: 0),
-        throwsA(isA<GlyphAtlasFullException>()),
+        throwsA(isA<AtlasFullException>()),
       );
     });
   });

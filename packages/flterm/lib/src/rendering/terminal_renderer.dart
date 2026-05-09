@@ -3,8 +3,9 @@ import 'package:flutter/widgets.dart';
 import 'package:libghostty/libghostty.dart';
 
 import '../foundation.dart';
-import 'atlas/glyph_atlas_config.dart';
+import 'atlas/atlas_config.dart';
 import 'atlas/sprite_buffer.dart';
+import 'cursor_atlas_resolver.dart';
 import 'kitty_image_cache.dart';
 import 'paint_state.dart';
 import 'painters/background_painter.dart';
@@ -12,28 +13,11 @@ import 'painters/cursor_painter.dart';
 import 'painters/decoration_painter.dart';
 import 'painters/emoji_painter.dart';
 import 'painters/kitty_graphics_painter.dart';
+import 'painters/sprite_painter.dart';
 import 'painters/terminal_text_painter.dart';
 import 'painters/underline_painter.dart';
 import 'sprite_builder.dart';
 import 'terminal_render_cache.dart';
-
-/// Pre-fetched cell data at the cursor position.
-///
-/// Snapshot of the cell under the cursor, taken during state sync so the
-/// cursor painter can render the character glyph inside a block cursor
-/// without accessing the terminal during paint.
-class CursorCell {
-  /// Text content of the cell (grapheme cluster).
-  final String content;
-
-  /// Style attributes (bold, italic, blink, inverse, etc.).
-  final Style style;
-
-  /// Whether this is a wide (2-cell) character.
-  final bool wide;
-
-  const CursorCell(this.content, this.style, {required this.wide});
-}
 
 /// Renders a terminal screen with cell backgrounds, styled text, cursors,
 /// and selection overlays.
@@ -194,7 +178,7 @@ class TerminalRenderBox extends RenderBox {
   TerminalRenderObserver _renderObserver;
   OnResize? _onResize;
   TerminalRenderCache _renderCache;
-  late TerminalGlyphAtlasHandle _atlasHandle;
+  late TerminalAtlasHandle _atlasHandle;
   var _performingLayout = false;
   var _needsContentSync = false;
   var _stickToBottom = true;
@@ -204,10 +188,12 @@ class TerminalRenderBox extends RenderBox {
 
   late final SpriteBuffer _sprites;
   late SpriteBuilder _spriteBuilder;
+  late CursorAtlasResolver _cursorAtlasResolver;
   final _renderState = RenderState();
 
   late EmojiPainter _emojiPainter;
   late CursorPainter _cursorPainter;
+  late SpritePainter _spritePainter;
   late TerminalTextPainter _textPainter;
   late UnderlinePainter _underlinePainter;
   late final TerminalPaintState _paintState;
@@ -237,7 +223,7 @@ class TerminalRenderBox extends RenderBox {
       ..blinkVisible = blinkVisible
       ..selection = renderObserver.selection
       ..cursorFocused = renderObserver.hasFocus;
-    _atlasHandle = _renderCache.acquireGlyphAtlas(
+    _atlasHandle = _renderCache.acquireAtlas(
       .fromTheme(
         theme: theme,
         metrics: metrics,
@@ -431,6 +417,7 @@ class TerminalRenderBox extends RenderBox {
     // at intersections.
     _underlinePainter.paint(canvas);
     _textPainter.paint(canvas);
+    _spritePainter.paint(canvas);
     _cursorPainter.paint(canvas);
     _emojiPainter.paint(canvas);
     // Strikethrough and overline drawn after text so strikethrough visibly
@@ -508,7 +495,7 @@ class TerminalRenderBox extends RenderBox {
   }
 
   bool _acquireAtlasForCurrentConfig({double? dpr, bool force = false}) {
-    final config = GlyphAtlasConfig.fromTheme(
+    final config = AtlasConfig.fromTheme(
       theme: _paintState.theme,
       metrics: _paintState.metrics,
       devicePixelRatio: dpr ?? _currentDevicePixelRatio,
@@ -518,7 +505,7 @@ class TerminalRenderBox extends RenderBox {
     final previousHandle = _atlasHandle;
     final previousBuilder = _spriteBuilder;
 
-    _atlasHandle = _renderCache.acquireGlyphAtlas(config);
+    _atlasHandle = _renderCache.acquireAtlas(config);
     _bindAtlasDependents();
     if (_paintState.rows > 0 && _paintState.cols > 0) {
       _spriteBuilder.configure(_paintState.rows, _paintState.cols);
@@ -532,7 +519,9 @@ class TerminalRenderBox extends RenderBox {
   void _bindAtlasDependents() {
     final atlas = _atlasHandle.atlas;
     _spriteBuilder = SpriteBuilder(atlas, _sprites, _paintState);
+    _cursorAtlasResolver = CursorAtlasResolver(atlas);
     _textPainter = TerminalTextPainter(atlas, _sprites.wide, _sprites.regular);
+    _spritePainter = SpritePainter(atlas, _sprites);
     _cursorPainter = CursorPainter(_paintState, atlas);
     _emojiPainter = EmojiPainter(atlas, _sprites);
     _underlinePainter = UnderlinePainter(atlas, _sprites);
@@ -638,7 +627,7 @@ class TerminalRenderBox extends RenderBox {
       _lastCursorCell = null;
       _paintState.cursor = cursor.copyWith(visible: false);
       _paintState.cursorWide = false;
-      _paintState.cursorGlyphEntry = null;
+      _paintState.cursorAtlasEntry = null;
       return;
     }
 
@@ -694,34 +683,15 @@ class TerminalRenderBox extends RenderBox {
   // Builds the block cursor glyph from cached cursor cell data.
   // Called after cursor resolution and on focus changes.
   void _resolveCursorGlyph() {
-    _paintState.cursorGlyphEntry = null;
     final cell = _lastCursorCell;
-    if (cell == null ||
-        !_paintState.cursorFocused ||
-        _lastCursor.shape != CursorShape.block) {
-      return;
-    }
-    final style = cell.style;
-    if (cell.content.isEmpty ||
-        style.invisible ||
-        (style.blink && !_paintState.blinkVisible)) {
-      return;
-    }
-    final runes = cell.content.runes;
-    if (runes.length == 1) {
-      _paintState.cursorGlyphEntry = _atlasHandle.atlas.addCodepoint(
-        runes.first,
-        bold: style.bold,
-        italic: style.italic,
-        span: cell.wide ? 2 : 1,
-      );
-    } else {
-      _paintState.cursorGlyphEntry = _atlasHandle.atlas.add((
-        text: cell.content,
-        bold: style.bold,
-        italic: style.italic,
-      ), span: cell.wide ? 2 : 1);
-    }
+    final entry = _cursorAtlasResolver.resolve(
+      cell: cell,
+      shape: _lastCursor.shape,
+      focused: _paintState.cursorFocused,
+      blinkVisible: _paintState.blinkVisible,
+    );
+    _paintState.cursorAtlasEntry = entry;
+    if (entry == null || cell == null) return;
 
     // The character under a block cursor paints in [CursorTheme.text] (or
     // the terminal background when unset) so it contrasts with the cursor

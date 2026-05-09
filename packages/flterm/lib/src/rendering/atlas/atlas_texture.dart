@@ -1,17 +1,17 @@
 import 'dart:math';
 import 'dart:ui';
 
-import 'glyph_entry.dart';
+import 'atlas_entry.dart';
 
 /// Thrown when a glyph or sprite cannot fit inside the configured atlas limit.
-class GlyphAtlasFullException implements Exception {
+class AtlasFullException implements Exception {
   final double requestedWidth;
   final double requestedHeight;
   final int atlasWidth;
   final int atlasHeight;
   final int maxSize;
 
-  const GlyphAtlasFullException({
+  const AtlasFullException({
     required this.requestedWidth,
     required this.requestedHeight,
     required this.atlasWidth,
@@ -21,15 +21,15 @@ class GlyphAtlasFullException implements Exception {
 
   @override
   String toString() =>
-      'GlyphAtlasFullException: requested '
+      'AtlasFullException: requested '
       '${requestedWidth.toStringAsFixed(1)}x'
       '${requestedHeight.toStringAsFixed(1)} in ${atlasWidth}x$atlasHeight '
       'atlas with max size $maxSize';
 }
 
-/// Owns glyph atlas storage, slot allocation, and image replacement.
-class GlyphAtlasTexture {
-  static const defaultInitialSize = 1024;
+/// Owns atlas storage, slot allocation, and image replacement.
+class AtlasTexture {
+  static const defaultInitialSize = 256;
   static const defaultMaxSize = 4096;
 
   // Gap between atlas cells prevents sub-pixel bleed between sprites.
@@ -44,10 +44,9 @@ class GlyphAtlasTexture {
   var _packX = 0.0;
   var _packY = 0.0;
   var _rowHeight = 0.0;
+  Image? _image;
 
-  Image? image;
-
-  GlyphAtlasTexture({
+  AtlasTexture({
     int initialSize = defaultInitialSize,
     int maxSize = defaultMaxSize,
   }) : assert(initialSize > 0, 'initialSize must be positive'),
@@ -58,23 +57,25 @@ class GlyphAtlasTexture {
     _height = initialSize;
   }
 
-  GlyphEntry allocate({
+  Image? get image => _image;
+
+  AtlasEntry allocate({
     required double width,
     required double height,
     required double bearingY,
     double bearingX = 0.0,
-    bool isEmoji = false,
+    AtlasEntryLane lane = .text,
   }) {
     _pack(width, height);
 
-    final entry = GlyphEntry(
+    final entry = AtlasEntry(
       srcLeft: _packX,
       srcTop: _packY,
       srcRight: _packX + width,
       srcBottom: _packY + height,
       bearingY: bearingY,
       bearingX: bearingX,
-      isEmoji: isEmoji,
+      lane: lane,
     );
 
     _packX += width + padding;
@@ -83,8 +84,8 @@ class GlyphAtlasTexture {
   }
 
   void clear() {
-    image?.dispose();
-    image = null;
+    _image?.dispose();
+    _image = null;
     _packX = 0;
     _packY = 0;
     _rowHeight = 0;
@@ -93,20 +94,21 @@ class GlyphAtlasTexture {
   }
 
   void dispose() {
-    image?.dispose();
-    image = null;
+    _image?.dispose();
+    _image = null;
   }
 
   void replaceImage(void Function(Canvas canvas) paintPending) {
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
-    if (image != null) canvas.drawImage(image!, Offset.zero, _compositePaint);
+    final image = _image;
+    if (image != null) canvas.drawImage(image, Offset.zero, _compositePaint);
 
     paintPending(canvas);
 
     final picture = recorder.endRecording();
-    image?.dispose();
-    image = picture.toImageSync(_width, _height);
+    _image?.dispose();
+    _image = picture.toImageSync(_width, _height);
     picture.dispose();
   }
 
@@ -129,7 +131,7 @@ class GlyphAtlasTexture {
   /// atlas if vertical space is exhausted.
   void _pack(double width, double height) {
     if (width + padding > _maxSize || height + padding > _maxSize) {
-      throw GlyphAtlasFullException(
+      throw AtlasFullException(
         requestedWidth: width,
         requestedHeight: height,
         atlasWidth: _width,
@@ -140,7 +142,7 @@ class GlyphAtlasTexture {
 
     while (width + padding > _width || height + padding > _height) {
       if (!_grow()) {
-        throw GlyphAtlasFullException(
+        throw AtlasFullException(
           requestedWidth: width,
           requestedHeight: height,
           atlasWidth: _width,
@@ -158,7 +160,7 @@ class GlyphAtlasTexture {
 
     while (_packY + height + padding > _height) {
       if (!_grow()) {
-        throw GlyphAtlasFullException(
+        throw AtlasFullException(
           requestedWidth: width,
           requestedHeight: height,
           atlasWidth: _width,

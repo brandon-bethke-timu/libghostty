@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:flterm/src/rendering/atlas/glyph_atlas.dart';
+import 'package:flterm/src/rendering/atlas/atlas.dart';
 import 'package:flterm/src/rendering/atlas/sprite_buffer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -312,12 +312,12 @@ void main() {
   });
 }
 
-GlyphEntry _entry({
+AtlasEntry _entry({
   double srcLeft = 0,
   double srcTop = 0,
   double srcRight = 8,
   double srcBottom = 16,
-}) => GlyphEntry(
+}) => AtlasEntry(
   srcLeft: srcLeft,
   srcTop: srcTop,
   srcRight: srcRight,

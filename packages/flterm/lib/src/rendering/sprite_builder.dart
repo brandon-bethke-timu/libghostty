@@ -5,32 +5,13 @@ import 'package:libghostty/libghostty.dart';
 
 import '../foundation/dynamic_color.dart';
 import '../foundation/terminal_selection.dart';
-import 'atlas/glyph_atlas.dart';
+import 'atlas/atlas.dart';
 import 'atlas/sprite_buffer.dart';
+import 'codepoint_classification.dart';
 import 'paint_state.dart';
 
 bool _hasDecoration(Style style) {
   return style.underline != .none || style.strikethrough || style.overline;
-}
-
-/// Whether [cp] is a CJK or Hangul codepoint (rendered as tinted text).
-///
-/// Wide characters that are NOT CJK are assumed to be emoji and rendered
-/// as full-color image sprites. Flutter doesn't expose a font-level
-/// `isColorGlyph()` check, so codepoint range classification is the
-/// pragmatic way to distinguish CJK text from emoji in the hot loop.
-bool _isCjk(int cp) {
-  return (cp >= 0x2E80 && cp <= 0x9FFF) || // CJK radicals, unified ideographs
-      (cp >= 0xAC00 && cp <= 0xD7AF) || // Hangul Syllables
-      (cp >= 0xF900 && cp <= 0xFAFF) || // CJK Compatibility Ideographs
-      (cp >= 0xFE30 && cp <= 0xFE4F) || // CJK Compatibility Forms
-      (cp >= 0xFF01 && cp <= 0xFF60) || // Fullwidth Forms
-      (cp >= 0xFFE0 && cp <= 0xFFE6) || // Fullwidth Signs
-      (cp >= 0x1100 && cp <= 0x11FF) || // Hangul Jamo
-      (cp >= 0x3130 && cp <= 0x318F) || // Hangul Compatibility Jamo
-      (cp >= 0xA960 && cp <= 0xA97F) || // Hangul Jamo Extended-A
-      (cp >= 0xD7B0 && cp <= 0xD7FF) || // Hangul Jamo Extended-B
-      (cp >= 0x20000 && cp <= 0x2FA1F); // CJK Supplementary
 }
 
 /// ASCII punctuation/operator: not digit, not uppercase, not lowercase.
@@ -114,7 +95,7 @@ class RowDirtyTracker {
 ///   String allocation.
 /// - Background color runs are coalesced across adjacent same-color cells.
 class SpriteBuilder {
-  final GlyphAtlas _atlas;
+  final Atlas _atlas;
   final SpriteBuffer _sprites;
   final TerminalPaintState _state;
   final _StyleCache _styleCache;
@@ -312,7 +293,40 @@ class SpriteBuilder {
       bold: style.bold,
       italic: style.italic,
     );
-    _sprites.regular.add(x, cursor.rowY, entry, _inverseDpr, cursor.foreground);
+    final sprites = switch (entry.lane) {
+      .sprite => _sprites.sprite,
+      _ => _sprites.regular,
+    };
+    sprites.add(x, cursor.rowY, entry, _inverseDpr, cursor.foreground);
+  }
+
+  void _emitText(
+    String text,
+    double x,
+    _RowCursor cursor, {
+    required bool emoji,
+    int span = 1,
+    AtlasSprites? textSprites,
+  }) {
+    final style = cursor.style!;
+    final entry = _atlas.add(
+      (text: text, bold: style.bold, italic: style.italic),
+      span: span,
+      emoji: emoji,
+    );
+
+    if (emoji) {
+      _sprites.emoji.add(x, cursor.rowY, entry, _inverseDpr);
+      return;
+    }
+
+    (textSprites ?? _sprites.regular).add(
+      x,
+      cursor.rowY,
+      entry,
+      _inverseDpr,
+      cursor.foreground,
+    );
   }
 
   /// Emits decoration sprites (underline, strikethrough, overline).
@@ -407,26 +421,15 @@ class SpriteBuilder {
       } else {
         final content = cell.content;
         if (content.isNotEmpty && content != ' ') {
-          final key = (text: content, bold: style.bold, italic: style.italic);
           // VS16 (U+FE0F) forces text-presentation codepoints into emoji
           // presentation. These go to the emoji sprite path (full color,
           // no foreground tinting) rather than the regular text path.
-          if (content.contains('\uFE0F')) {
-            _sprites.emoji.add(
-              cursor.spriteX,
-              cursor.rowY,
-              _atlas.add(key, emoji: true),
-              _inverseDpr,
-            );
-          } else {
-            _sprites.regular.add(
-              cursor.spriteX,
-              cursor.rowY,
-              _atlas.add(key),
-              _inverseDpr,
-              cursor.foreground,
-            );
-          }
+          _emitText(
+            content,
+            cursor.spriteX,
+            cursor,
+            emoji: content.contains('\uFE0F'),
+          );
         }
       }
       return;
@@ -461,7 +464,7 @@ class SpriteBuilder {
           italic: style.italic,
           span: 2,
         );
-        _sprites.wide.add(
+        _sprites.sprite.add(
           cursor.spriteX,
           cursor.rowY,
           entry,
@@ -469,20 +472,15 @@ class SpriteBuilder {
           cursor.foreground,
         );
       } else {
-        final isEmoji = !_isCjk(cp);
-        final key = (text: content, bold: style.bold, italic: style.italic);
-        final entry = _atlas.add(key, span: 2, emoji: isEmoji);
-        if (isEmoji) {
-          _sprites.emoji.add(cursor.spriteX, cursor.rowY, entry, _inverseDpr);
-        } else {
-          _sprites.wide.add(
-            cursor.spriteX,
-            cursor.rowY,
-            entry,
-            _inverseDpr,
-            cursor.foreground,
-          );
-        }
+        final renderAsEmoji = !isCjkCodepoint(cp);
+        _emitText(
+          content,
+          cursor.spriteX,
+          cursor,
+          emoji: renderAsEmoji,
+          span: 2,
+          textSprites: _sprites.wide,
+        );
       }
     }
     // Advance past the spacer tail. Flush the background run through
@@ -554,14 +552,12 @@ class SpriteBuilder {
       );
     } else {
       final text = String.fromCharCodes(cursor.operatorRun);
-      final span = cursor.operatorRun.length;
-      final key = (text: text, bold: style.bold, italic: style.italic);
-      _sprites.regular.add(
+      _emitText(
+        text,
         cursor.operatorRunX,
-        cursor.rowY,
-        _atlas.add(key, span: span),
-        _inverseDpr,
-        cursor.foreground,
+        cursor,
+        emoji: false,
+        span: cursor.operatorRun.length,
       );
     }
     cursor.operatorRun.clear();

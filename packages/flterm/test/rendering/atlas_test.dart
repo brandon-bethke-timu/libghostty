@@ -1,15 +1,16 @@
 import 'dart:ui';
 
 import 'package:flterm/src/foundation/cell_metrics.dart';
-import 'package:flterm/src/rendering/atlas/glyph_atlas.dart';
+import 'package:flterm/src/rendering/atlas/atlas.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:libghostty/libghostty.dart';
 
 void main() {
-  group('GlyphAtlas', () {
-    late GlyphAtlas atlas;
+  group('Atlas', () {
+    late Atlas atlas;
 
     setUp(() {
-      atlas = GlyphAtlas(_config());
+      atlas = Atlas(_config());
     });
 
     tearDown(() => atlas.dispose());
@@ -17,16 +18,34 @@ void main() {
     group('construction', () {
       test('applies config, pre-seeds glyphs, and creates atlas image', () {
         atlas.dispose();
-        atlas = GlyphAtlas(_config(dpr: 2.0));
+        atlas = Atlas(_config(dpr: 2.0));
 
         expect(atlas.devicePixelRatio, 2.0);
         expect(atlas.cacheSize, greaterThan(0));
-        expect(atlas.image, isNotNull);
+        expect(atlas.textImage, isNotNull);
+        expect(atlas.spriteImage, isNull);
+      });
+
+      test('lane image accessors expose separate atlas textures', () {
+        expect(atlas.textImage, isNotNull);
+        expect(atlas.spriteImage, isNull);
+        expect(atlas.decorationImage, isNotNull);
+        expect(atlas.decorationImage, isNot(same(atlas.textImage)));
+
+        atlas.add((text: '\u{1F600}', bold: false, italic: false), emoji: true);
+        atlas.addCodepoint(0x2500, bold: false, italic: false);
+        atlas.ensureImage();
+
+        expect(atlas.emojiImage, isNotNull);
+        expect(atlas.spriteImage, isNotNull);
+        expect(atlas.emojiImage, isNot(same(atlas.textImage)));
+        expect(atlas.spriteImage, isNot(same(atlas.textImage)));
+        expect(atlas.decorationImage, isNot(same(atlas.spriteImage)));
       });
 
       test('defers preseed when cell dimensions are not available', () {
         atlas.dispose();
-        atlas = GlyphAtlas(
+        atlas = Atlas(
           _config(
             metrics: const CellMetrics(
               cellWidth: 0,
@@ -37,7 +56,7 @@ void main() {
         );
 
         expect(atlas.cacheSize, 0);
-        expect(atlas.image, isNull);
+        expect(atlas.textImage, isNull);
       });
     });
 
@@ -88,6 +107,19 @@ void main() {
           greaterThan(single.srcRight - single.srcLeft),
         );
       });
+
+      test('sprite codepoints are rasterized lazily on first use', () {
+        final sizeBefore = atlas.cacheSize;
+        expect(atlas.spriteImage, isNull);
+
+        final entry = atlas.addCodepoint(0x2500, bold: false, italic: false);
+        expect(entry.srcRight, greaterThan(entry.srcLeft));
+        expect(atlas.cacheSize, sizeBefore + 1);
+        expect(atlas.spriteImage, isNull);
+
+        atlas.ensureImage();
+        expect(atlas.spriteImage, isNotNull);
+      });
     });
 
     group('add', () {
@@ -102,23 +134,31 @@ void main() {
         expect(identical(entry1, entry2), isTrue);
       });
 
-      test('wide entry spans 2 cells', () {
+      test('wide text entry spans 2 cells', () {
         const key = (text: '\u{4e00}', bold: false, italic: false);
         final entry = atlas.add(key, span: 2);
 
         final expectedWidth = (8.0 * 2 * 1.0).ceil().toDouble();
         expect(entry.srcRight - entry.srcLeft, expectedWidth);
-        expect(entry.isEmoji, isFalse);
+        expect(entry.lane, AtlasEntryLane.text);
       });
 
-      test('emoji entry has isEmoji true', () {
+      test('emoji entry exposes the emoji lane', () {
         const key = (text: '\u{1F600}', bold: false, italic: false);
         final entry = atlas.add(key, emoji: true);
-        expect(entry.isEmoji, isTrue);
+        expect(entry.lane, AtlasEntryLane.emoji);
+      });
+
+      test('sprite and decoration entries expose their owning lane', () {
+        final sprite = atlas.addCodepoint(0x2500, bold: false, italic: false);
+        final decoration = atlas.addDecoration(UnderlineStyle.single);
+
+        expect(sprite.lane, AtlasEntryLane.sprite);
+        expect(decoration.lane, AtlasEntryLane.decoration);
       });
 
       test('sequential adds produce non-overlapping positions', () {
-        final entries = <GlyphEntry>[];
+        final entries = <AtlasEntry>[];
         for (var code = 0x300; code < 0x310; code++) {
           entries.add(
             atlas.add((
@@ -144,7 +184,7 @@ void main() {
       });
 
       test('early positions remain stable after many adds', () {
-        final earlyEntries = <GlyphEntry>[];
+        final earlyEntries = <AtlasEntry>[];
         for (var code = 0x400; code < 0x410; code++) {
           earlyEntries.add(
             atlas.add((
@@ -182,31 +222,34 @@ void main() {
       test('composites pending glyphs into atlas image', () {
         atlas.add((text: '\u{1234}', bold: false, italic: false));
         atlas.ensureImage();
-        expect(atlas.image, isNotNull);
+        expect(atlas.textImage, isNotNull);
       });
 
-      test('composites pending sprite glyphs into atlas image', () {
+      test('composites pending sprite glyphs into sprite image', () {
         for (final codepoint in _spriteSamples) {
           atlas.addCodepoint(codepoint, bold: false, italic: false);
         }
         atlas.ensureImage();
-        expect(atlas.image, isNotNull);
+        expect(atlas.spriteImage, isNotNull);
       });
 
       test('is no-op when no pending glyphs', () {
-        final imageBefore = atlas.image;
+        final imageBefore = atlas.textImage;
 
         atlas.ensureImage();
-        expect(atlas.image, same(imageBefore));
+        expect(atlas.textImage, same(imageBefore));
       });
     });
 
     group('dispose', () {
       test('releases image', () {
-        expect(atlas.image, isNotNull);
+        expect(atlas.textImage, isNotNull);
 
         atlas.dispose();
-        expect(atlas.image, isNull);
+        expect(atlas.textImage, isNull);
+        expect(atlas.emojiImage, isNull);
+        expect(atlas.spriteImage, isNull);
+        expect(atlas.decorationImage, isNull);
       });
     });
   });
@@ -214,8 +257,8 @@ void main() {
 
 const _metrics = CellMetrics(cellWidth: 8, cellHeight: 16, baseline: 12);
 
-GlyphAtlasConfig _config({double dpr = 1, CellMetrics metrics = _metrics}) {
-  return GlyphAtlasConfig(
+AtlasConfig _config({double dpr = 1, CellMetrics metrics = _metrics}) {
+  return AtlasConfig(
     fontSize: 14,
     fontWeight: FontWeight.normal,
     fontFamily: 'monospace',

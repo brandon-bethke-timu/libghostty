@@ -6,7 +6,7 @@ import 'dart:typed_data';
 
 import 'package:flterm/src/foundation.dart';
 import 'package:flterm/src/rendering.dart';
-import 'package:flterm/src/rendering/atlas/glyph_atlas_config.dart';
+import 'package:flterm/src/rendering/atlas/atlas_config.dart';
 import 'package:flterm/src/rendering/terminal_render_cache.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
@@ -216,12 +216,12 @@ TerminalRenderCache _renderCache() {
 }
 
 class _TrackingRenderCache extends TerminalRenderCache {
-  final acquiredKeys = <GlyphAtlasConfig>[];
+  final acquiredKeys = <AtlasConfig>[];
 
   @override
-  TerminalGlyphAtlasHandle acquireGlyphAtlas(GlyphAtlasConfig config) {
+  TerminalAtlasHandle acquireAtlas(AtlasConfig config) {
     acquiredKeys.add(config);
-    return super.acquireGlyphAtlas(config);
+    return super.acquireAtlas(config);
   }
 }
 

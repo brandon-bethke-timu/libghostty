@@ -1,11 +1,11 @@
 import 'dart:ui';
 
 import 'package:flterm/src/foundation.dart';
-import 'package:flterm/src/rendering/atlas/glyph_atlas_config.dart';
+import 'package:flterm/src/rendering/atlas/atlas_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('GlyphAtlasConfig', () {
+  group('AtlasConfig', () {
     test('equality includes font, metrics, fallback, and DPR', () {
       final first = _config();
       final second = _config();
@@ -47,12 +47,12 @@ void main() {
   });
 }
 
-GlyphAtlasConfig _config({
+AtlasConfig _config({
   double fontSize = 14,
   double devicePixelRatio = 1,
   List<String> fallback = const [],
 }) {
-  return GlyphAtlasConfig(
+  return AtlasConfig(
     fontSize: fontSize,
     fontWeight: FontWeight.normal,
     fontFamily: 'monospace',

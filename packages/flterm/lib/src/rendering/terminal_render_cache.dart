@@ -1,66 +1,63 @@
-import 'atlas/glyph_atlas.dart';
+import 'atlas/atlas.dart';
 
-class TerminalGlyphAtlasHandle {
+class TerminalAtlasHandle {
   final TerminalRenderCache _owner;
-  final GlyphAtlasConfig config;
-  final _GlyphAtlasEntry _entry;
+  final AtlasConfig config;
+  final _CachedAtlas _entry;
   var _released = false;
 
-  TerminalGlyphAtlasHandle._(this._owner, this.config, this._entry);
+  TerminalAtlasHandle._(this._owner, this.config, this._entry);
 
-  GlyphAtlas get atlas => _entry.atlas;
+  Atlas get atlas => _entry.atlas;
 
   void release() {
     if (_released) return;
     _released = true;
-    _owner._releaseGlyphAtlas(config, _entry);
+    _owner._releaseAtlas(config, _entry);
   }
 }
 
 /// Owns render resources that can be shared by compatible terminal views.
 ///
-/// Render boxes derive a [GlyphAtlasConfig] from their current
+/// Render boxes derive an [AtlasConfig] from their current
 /// theme/metrics/DPR and use it directly as the sharing key.
 ///
 /// This type is internal; public sharing is exposed through `TerminalScope`.
 class TerminalRenderCache {
-  final _glyphAtlases = <GlyphAtlasConfig, _GlyphAtlasEntry>{};
+  final _atlases = <AtlasConfig, _CachedAtlas>{};
 
-  TerminalGlyphAtlasHandle acquireGlyphAtlas(GlyphAtlasConfig config) {
-    final entry = _glyphAtlases.putIfAbsent(
+  TerminalAtlasHandle acquireAtlas(AtlasConfig config) {
+    final entry = _atlases.putIfAbsent(
       config,
-      () => _GlyphAtlasEntry(GlyphAtlas(config)),
+      () => _CachedAtlas(Atlas(config)),
     );
     entry.references++;
-    return TerminalGlyphAtlasHandle._(this, config, entry);
+    return TerminalAtlasHandle._(this, config, entry);
   }
 
   void dispose() {
-    for (final entry in _glyphAtlases.values) {
+    for (final entry in _atlases.values) {
       entry.atlas.dispose();
     }
-    _glyphAtlases.clear();
+    _atlases.clear();
   }
 
-  void _releaseGlyphAtlas(
-    GlyphAtlasConfig config,
-    _GlyphAtlasEntry releasedEntry,
-  ) {
-    final entry = _glyphAtlases[config];
+  void _releaseAtlas(AtlasConfig config, _CachedAtlas releasedEntry) {
+    final entry = _atlases[config];
     if (entry == null) return;
     if (!identical(entry, releasedEntry)) return;
 
     entry.references--;
     if (entry.references > 0) return;
 
-    _glyphAtlases.remove(config);
+    _atlases.remove(config);
     entry.atlas.dispose();
   }
 }
 
-class _GlyphAtlasEntry {
-  final GlyphAtlas atlas;
+class _CachedAtlas {
+  final Atlas atlas;
   var references = 0;
 
-  _GlyphAtlasEntry(this.atlas);
+  _CachedAtlas(this.atlas);
 }

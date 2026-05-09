@@ -3,7 +3,7 @@ import 'dart:ui';
 import 'package:libghostty/libghostty.dart' show Cursor;
 
 import '../foundation.dart' show CellMetrics, TerminalSelection, TerminalTheme;
-import 'atlas/glyph_atlas.dart';
+import 'atlas/atlas.dart';
 
 /// Mutable state shared between [TerminalRenderBox] and all painters.
 ///
@@ -38,7 +38,7 @@ class TerminalPaintState {
   var cursorWide = false;
   var cursorFocused = true;
   var cursorColorArgb = 0xFFFFFFFF;
-  GlyphEntry? cursorGlyphEntry;
+  AtlasEntry? cursorAtlasEntry;
   final cursorGlyphPaint = Paint();
 
   TerminalPaintState(this.theme, this.metrics)
