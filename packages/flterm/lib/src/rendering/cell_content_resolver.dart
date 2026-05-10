@@ -67,18 +67,6 @@ final class CellContentResolver {
     );
   }
 
-  AtlasEntry resolveTextRun(
-    String text, {
-    required Style style,
-    required int span,
-  }) {
-    return _atlas.add((
-      text: text,
-      bold: style.bold,
-      italic: style.italic,
-    ), span: span);
-  }
-
   bool _paintsAsEmoji(String content, int codepoint, {required int span}) {
     return content.contains('\uFE0F') ||
         (span == 2 && !isCjkCodepoint(codepoint));

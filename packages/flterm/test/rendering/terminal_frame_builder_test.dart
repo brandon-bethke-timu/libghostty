@@ -52,6 +52,16 @@ void main() {
       expect(atlas.emojiImage, isNotNull);
     });
 
+    test('sync emits operator ligatures without adding text atlas entries', () {
+      final initialCacheSize = atlas.cacheSize;
+      terminal.writeUtf8('=> !=');
+
+      builder.sync(terminal, terminalDirty: true);
+
+      expect(sprites.shaped.count, 2);
+      expect(atlas.cacheSize, initialCacheSize);
+    });
+
     test(
       'sync emits selection background without terminal access in paint',
       () {

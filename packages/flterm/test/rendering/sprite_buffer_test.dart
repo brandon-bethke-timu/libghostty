@@ -262,6 +262,7 @@ void main() {
       expect(buffer.background.count, 0);
       expect(buffer.underline.count, 0);
       expect(buffer.decoration.count, 0);
+      expect(buffer.shaped.count, 0);
     });
 
     test('seal builds backgroundVertices when any row has bg rects', () {
@@ -307,6 +308,7 @@ void main() {
 
       expect(buffer.regular.count, 0);
       expect(buffer.background.count, 0);
+      expect(buffer.shaped.count, 0);
       expect(buffer.backgroundVertices, isNull);
     });
   });

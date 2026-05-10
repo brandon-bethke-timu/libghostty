@@ -3,6 +3,88 @@ import 'dart:ui';
 
 import 'atlas_entry.dart';
 
+/// A shaped text run that must be painted through Flutter's paragraph shaper.
+///
+/// Used for terminal text where ligatures matter. These runs are not atlas
+/// entries because Flutter does not expose glyph IDs, and caching arbitrary
+/// source strings as atlas images causes unbounded native image growth.
+final class ShapedRun {
+  final Paragraph paragraph;
+  final Offset offset;
+  final Rect clip;
+
+  const ShapedRun({
+    required this.paragraph,
+    required this.offset,
+    required this.clip,
+  });
+
+  void dispose() => paragraph.dispose();
+}
+
+/// Row-retained shaped text runs.
+///
+/// Dirty rows replace only their own paragraph runs. Clean rows keep their
+/// already laid-out paragraphs so repaint does not require reshaping.
+final class ShapedRunBuffer {
+  List<List<ShapedRun>> _rows = const [];
+  var _activeRuns = 0;
+  var _currentRow = -1;
+
+  int get count => _activeRuns;
+
+  List<List<ShapedRun>> get rows => _rows;
+
+  void add(ShapedRun run) {
+    assert(_currentRow >= 0, 'add() called outside beginRow/endRow');
+    _rows[_currentRow].add(run);
+    _activeRuns++;
+  }
+
+  void beginRow(int row) {
+    _currentRow = row;
+    final runs = _rows[row];
+    _activeRuns -= runs.length;
+    for (final run in runs) {
+      run.dispose();
+    }
+    runs.clear();
+  }
+
+  void configure(int rowCount) {
+    _disposeRows();
+    _activeRuns = 0;
+    _currentRow = -1;
+    _rows = List.generate(rowCount, (_) => <ShapedRun>[]);
+  }
+
+  void dispose() {
+    _disposeRows();
+    _rows = const [];
+    _activeRuns = 0;
+    _currentRow = -1;
+  }
+
+  void endRow() {
+    assert(_currentRow >= 0, 'endRow() without beginRow()');
+    _currentRow = -1;
+  }
+
+  void seal() {
+    assert(_currentRow < 0, 'seal() called before endRow()');
+  }
+
+  void _disposeRows() {
+    for (final row in _rows) {
+      for (final run in row) {
+        run.dispose();
+      }
+      row.clear();
+    }
+    _activeRuns = 0;
+  }
+}
+
 /// Sprite data for [Canvas.drawRawAtlas] calls, organized as fixed per-row
 /// slot ranges for incremental row-dirty rebuilds.
 ///
@@ -409,6 +491,9 @@ class SpriteBuffer {
   /// Rect-based decorations (strikethroughs, overlines).
   final RectSprites decoration;
 
+  /// Paragraph-shaped text runs for ligatures.
+  final ShapedRunBuffer shaped;
+
   var _indices = Uint16List(0);
 
   SpriteBuffer()
@@ -418,7 +503,8 @@ class SpriteBuffer {
       emoji = AtlasSprites(),
       background = RectSprites(),
       underline = AtlasSprites(),
-      decoration = RectSprites();
+      decoration = RectSprites(),
+      shaped = ShapedRunBuffer();
 
   /// Finalized background vertex data, available after [seal].
   Vertices? get backgroundVertices => background.cachedVertices;
@@ -438,6 +524,7 @@ class SpriteBuffer {
     background.beginRow(row);
     underline.beginRow(row);
     decoration.beginRow(row);
+    shaped.beginRow(row);
   }
 
   /// Reconfigures all channels for a grid of [rows] rows and [cols]
@@ -456,6 +543,7 @@ class SpriteBuffer {
     background.configure(rows, atlasStride);
     underline.configure(rows, atlasStride);
     decoration.configure(rows, 2 * cols + 1);
+    shaped.configure(rows);
   }
 
   /// Releases buffers, sized arrays and cached [Vertices] for all
@@ -468,6 +556,7 @@ class SpriteBuffer {
     background.dispose();
     underline.dispose();
     decoration.dispose();
+    shaped.dispose();
     _indices = Uint16List(0);
   }
 
@@ -480,6 +569,7 @@ class SpriteBuffer {
     background.endRow();
     underline.endRow();
     decoration.endRow();
+    shaped.endRow();
   }
 
   /// Packs atlas channels and builds vertex data for rect channels.
@@ -489,6 +579,7 @@ class SpriteBuffer {
     sprite.seal();
     emoji.seal();
     underline.seal();
+    shaped.seal();
     final maxRects = background.count > decoration.count
         ? background.count
         : decoration.count;

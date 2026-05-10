@@ -89,16 +89,6 @@ void main() {
 
       expect(entry.lane, AtlasEntryLane.sprite);
     });
-
-    test('routes ASCII operator runs through the text lane', () {
-      final entry = resolver.resolveTextRun(
-        '==',
-        style: const Style(),
-        span: 2,
-      );
-
-      expect(entry.lane, AtlasEntryLane.text);
-    });
   });
 }
 

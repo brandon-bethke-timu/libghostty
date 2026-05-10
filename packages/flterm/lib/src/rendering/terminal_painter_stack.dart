@@ -11,6 +11,7 @@ import 'painters/cursor_painter.dart';
 import 'painters/decoration_painter.dart';
 import 'painters/emoji_painter.dart';
 import 'painters/kitty_graphics_painter.dart';
+import 'painters/shaped_run_painter.dart';
 import 'painters/sprite_painter.dart';
 import 'painters/terminal_text_painter.dart';
 import 'painters/underline_painter.dart';
@@ -36,6 +37,7 @@ final class TerminalPainterStack {
   late CursorPainter _cursorPainter;
   late TerminalTextPainter _textPainter;
   late UnderlinePainter _underlinePainter;
+  late final ShapedRunPainter _shapedRunPainter;
 
   TerminalPainterStack({
     required Atlas atlas,
@@ -62,6 +64,7 @@ final class TerminalPainterStack {
       cache: _kittyImageCache,
       snapshots: _kittyAboveText,
     );
+    _shapedRunPainter = ShapedRunPainter(_sprites.shaped);
     bindAtlas(atlas);
   }
 
@@ -83,6 +86,7 @@ final class TerminalPainterStack {
     _kittyBelowTextPainter.paint(canvas);
     _underlinePainter.paint(canvas);
     _textPainter.paint(canvas);
+    _shapedRunPainter.paint(canvas);
     _spritePainter.paint(canvas);
     _cursorPainter.paint(canvas);
     _emojiPainter.paint(canvas);

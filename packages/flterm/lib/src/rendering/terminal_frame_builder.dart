@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
@@ -351,10 +352,11 @@ final class _CursorFrameBuilder {
 final class _ForegroundEmitter {
   final SpriteBuffer _sprites;
   final _FrameSnapshot _frame;
+  final TerminalPaintState _state;
   final CellContentResolver _content;
   final _AsciiOperatorRun _operators;
 
-  _ForegroundEmitter(this._sprites, this._content, this._frame)
+  _ForegroundEmitter(this._sprites, this._content, this._frame, this._state)
     : _operators = _AsciiOperatorRun();
 
   void emit(CellIterator cell, _RowBuildState row, {required int span}) {
@@ -390,14 +392,68 @@ final class _ForegroundEmitter {
     if (_operators.length == 1) {
       _emitCodepoint(_operators.first, row, style: style, x: _operators.x);
     } else {
-      final entry = _content.resolveTextRun(
+      _emitShapedRun(
         _operators.text,
+        row,
         style: style,
         span: _operators.length,
       );
-      _emitEntry(entry, row, x: _operators.x, wideText: false);
     }
     _operators.clear();
+  }
+
+  void _emitShapedRun(
+    String text,
+    _RowBuildState row, {
+    required Style style,
+    required int span,
+  }) {
+    final theme = _state.theme;
+    final width = _frame.cellWidth * span;
+    final overhang = style.italic
+        ? math.max(1.0, (theme.fontSize * 0.15).ceilToDouble())
+        : 0.0;
+    final paragraph =
+        (ParagraphBuilder(
+                ParagraphStyle(
+                  fontSize: theme.fontSize,
+                  fontFamily: theme.fontFamily,
+                  textAlign: .start,
+                ),
+              )
+              ..pushStyle(
+                TextStyle(
+                  color: Color(row.foreground),
+                  fontSize: theme.fontSize,
+                  fontFamily: theme.fontFamily,
+                  decoration: TextDecoration.none,
+                  fontWeight: style.bold ? .bold : theme.fontWeight,
+                  fontStyle: style.italic ? .italic : .normal,
+                  fontFamilyFallback: theme.fontFamilyFallback,
+                ),
+              )
+              ..addText(text)
+              ..pop())
+            .build()
+          ..layout(const ParagraphConstraints(width: .infinity));
+    final bearingX = span > 1
+        ? math.max(0.0, (width - paragraph.maxIntrinsicWidth) / 2)
+        : 0.0;
+    _sprites.shaped.add(
+      ShapedRun(
+        paragraph: paragraph,
+        offset: Offset(
+          _operators.x + bearingX,
+          row.rowY + _state.metrics.baseline - paragraph.alphabeticBaseline,
+        ),
+        clip: Rect.fromLTWH(
+          _operators.x,
+          row.rowY,
+          width + overhang,
+          _frame.cellHeight,
+        ),
+      ),
+    );
   }
 
   void _emitCodepoint(
@@ -698,7 +754,7 @@ final class _TerminalRowBuilder {
        _frame = _FrameSnapshot(),
        _row = _RowBuildState(),
        _styles = _StyleResolver(state) {
-    _foreground = _ForegroundEmitter(sprites, content, _frame);
+    _foreground = _ForegroundEmitter(sprites, content, _frame, state);
   }
 
   void beginFrame() {
