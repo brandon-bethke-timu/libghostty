@@ -142,10 +142,9 @@ class TerminalFrameBuilder {
       final scrollbar = terminal.scrollbar;
 
       _state.viewportOffset = scrollbar.offset;
-      _state.terminalForegroundArgb =
-          terminal.foreground?.toArgb32 ?? _state.theme.foreground.toARGB32();
-      _state.terminalBackgroundArgb =
-          terminal.background?.toArgb32 ?? _state.theme.background.toARGB32();
+      if (dirty == DirtyState.full) {
+        _state.updateTerminalColors(_renderState.colors);
+      }
 
       if (dirty != .clean || hasDirtyRows) {
         _build(dirty);
@@ -682,8 +681,8 @@ final class _StyleResolver {
     }
 
     final style = cell.style;
-    var foreground = cell.foregroundArgb ?? _defaultFg;
-    var background = cell.backgroundArgb ?? _defaultBg;
+    var foreground = _resolveColor(style.foreground, isForeground: true);
+    var background = _resolveColor(style.background, isForeground: false);
     var explicitBg = style.background is! DefaultColor;
 
     if (style.bold) {
@@ -693,7 +692,7 @@ final class _StyleResolver {
       } else if (_state.theme.boldIsBright) {
         final raw = style.foreground;
         if (raw is PaletteColor && raw.index < 8) {
-          foreground = _state.theme.palette[raw.index + 8].toARGB32();
+          foreground = _state.terminalPaletteArgb[raw.index + 8];
         }
       }
     }
@@ -716,6 +715,14 @@ final class _StyleResolver {
     }
 
     return (foreground, background, style, explicitBg);
+  }
+
+  int _resolveColor(CellColor color, {required bool isForeground}) {
+    return switch (color) {
+      DefaultColor() => isForeground ? _defaultFg : _defaultBg,
+      RgbColor() => color.toArgb32,
+      PaletteColor(:final index) => _state.terminalPaletteArgb[index],
+    };
   }
 
   int _resolveSelectionColor(

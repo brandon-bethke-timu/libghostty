@@ -18,13 +18,28 @@ final class CellContentResolver {
     required Style style,
     required int span,
   }) {
+    final graphemeLength = cell.graphemeLength;
+    if (graphemeLength == 0) return null;
+
+    final codepoint = cell.codepoint;
+    if (graphemeLength == 1) {
+      if (codepoint == 0x20) return null;
+      if (_usesCodepointEntry(
+        codepoint: codepoint,
+        graphemeLength: graphemeLength,
+        span: span,
+      )) {
+        return resolveCodepoint(codepoint, style: style, span: span);
+      }
+    }
+
     final content = cell.content;
     if (content.isEmpty || content == ' ') return null;
 
     return resolve(
       content: content,
-      codepoint: cell.codepoint,
-      graphemeLength: cell.graphemeLength,
+      codepoint: codepoint,
+      graphemeLength: graphemeLength,
       style: style,
       span: span,
     );

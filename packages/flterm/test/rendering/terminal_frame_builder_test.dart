@@ -62,6 +62,18 @@ void main() {
       expect(atlas.cacheSize, initialCacheSize);
     });
 
+    test('sync resolves palette colors from render state colors', () {
+      terminal.palette = [
+        for (var i = 0; i < 256; i++)
+          i == 1 ? const RgbColor(1, 2, 3) : const RgbColor(0, 0, 0),
+      ];
+      terminal.writeUtf8('\x1b[31mA');
+
+      builder.sync(terminal, terminalDirty: true);
+
+      expect(sprites.regular.sealedColors.single, 0xFF010203.toSigned(32));
+    });
+
     test(
       'sync emits selection background without terminal access in paint',
       () {

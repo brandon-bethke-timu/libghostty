@@ -1,6 +1,7 @@
+import 'dart:typed_data';
 import 'dart:ui';
 
-import 'package:libghostty/libghostty.dart' show Cursor;
+import 'package:libghostty/libghostty.dart' show Cursor, TerminalColors;
 
 import '../foundation.dart' show CellMetrics, TerminalSelection, TerminalTheme;
 import 'atlas/atlas.dart';
@@ -27,6 +28,7 @@ class TerminalPaintState {
 
   late int terminalForegroundArgb;
   late int terminalBackgroundArgb;
+  final terminalPaletteArgb = Uint32List(256);
 
   /// Alpha byte (0-255) applied to faint text foregrounds.
   int faintAlpha;
@@ -45,10 +47,28 @@ class TerminalPaintState {
     : faintAlpha = (theme.faintOpacity * 255).ceil() {
     terminalForegroundArgb = theme.foreground.toARGB32();
     terminalBackgroundArgb = theme.background.toARGB32();
+    _updateThemePalette();
   }
 
   void updateTheme(TerminalTheme newTheme) {
     theme = newTheme;
     faintAlpha = (newTheme.faintOpacity * 255).ceil();
+    _updateThemePalette();
+  }
+
+  void updateTerminalColors(TerminalColors colors) {
+    terminalForegroundArgb = colors.foreground.toArgb32;
+    terminalBackgroundArgb = colors.background.toArgb32;
+    final palette = colors.palette;
+    for (var i = 0; i < terminalPaletteArgb.length; i++) {
+      terminalPaletteArgb[i] = palette[i].toArgb32;
+    }
+  }
+
+  void _updateThemePalette() {
+    final palette = theme.palette;
+    for (var i = 0; i < terminalPaletteArgb.length; i++) {
+      terminalPaletteArgb[i] = palette[i].toARGB32();
+    }
   }
 }
