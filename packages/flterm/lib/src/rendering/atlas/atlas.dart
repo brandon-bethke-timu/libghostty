@@ -17,9 +17,10 @@ export 'atlas_texture.dart' show AtlasFullException;
 
 /// Cache backed by lane-specific atlas textures.
 ///
-/// Caches rasterized text, emoji, sprite, and decoration glyphs. On first
-/// use with new cell dimensions, pre-seeds common glyphs so steady-state
-/// rendering avoids the most common cache misses.
+/// Caches rasterized text, emoji, sprite, and decoration glyphs. On first use
+/// with new cell dimensions, pre-seeds the common normal-style text glyphs so
+/// steady-state rendering avoids the most common cache misses without eagerly
+/// rasterizing rarely used style variants.
 ///
 /// Lifecycle: construct with an [AtlasConfig],
 /// [add]/[addCodepoint] per frame, [ensureImage] to composite pending glyphs,
@@ -111,8 +112,8 @@ class Atlas {
 
   /// Pre-seeds the atlas with glyphs that will almost certainly be needed.
   ///
-  /// Rasterizing all printable ASCII in every bold/italic combination up
-  /// front avoids per-frame cache misses for the most common characters.
+  /// Rasterizing normal printable ASCII up front avoids per-frame cache misses
+  /// for the most common characters while keeping bold/italic variants lazy.
   /// Built-in sprite glyphs are rasterized lazily into their own atlas
   /// texture, so first use no longer shifts text/emoji atlas positions.
   /// All underline styles are pre-seeded so decoration rendering never

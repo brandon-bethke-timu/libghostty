@@ -93,10 +93,12 @@ class AtlasCache {
 
   /// Pre-seeds glyphs that are expected to appear in nearly every terminal.
   ///
-  /// Printable ASCII is seeded for every style because it appears in nearly
-  /// every frame. Built-in sprites stay lazy so they do not consume memory
-  /// until a terminal actually renders them. Decorations are seeded because
-  /// they are few and avoid mid-frame atlas composites.
+  /// Normal printable ASCII is seeded because it appears in nearly every frame.
+  /// Bold and italic variants stay lazy so every atlas does not pay the memory
+  /// cost for style combinations that may never render. Built-in sprites stay
+  /// lazy so they do not consume memory until a terminal actually renders them.
+  /// Decorations are seeded because they are few and avoid mid-frame atlas
+  /// composites.
   void preseedCommonEntries() {
     _preseedAscii();
     _preseedDecorations();
@@ -141,15 +143,8 @@ class AtlasCache {
   }
 
   void _preseedAscii() {
-    for (final (bold, italic) in [
-      (false, false),
-      (true, false),
-      (false, true),
-      (true, true),
-    ]) {
-      for (var codepoint = 0x21; codepoint <= 0x7E; codepoint++) {
-        addCodepoint(codepoint, bold: bold, italic: italic);
-      }
+    for (var codepoint = 0x21; codepoint <= 0x7E; codepoint++) {
+      addCodepoint(codepoint, bold: false, italic: false);
     }
   }
 

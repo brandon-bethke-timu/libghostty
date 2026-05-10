@@ -161,19 +161,21 @@ void main() {
       );
     });
 
-    test('preseedCommonEntries seeds ASCII and decorations only', () {
+    test('preseedCommonEntries seeds normal ASCII and decorations only', () {
       cache.preseedCommonEntries();
 
-      final preseedSize = 94 * 4 + UnderlineStyle.values.length - 1;
+      final preseedSize = 94 + UnderlineStyle.values.length - 1;
       expect(cache.size, preseedSize);
       final ascii = cache.addCodepoint(0x41, bold: false, italic: false);
+      final boldAscii = cache.addCodepoint(0x41, bold: true, italic: false);
       final sprite = cache.addCodepoint(0x2500, bold: false, italic: false);
       final decoration = cache.addDecoration(UnderlineStyle.single);
 
       expect(ascii, isNotNull);
+      expect(boldAscii, isNotNull);
       expect(sprite, isNotNull);
       expect(decoration, isNotNull);
-      expect(cache.size, preseedSize + 1);
+      expect(cache.size, preseedSize + 2);
     });
   });
 }
