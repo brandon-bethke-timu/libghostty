@@ -8,6 +8,7 @@ workspace:
   - packages/libghostty
   - packages/flterm
   - packages/flterm/example
+  - packages/ptyx
 
 hooks:
   user_defines:
