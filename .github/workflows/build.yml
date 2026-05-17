@@ -232,6 +232,7 @@ jobs:
             android_linker: aarch64-linux-android21-clang
             cargo_linker_env: CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER
             cc_env: CC_aarch64_linux_android
+            ar_env: AR_aarch64_linux_android
           - target: x86_64-linux-android
             runner: ubuntu-latest
             rust_target: x86_64-linux-android
@@ -240,6 +241,7 @@ jobs:
             android_linker: x86_64-linux-android21-clang
             cargo_linker_env: CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER
             cc_env: CC_x86_64_linux_android
+            ar_env: AR_x86_64_linux_android
           - target: arm-linux-androideabi
             runner: ubuntu-latest
             rust_target: arm-linux-androideabi
@@ -248,6 +250,7 @@ jobs:
             android_linker: armv7a-linux-androideabi21-clang
             cargo_linker_env: CARGO_TARGET_ARM_LINUX_ANDROIDEABI_LINKER
             cc_env: CC_arm_linux_androideabi
+            ar_env: AR_arm_linux_androideabi
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
@@ -296,13 +299,20 @@ jobs:
             echo "Android NDK was not found."
             exit 1
           fi
-          LINKER="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.android_linker }}"
+          TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          LINKER="$TOOLCHAIN/${{ matrix.android_linker }}"
+          ARCHIVER="$TOOLCHAIN/llvm-ar"
           if [[ ! -x "$LINKER" ]]; then
             echo "Android linker was not found: $LINKER"
             exit 1
           fi
+          if [[ ! -x "$ARCHIVER" ]]; then
+            echo "Android archiver was not found: $ARCHIVER"
+            exit 1
+          fi
           printf '${{ matrix.cargo_linker_env }}=%s\n' "$LINKER" >> "$GITHUB_ENV"
           printf '${{ matrix.cc_env }}=%s\n' "$LINKER" >> "$GITHUB_ENV"
+          printf '${{ matrix.ar_env }}=%s\n' "$ARCHIVER" >> "$GITHUB_ENV"
       - name: compile
         run: |
           cargo build \
