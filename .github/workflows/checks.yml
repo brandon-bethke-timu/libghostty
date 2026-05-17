@@ -232,6 +232,7 @@ jobs:
     needs: [analyze, changes]
     if: needs.changes.outputs.ptyx == 'true'
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
     defaults:
       run:
         shell: bash
@@ -288,6 +289,7 @@ jobs:
     needs: [analyze, changes]
     if: needs.changes.outputs.ptyx == 'true'
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
     defaults:
       run:
         shell: bash
