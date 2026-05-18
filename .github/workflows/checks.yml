@@ -23,23 +23,40 @@ jobs:
             libghostty:
               - 'packages/libghostty/**'
               - '!packages/libghostty/**/*.md'
+              - 'analysis_options.yaml'
+              - 'all_lint_rules.yaml'
               - 'pubspec.yaml'
+              - 'pubspec.lock'
+              - '.github/workflows/pr-check.yml'
               - '.github/workflows/checks.yml'
               - '.github/workflows/build.yml'
             flterm:
+              - 'packages/libghostty/**'
+              - '!packages/libghostty/**/*.md'
               - 'packages/flterm/**'
               - '!packages/flterm/**/*.md'
+              - 'analysis_options.yaml'
+              - 'all_lint_rules.yaml'
               - 'pubspec.yaml'
+              - 'pubspec.lock'
+              - '.github/workflows/pr-check.yml'
               - '.github/workflows/checks.yml'
+              - '.github/workflows/build.yml'
             ptyx:
               - 'packages/ptyx/**'
               - '!packages/ptyx/**/*.md'
+              - 'analysis_options.yaml'
+              - 'all_lint_rules.yaml'
               - 'pubspec.yaml'
+              - 'pubspec.lock'
+              - '.github/workflows/pr-check.yml'
               - '.github/workflows/checks.yml'
               - '.github/workflows/build.yml'
 
-  analyze:
-    name: analyze
+  analyze-libghostty:
+    name: analyze-libghostty
+    needs: [changes]
+    if: needs.changes.outputs.libghostty == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -57,21 +74,77 @@ jobs:
           COMMIT=$(cat packages/libghostty/ghostty.version)
           curl -fsSL -o /dev/null "https://github.com/ghostty-org/ghostty/archive/$COMMIT.tar.gz"
       - run: flutter pub get
-      - run: dart format --set-exit-if-changed .
-      - run: dart analyze .
+      - run: dart format --set-exit-if-changed packages/libghostty
+      - run: dart analyze packages/libghostty
       - name: publish dry run libghostty
         working-directory: packages/libghostty
         run: dart pub publish --dry-run
+
+  analyze-flterm:
+    name: analyze-flterm
+    needs: [changes]
+    if: needs.changes.outputs.flterm == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2.21.0
+        with:
+          channel: stable
+          cache: true
+      - uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+      - run: flutter pub get
+      - run: dart format --set-exit-if-changed packages/flterm
+      - run: dart analyze packages/flterm
       - name: publish dry run flterm
         working-directory: packages/flterm
         run: dart pub publish --dry-run
+
+  analyze-ptyx:
+    name: analyze-ptyx
+    needs: [changes]
+    if: needs.changes.outputs.ptyx == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2.21.0
+        with:
+          channel: stable
+          cache: true
+      - uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+      - run: flutter pub get
+      - run: dart format --set-exit-if-changed packages/ptyx
+      - run: dart analyze packages/ptyx
       - name: publish dry run ptyx
         working-directory: packages/ptyx
         run: dart pub publish --dry-run
 
+  analyze:
+    name: analyze
+    if: always()
+    needs:
+      - analyze-libghostty
+      - analyze-flterm
+      - analyze-ptyx
+    runs-on: ubuntu-latest
+    steps:
+      - name: verify package analysis
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more package analysis checks failed or were cancelled."
+            exit 1
+          fi
+
   test-libghostty-native:
     name: test-libghostty-${{ matrix.os }}
-    needs: [analyze, changes]
+    needs: [analyze-libghostty, changes]
     if: needs.changes.outputs.libghostty == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -127,7 +200,7 @@ jobs:
 
   test-libghostty-wasm:
     name: test-libghostty-wasm
-    needs: [analyze, changes]
+    needs: [analyze-libghostty, changes]
     if: needs.changes.outputs.libghostty == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -177,7 +250,7 @@ jobs:
 
   test-flterm:
     name: test-flterm
-    needs: [analyze, changes]
+    needs: [analyze-flterm, changes]
     if: needs.changes.outputs.flterm == 'true'
     runs-on: ubuntu-latest
     # Run inside the cirruslabs Flutter image so the libfreetype/libpng/skia
@@ -229,7 +302,7 @@ jobs:
 
   test-ptyx-dart:
     name: test-ptyx-dart-${{ matrix.os }}
-    needs: [analyze, changes]
+    needs: [analyze-ptyx, changes]
     if: needs.changes.outputs.ptyx == 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
@@ -286,7 +359,7 @@ jobs:
 
   test-ptyx-rust:
     name: test-ptyx-rust-${{ matrix.os }}
-    needs: [analyze, changes]
+    needs: [analyze-ptyx, changes]
     if: needs.changes.outputs.ptyx == 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
@@ -349,6 +422,9 @@ jobs:
     if: always()
     needs:
       - analyze
+      - analyze-libghostty
+      - analyze-flterm
+      - analyze-ptyx
       - test-libghostty-native
       - test-libghostty-wasm
       - test-flterm
