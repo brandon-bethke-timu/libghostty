@@ -74,6 +74,9 @@ class TerminalInputClient with DeltaTextInputClient {
   void insertTextPlaceholder(Size size) {}
 
   @override
+  bool onFocusReceived() => false;
+
+  @override
   void performAction(TextInputAction action) {
     if (action == .newline) onNewline?.call();
   }

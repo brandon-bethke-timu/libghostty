@@ -257,6 +257,14 @@ void main() {
       });
     });
 
+    group('onFocusReceived', () {
+      test('returns false', () {
+        final acquiredFocus = handler.onFocusReceived();
+
+        expect(acquiredFocus, isFalse);
+      });
+    });
+
     group('attach', () {
       test('replaces an existing connection', () {
         handler.attach();
