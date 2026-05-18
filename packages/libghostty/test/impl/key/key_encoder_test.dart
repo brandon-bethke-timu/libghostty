@@ -38,6 +38,26 @@ void main() {
       expect(result.codeUnitAt(0), 0x0D);
     });
 
+    test('encodes Backspace as delete by default', () {
+      event.action = KeyAction.press;
+      event.key = Key.backspace;
+
+      final result = encoder.encode(event);
+      expect(result, isNotEmpty);
+      expect(result.codeUnitAt(0), 0x7F);
+    });
+
+    test('encodes Backspace as backspace in back-arrow key mode', () {
+      encoder.setBackArrowKeyMode(enabled: true);
+
+      event.action = KeyAction.press;
+      event.key = Key.backspace;
+
+      final result = encoder.encode(event);
+      expect(result, isNotEmpty);
+      expect(result.codeUnitAt(0), 0x08);
+    });
+
     test('encodes Escape key', () {
       event.action = KeyAction.press;
       event.key = Key.escape;
@@ -93,9 +113,25 @@ void main() {
       encoder.setIgnoreKeypadWithNumLock(enabled: true);
       encoder.setAltEscPrefix(enabled: true);
       encoder.setModifyOtherKeys(enabled: true);
+      encoder.setBackArrowKeyMode(enabled: true);
       encoder.setKittyFlags(const KittyKeyFlags.disambiguate());
       encoder.setOptionAsAlt(OptionAsAlt.true$);
     });
+
+    test('sync applies terminal back-arrow key mode', () {
+      final terminal = Terminal(cols: 80, rows: 24);
+      addTearDown(terminal.dispose);
+      terminal.modeSet(const TerminalMode.backArrowKeyMode(), value: true);
+
+      encoder.sync(terminal);
+      event.action = KeyAction.press;
+      event.key = Key.backspace;
+
+      final result = encoder.encode(event);
+      expect(result, isNotEmpty);
+      expect(result.codeUnitAt(0), 0x08);
+    });
+
     test('encodes sequence exceeding initial 128-byte buffer', () {
       encoder.setKittyFlags(const KittyKeyFlags.all());
 

@@ -67,6 +67,12 @@ extension type const TerminalMode._(int value) {
   /// DEC private mode 66: application keypad.
   const TerminalMode.keypadKeys() : value = 66;
 
+  /// DEC private mode 67: back-arrow key mode.
+  ///
+  /// When enabled, Backspace emits BS (`0x08`) in legacy key encoding.
+  /// When disabled, Backspace emits DEL (`0x7f`).
+  const TerminalMode.backArrowKeyMode() : value = 67;
+
   /// DEC private mode 69: left/right margin mode.
   const TerminalMode.leftRightMargin() : value = 69;
 

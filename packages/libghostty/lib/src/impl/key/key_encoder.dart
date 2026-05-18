@@ -100,6 +100,14 @@ final class KeyEncoder {
     _setOptBool(.keypadKeyApplication, enabled);
   }
 
+  /// Sets DEC mode 67: back-arrow key mode.
+  ///
+  /// When enabled, Backspace emits BS (`0x08`) in legacy key encoding.
+  /// When disabled, Backspace emits DEL (`0x7f`).
+  void setBackArrowKeyMode({required bool enabled}) {
+    _setOptBool(.backarrowKeyMode, enabled);
+  }
+
   /// Sets the Kitty keyboard protocol flags controlling which key events and
   /// metadata are reported.
   ///
@@ -130,9 +138,9 @@ final class KeyEncoder {
   /// Syncs all encoder options from [terminal]'s current mode state.
   ///
   /// Reads the terminal's current modes and applies them to the encoder:
-  /// cursor key application mode (DEC 1), keypad mode (DEC 66), alt escape
-  /// prefix (DEC 1036), modifyOtherKeys state, and Kitty keyboard protocol
-  /// flags.
+  /// cursor key application mode (DEC 1), keypad mode (DEC 66), back-arrow key
+  /// mode (DEC 67), alt escape prefix (DEC 1036), modifyOtherKeys state, and
+  /// Kitty keyboard protocol flags.
   ///
   /// Call immediately before each [encode] so the produced sequence
   /// matches the terminal's current mode state.

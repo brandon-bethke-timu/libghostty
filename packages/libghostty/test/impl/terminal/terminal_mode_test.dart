@@ -11,6 +11,10 @@ void main() {
       expect(const TerminalMode.cursorKeys().modeValue, 1);
     });
 
+    test('back-arrow key mode uses DEC private mode 67', () {
+      expect(const TerminalMode.backArrowKeyMode().modeValue, 67);
+    });
+
     test('modeValue strips ANSI flag', () {
       expect(const TerminalMode.insert().modeValue, 4);
       expect(const TerminalMode.kam().modeValue, 2);
