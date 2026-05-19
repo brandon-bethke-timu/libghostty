@@ -40,17 +40,13 @@ void main() {
 
     List<int> geometricShapesCodepoints() {
       final face = SpriteFace();
+      // dart format off
       return [
         ...inclusiveRange(0x25A0, 0x25FF),
-        0x23BF,
-        0x23FA,
-        0x26AA,
-        0x26AB,
-        0x2B1B,
-        0x2B1C,
-        0x2B24,
-        0x2B55,
+        0x23BF, 0x23FA, 0x26AA, 0x26AB,
+        0x2B1B, 0x2B1C, 0x2B24, 0x2B55,
       ].where(face.hasCodepoint).toList();
+      // dart format on
     }
 
     List<int> legacyComputingCodepoints() => [

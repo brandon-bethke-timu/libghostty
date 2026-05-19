@@ -24,16 +24,12 @@ void main() {
       );
     }
 
+    // dart format off
     const spriteSamples = [
-      0x2500,
-      0x25E2,
-      0xF5D6,
-      0x1CC21,
-      0x1CC30,
-      0x1CE0B,
-      0x1FB95,
-      0x1FBBD,
+      0x2500, 0x25E2, 0xF5D6, 0x1CC21,
+      0x1CC30, 0x1CE0B, 0x1FB95, 0x1FBBD,
     ];
+    // dart format on
 
     late Atlas atlas;
 
