@@ -2,11 +2,11 @@
 library;
 
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flterm/src/foundation.dart';
 import 'package:flterm/src/widgets/terminal_controller_impl.dart';
 import 'package:flterm/src/widgets/terminal_view_binding.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart' hide KeyEvent;
 
@@ -658,44 +658,6 @@ void main() {
         controller.sendText('');
 
         expect(controller.virtualMods.hasCtrl, isTrue);
-      });
-    });
-
-    group('text input with virtual mods', () {
-      late List<Uint8List> output;
-
-      setUp(() {
-        output = [];
-        controller.onOutput = output.add;
-      });
-
-      test('single char commits with mod via sendKey', () {
-        controller.toggleMod(const Mods.ctrl());
-
-        (controller as TerminalViewBinding).testCommitText('c');
-
-        expect(output, hasLength(1));
-        expect(output.first, equals(utf8.encode('\x03')));
-        expect(controller.virtualMods, const Mods.none());
-      });
-
-      test('multi-char commits as plain text and clears mods', () {
-        controller.toggleMod(const Mods.ctrl());
-
-        (controller as TerminalViewBinding).testCommitText('hello');
-
-        expect(output, hasLength(1));
-        expect(utf8.decode(output.first), 'hello');
-        expect(controller.virtualMods, const Mods.none());
-      });
-
-      test('unmappable single char commits as plain text and clears mods', () {
-        controller.toggleMod(const Mods.ctrl());
-
-        (controller as TerminalViewBinding).testCommitText('\u{1F600}');
-
-        expect(output, hasLength(1));
-        expect(controller.virtualMods, const Mods.none());
       });
     });
   });

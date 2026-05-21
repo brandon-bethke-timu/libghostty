@@ -64,6 +64,9 @@ class TerminalRenderer extends LeafRenderObjectWidget {
   /// Toggled by a timer in [TerminalView].
   final bool blinkVisible;
 
+  /// IME preedit text to draw at the cursor before it is committed.
+  final String preeditText;
+
   /// Called when the terminal grid dimensions change during layout.
   ///
   /// Fires after the terminal has been resized. Use this to notify the
@@ -82,6 +85,7 @@ class TerminalRenderer extends LeafRenderObjectWidget {
     required this.renderObserver,
     required this.renderCache,
     this.blinkVisible = true,
+    this.preeditText = '',
     this.onResize,
   });
 
@@ -95,6 +99,7 @@ class TerminalRenderer extends LeafRenderObjectWidget {
       renderCache: renderCache,
       onResize: onResize,
       blinkVisible: blinkVisible,
+      preeditText: preeditText,
       renderObserver: renderObserver,
     );
   }
@@ -119,7 +124,8 @@ class TerminalRenderer extends LeafRenderObjectWidget {
           value: blinkVisible,
           ifTrue: 'blink visible',
         ),
-      );
+      )
+      ..add(StringProperty('preeditText', preeditText, defaultValue: ''));
   }
 
   @override
@@ -135,7 +141,8 @@ class TerminalRenderer extends LeafRenderObjectWidget {
       ..metrics = metrics
       ..onResize = onResize
       ..renderObserver = renderObserver
-      ..blinkVisible = blinkVisible;
+      ..blinkVisible = blinkVisible
+      ..preeditText = preeditText;
   }
 }
 
@@ -167,6 +174,7 @@ class TerminalRenderBox extends RenderBox {
   var _needsFrameSync = false;
   var _stickToBottom = true;
   var _lastScrollbackRows = 0;
+  var _preeditText = '';
 
   final TerminalPaintState _paintState;
   late final TerminalRenderPipeline _pipeline;
@@ -179,6 +187,7 @@ class TerminalRenderBox extends RenderBox {
     required this._renderObserver,
     required this._renderCache,
     bool blinkVisible = true,
+    this._preeditText = '',
     this._onResize,
   }) : _paintState = TerminalPaintState(theme, metrics)
          ..blinkVisible = blinkVisible
@@ -211,8 +220,35 @@ class TerminalRenderBox extends RenderBox {
     markNeedsPaint();
   }
 
+  set preeditText(String value) {
+    if (_preeditText == value) return;
+    _preeditText = value;
+    markNeedsPaint();
+  }
+
   @override
   bool get isRepaintBoundary => true;
+
+  /// Current terminal input caret rect in this render box's local coordinates.
+  Rect get textInputCaretRect {
+    final metrics = _paintState.metrics;
+    final rows = _paintState.rows;
+    final cols = _paintState.cols;
+    if (rows <= 0 || cols <= 0) {
+      return Offset.zero & Size(metrics.cellWidth, metrics.cellHeight);
+    }
+
+    final cursor = _paintState.cursor;
+    final row = cursor.row.clamp(0, rows - 1);
+    final rawCol = cursor.wideTail && cursor.col > 0
+        ? cursor.col - 1
+        : cursor.col;
+    final col = rawCol.clamp(0, cols - 1);
+    return metrics.cellRect(row, col, .zero);
+  }
+
+  /// Current terminal composing rect in this render box's local coordinates.
+  Rect get textInputComposingRect => textInputCaretRect;
 
   set metrics(CellMetrics value) {
     if (_paintState.metrics == value) return;
@@ -562,7 +598,11 @@ class TerminalRenderBox extends RenderBox {
 
     final terminalDirty = _needsFrameSync;
     _needsFrameSync = false;
-    _pipeline.sync(_terminal, terminalDirty: terminalDirty);
+    _pipeline.sync(
+      _terminal,
+      terminalDirty: terminalDirty,
+      preeditText: _preeditText,
+    );
   }
 }
 

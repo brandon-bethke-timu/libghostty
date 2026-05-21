@@ -20,6 +20,9 @@ abstract interface class TerminalViewBinding {
   /// and the cursor row is visible in the viewport.
   bool get cursorBlinks;
 
+  /// Current IME preedit text that has not been committed to the terminal.
+  String get preeditText;
+
   /// Current mouse tracking mode.
   MouseTracking get mouseTracking;
 
@@ -66,6 +69,14 @@ abstract interface class TerminalViewBinding {
   /// Requests keyboard focus for the attached view.
   void requestFocus();
 
+  /// Reports renderer geometry used to anchor platform IME UI.
+  void updateTextInputGeometry({
+    required Size editableSize,
+    required Matrix4 transform,
+    required Rect caretRect,
+    required Rect composingRect,
+  });
+
   /// Selects the line at [row], using terminal line-boundary detection.
   /// The [lineSelectMode] controls whether trailing empty cells are included.
   void selectLine(int row, LineSelectMode lineSelectMode);
@@ -73,9 +84,6 @@ abstract interface class TerminalViewBinding {
   /// Selects the word at ([row], [col]), using terminal word-boundary
   /// detection with wide character snapping.
   void selectWord(int row, int col);
-
-  @visibleForTesting
-  void testCommitText(String text);
 
   /// Creates a selection from drag coordinates, snapping columns to
   /// wide character boundaries and applying the viewport scroll offset.

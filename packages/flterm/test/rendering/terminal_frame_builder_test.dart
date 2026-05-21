@@ -35,6 +35,83 @@ void main() {
       terminal.write(Uint8List.fromList(utf8.encode(text)));
     }
 
+    List<double> xPositions(AtlasSprites sprites) {
+      final transforms = sprites.sealedTransforms;
+      return List.generate(sprites.count, (index) => transforms[index * 4 + 2]);
+    }
+
+    String entryRectKey(AtlasEntry entry) {
+      return [
+        entry.srcLeft,
+        entry.srcTop,
+        entry.srcRight,
+        entry.srcBottom,
+      ].join(',');
+    }
+
+    String spriteRectKey(AtlasSprites sprites, int index) {
+      final rects = sprites.sealedRects;
+      final offset = index * 4;
+      return [
+        rects[offset],
+        rects[offset + 1],
+        rects[offset + 2],
+        rects[offset + 3],
+      ].join(',');
+    }
+
+    List<String> wideGlyphs(
+      Atlas atlas,
+      AtlasSprites sprites,
+      Iterable<String> glyphs,
+    ) {
+      final glyphByRect = <String, String>{};
+      for (final glyph in glyphs) {
+        final entry = atlas.addCodepoint(
+          glyph.runes.single,
+          bold: false,
+          italic: false,
+          span: 2,
+        );
+        glyphByRect[entryRectKey(entry)] = glyph;
+      }
+      return [
+        for (var i = 0; i < sprites.count; i++)
+          glyphByRect[spriteRectKey(sprites, i)]!,
+      ];
+    }
+
+    ({
+      Terminal terminal,
+      Atlas atlas,
+      SpriteBuffer sprites,
+      TerminalPaintState state,
+      TerminalFrameBuilder builder,
+    })
+    createFrame({required int cols, required int rows}) {
+      final terminal = Terminal(cols: cols, rows: rows);
+      final atlas = Atlas(config());
+      final sprites = SpriteBuffer();
+      final state = TerminalPaintState(TerminalTheme.dark(), metrics)
+        ..cols = cols
+        ..rows = rows;
+      final builder = TerminalFrameBuilder(atlas, sprites, state)
+        ..configure(rows, cols);
+      addTearDown(() {
+        builder.dispose();
+        sprites.dispose();
+        atlas.dispose();
+        terminal.dispose();
+      });
+      return (
+        terminal: terminal,
+        atlas: atlas,
+        sprites: sprites,
+        state: state,
+        builder: builder,
+      );
+    }
+
     late Terminal terminal;
     late Atlas atlas;
     late SpriteBuffer sprites;
@@ -223,6 +300,107 @@ void main() {
 
       expect(state.cursor.visible, isTrue);
       expect(state.cursorAtlasEntry, isNull);
+    });
+
+    test('sync replaces only the active preedit cell range', () {
+      writeUtf8(terminal, 'abcdef\x1b[1;3H');
+
+      builder.sync(terminal, terminalDirty: true, preeditText: '日');
+
+      expect(xPositions(sprites.regular), [0.0, 8.0, 32.0, 40.0]);
+      expect(xPositions(sprites.wide), [16.0]);
+    });
+
+    test('sync emits a continuous preedit underline', () {
+      writeUtf8(terminal, 'abcdef\x1b[1;3H');
+
+      builder.sync(terminal, terminalDirty: true, preeditText: '日');
+
+      expect(sprites.underline.count, 0);
+      expect(sprites.decoration.count, 1);
+    });
+
+    test('sync shifts wide preedit left at the row edge', () {
+      writeUtf8(terminal, 'abcdefgh\x1b[1;8H');
+
+      builder.sync(terminal, terminalDirty: true, preeditText: '日');
+
+      expect(xPositions(sprites.wide), [48.0]);
+      expect(sprites.decoration.count, 1);
+    });
+
+    test('sync keeps visible tail when preedit is wider than the row', () {
+      final frame = createFrame(cols: 6, rows: 1);
+      writeUtf8(frame.terminal, 'ab\x1b[1;3H');
+
+      frame.builder.sync(
+        frame.terminal,
+        terminalDirty: true,
+        preeditText: '一二三四五',
+      );
+
+      expect(xPositions(frame.sprites.wide), [0.0, 16.0, 32.0]);
+      expect(
+        wideGlyphs(frame.atlas, frame.sprites.wide, ['一', '二', '三', '四', '五']),
+        ['三', '四', '五'],
+      );
+    });
+
+    test('sync keeps the visible tail when clipping starts at column zero', () {
+      final frame = createFrame(cols: 4, rows: 1);
+
+      frame.builder.sync(
+        frame.terminal,
+        terminalDirty: true,
+        preeditText: '一二三四五',
+      );
+
+      expect(xPositions(frame.sprites.wide), [0.0, 16.0]);
+      expect(
+        wideGlyphs(frame.atlas, frame.sprites.wide, ['一', '二', '三', '四', '五']),
+        ['四', '五'],
+      );
+    });
+
+    test('sync preserves cells after a partial wide preedit slot', () {
+      final frame = createFrame(cols: 7, rows: 1);
+      writeUtf8(frame.terminal, 'abcdefg\x1b[1;1H');
+
+      frame.builder.sync(
+        frame.terminal,
+        terminalDirty: true,
+        preeditText: '一二三四',
+      );
+
+      expect(xPositions(frame.sprites.regular), [48.0]);
+      expect(xPositions(frame.sprites.wide), [0.0, 16.0, 32.0]);
+    });
+
+    test('sync suppresses wide cell that overlaps preedit range', () {
+      final frame = createFrame(cols: 5, rows: 1);
+      writeUtf8(frame.terminal, 'ab日x\x1b[1;5H');
+
+      frame.builder.sync(frame.terminal, terminalDirty: true, preeditText: '你');
+
+      expect(xPositions(frame.sprites.wide), [24.0]);
+    });
+
+    test('sync clears preedit when text becomes empty', () {
+      writeUtf8(terminal, 'abcdef\x1b[1;3H');
+      builder.sync(terminal, terminalDirty: true, preeditText: '日');
+
+      builder.sync(terminal, terminalDirty: false);
+
+      expect(state.preeditActive, isFalse);
+      expect(xPositions(sprites.regular), [0.0, 8.0, 16.0, 24.0, 32.0, 40.0]);
+    });
+
+    test('sync ignores zero-width preedit text', () {
+      writeUtf8(terminal, 'abcdef\x1b[1;3H');
+
+      builder.sync(terminal, terminalDirty: true, preeditText: '\u200B');
+
+      expect(state.preeditActive, isFalse);
     });
   });
 }

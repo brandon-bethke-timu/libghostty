@@ -31,9 +31,32 @@ class EmojiLane extends ParagraphLane {
         : _emojiFallbackFor(config, emojiFontFamily);
   }
 
+  /// Scales and centers an emoji paragraph within its atlas cell span.
+  ///
+  /// The emoji is uniformly scaled by whichever axis is tighter, then centered
+  /// on both axes. The allocated span is the terminal contract; font metrics
+  /// only decide how the glyph is fitted inside that span.
   @override
-  void paintPending(Canvas canvas) {
-    paintPendingParagraphs(canvas, _paintEmoji);
+  void paintPendingParagraph(
+    Canvas canvas,
+    Paragraph paragraph,
+    AtlasEntry entry,
+    double _,
+  ) {
+    final cellWidth = entry.srcRight - entry.srcLeft;
+    final cellHeight = entry.srcBottom - entry.srcTop;
+    final emojiWidth = max(paragraph.maxIntrinsicWidth, 1.0);
+    final emojiHeight = max(paragraph.height, 1.0);
+    final scale = min(
+      1.0,
+      min(cellWidth / emojiWidth, cellHeight / emojiHeight),
+    );
+
+    final dx = (cellWidth - emojiWidth * scale) / 2;
+    final dy = (cellHeight - emojiHeight * scale) / 2;
+    canvas.translate(entry.srcLeft + dx, entry.srcTop + dy);
+    canvas.scale(scale);
+    canvas.drawParagraph(paragraph, Offset.zero);
   }
 
   /// Builds a full-color emoji paragraph for [text], packs it into the
@@ -80,29 +103,6 @@ class EmojiLane extends ParagraphLane {
 
     addPendingParagraph(paragraph, entry);
     return entry;
-  }
-
-  /// Scales and centers an emoji paragraph within its atlas cell span.
-  ///
-  /// The emoji is uniformly scaled by whichever axis is tighter, then centered
-  /// on both axes. The allocated span is the terminal contract; font metrics
-  /// only decide how the glyph is fitted inside that span.
-  ///
-  void _paintEmoji(Canvas canvas, Paragraph paragraph, AtlasEntry entry) {
-    final cellWidth = entry.srcRight - entry.srcLeft;
-    final cellHeight = entry.srcBottom - entry.srcTop;
-    final emojiWidth = max(paragraph.maxIntrinsicWidth, 1.0);
-    final emojiHeight = max(paragraph.height, 1.0);
-    final scale = min(
-      1.0,
-      min(cellWidth / emojiWidth, cellHeight / emojiHeight),
-    );
-
-    final dx = (cellWidth - emojiWidth * scale) / 2;
-    final dy = (cellHeight - emojiHeight * scale) / 2;
-    canvas.translate(entry.srcLeft + dx, entry.srcTop + dy);
-    canvas.scale(scale);
-    canvas.drawParagraph(paragraph, Offset.zero);
   }
 
   static List<String> _emojiFallbackFor(AtlasConfig config, String primary) {

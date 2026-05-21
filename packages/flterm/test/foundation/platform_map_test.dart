@@ -52,6 +52,13 @@ void main() {
         expect(keyFromCodepoint(0x30), Key.digit0);
         expect(keyFromCodepoint(0x39), Key.digit9);
         expect(keyFromCodepoint(0x20), Key.space);
+        expect(keyFromCodepoint(0x5b), Key.bracketLeft);
+        expect(keyFromCodepoint(0x7b), Key.bracketLeft);
+        expect(keyFromCodepoint(0x5c), Key.backslash);
+        expect(keyFromCodepoint(0x7c), Key.backslash);
+        expect(keyFromCodepoint(0x2f), Key.slash);
+        expect(keyFromCodepoint(0x3f), Key.slash);
+        expect(keyFromCodepoint(0x40), Key.digit2);
       });
 
       test('returns null for unmapped codepoints', () {
@@ -68,6 +75,9 @@ void main() {
         expect(unshiftedCodepointForKey(Key.z), 0x7a);
         expect(unshiftedCodepointForKey(Key.digit0), 0x30);
         expect(unshiftedCodepointForKey(Key.digit9), 0x39);
+        expect(unshiftedCodepointForKey(Key.bracketLeft), 0x5b);
+        expect(unshiftedCodepointForKey(Key.backslash), 0x5c);
+        expect(unshiftedCodepointForKey(Key.slash), 0x2f);
       });
 
       test('returns zero for non-character keys', () {

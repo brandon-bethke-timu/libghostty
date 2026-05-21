@@ -54,6 +54,7 @@ final class TerminalRenderPipeline {
     _painters.dispose();
     _frameBuilder.dispose();
     _sprites.dispose();
+    _state.preeditActive = false;
   }
 
   void markAllRowsDirty() => _frameBuilder.markAllRowsDirty();
@@ -72,10 +73,22 @@ final class TerminalRenderPipeline {
 
   void refreshCursorGlyph() => _frameBuilder.refreshCursorGlyph();
 
-  void sync(Terminal terminal, {required bool terminalDirty}) {
+  /// Syncs terminal cells and render-only preedit state into paint buffers.
+  ///
+  /// [preeditText] does not enter libghostty state. The frame builder overlays
+  /// it on terminal-cell boundaries at the current cursor position.
+  void sync(
+    Terminal terminal, {
+    required bool terminalDirty,
+    String preeditText = '',
+  }) {
     final syncTerminal = terminalDirty || _needsTerminalSync;
     _needsTerminalSync = false;
-    _frameBuilder.sync(terminal, terminalDirty: syncTerminal);
+    _frameBuilder.sync(
+      terminal,
+      terminalDirty: syncTerminal,
+      preeditText: preeditText,
+    );
     _painters.sync(terminal);
   }
 }

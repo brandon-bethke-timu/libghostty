@@ -24,10 +24,7 @@ final class AtlasEntry {
   /// For emoji, centered vertically within the cell.
   final double bearingY;
 
-  /// Horizontal offset to center the glyph within its cell span.
-  ///
-  /// Non-zero for wide characters (CJK) whose natural advance width
-  /// differs from the allocated cell width.
+  /// Horizontal offset applied when rasterizing the glyph into the atlas.
   final double bearingX;
 
   /// Atlas lane that owns this entry's source pixels.

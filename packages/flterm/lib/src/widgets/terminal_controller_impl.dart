@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:libghostty/libghostty.dart' as vt;
@@ -23,7 +25,6 @@ class TerminalControllerImpl extends TerminalController
   static const _macFunctionKeyEnd = 0xF8FF;
 
   static final _crBytes = Uint8List.fromList([_cr]);
-  static final _delBytes = Uint8List.fromList([_del]);
   static final _formFeedBytes = Uint8List.fromList([_formFeed]);
   static final _clearScrollback = utf8.encode('\x1b[3J');
   static final _appCursorDown = Uint8List.fromList([0x1b, 0x4f, 0x42]);
@@ -45,6 +46,7 @@ class TerminalControllerImpl extends TerminalController
   MouseTracking _mouseTracking = .none;
   KeyboardState _keyboardState = .hidden;
   Mods _virtualMods = const .none();
+  var _preeditText = '';
   var _cursorKeyApplication = false;
   Brightness _brightness = .dark;
   var _cursorBlinking = true;
@@ -77,6 +79,7 @@ class TerminalControllerImpl extends TerminalController
     _textInput
       ..onTextCommitted = _handleTextCommitted
       ..onDelete = _handleDelete
+      ..onPreeditChanged = _handlePreeditChanged
       ..onNewline = _handleNewline;
     _wireTerminalCallbacks();
     _applyModes();
@@ -126,6 +129,9 @@ class TerminalControllerImpl extends TerminalController
   MouseTracking get mouseTracking => _mouseTracking;
 
   @override
+  String get preeditText => _preeditText;
+
+  @override
   String get pwd => terminal.pwd;
 
   @override
@@ -153,6 +159,21 @@ class TerminalControllerImpl extends TerminalController
   @override
   Mods get virtualMods => _virtualMods;
 
+  bool get _hasActiveComposition =>
+      _textInput.hasActiveComposition || _preeditText.isNotEmpty;
+
+  bool get _isDesktopPlatform {
+    if (kIsWeb) return false;
+    return switch (defaultTargetPlatform) {
+      .linux || .macOS || .windows => true,
+      .android || .fuchsia || .iOS => false,
+    };
+  }
+
+  bool get _shouldForwardCompositionKeyToTextInput {
+    return _hasActiveComposition && _textInput.isAttached && _isDesktopPlatform;
+  }
+
   @override
   void attach(FocusNode focusNode, ScrollController scrollController) {
     _focusNode?.removeListener(_onFocusChanged);
@@ -160,6 +181,13 @@ class TerminalControllerImpl extends TerminalController
     _wasFocused = focusNode.hasFocus;
     _focusNode!.addListener(_onFocusChanged);
     _textInput.keyboardAppearance = _brightness;
+    if (_wasFocused && _keyboardState != .disabled) {
+      if (_keyboardState == .showing) {
+        _textInput.show();
+      } else {
+        _textInput.ensureAttached(keyboardAppearance: _brightness);
+      }
+    }
     _scrollController = scrollController;
   }
 
@@ -203,6 +231,7 @@ class TerminalControllerImpl extends TerminalController
     _focusNode = null;
     _wasFocused = false;
     _keyboardState = .hidden;
+    _preeditText = '';
     _scrollController = null;
     _textInput.detach();
   }
@@ -225,7 +254,8 @@ class TerminalControllerImpl extends TerminalController
 
   @override
   KeyEventResult handleKeyEvent(KeyEvent event) {
-    if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
+    if (!_hasActiveComposition &&
+        (event is KeyDownEvent || event is KeyRepeatEvent) &&
         HardwareKeyboard.instance.isShiftPressed &&
         _selection != null) {
       if (_extendSelection(event.logicalKey)) return .handled;
@@ -241,22 +271,46 @@ class TerminalControllerImpl extends TerminalController
 
     if (action == null) return .ignored;
 
+    if (_shouldForwardCompositionKeyToTextInput) {
+      return .skipRemainingHandlers;
+    }
+
+    final unshiftedCodepoint = unshiftedCodepointForKey(key);
+    final mods = _currentMods();
+    final character = _encoderCharacter(event.character);
+
     _keyEvent
       ..key = key
-      ..mods = _currentMods()
+      ..mods = mods
       ..action = action
-      ..utf8 = _encoderCharacter(event.character)
-      ..unshiftedCodepoint = unshiftedCodepointForKey(key);
+      ..utf8 = character
+      ..unshiftedCodepoint = unshiftedCodepoint
+      ..composing = _hasActiveComposition;
 
     _keyEncoder.sync(terminal);
     final result = _keyEncoder.encode(_keyEvent);
-    if (result.isEmpty) return .ignored;
+    if (result.isEmpty) return _hasActiveComposition ? .handled : .ignored;
+
+    if (_shouldRouteKeyThroughTextInput(
+      action: action,
+      character: character,
+      encoded: result,
+      mods: mods,
+    )) {
+      _onTextInput();
+      return .skipRemainingHandlers;
+    }
 
     clearVirtualMods();
+    final forwardToPlatformIme = _consumeCommittedCompositionEditKey(
+      key,
+      action,
+      mods,
+    );
     _emitOutput(utf8.encode(result));
     _onTextInput();
 
-    return .handled;
+    return forwardToPlatformIme ? .skipRemainingHandlers : .handled;
   }
 
   @override
@@ -514,7 +568,8 @@ class TerminalControllerImpl extends TerminalController
       ..mods = effectiveMods
       ..action = .press
       ..unshiftedCodepoint = codepoint
-      ..utf8 = codepoint > 0 ? String.fromCharCode(codepoint) : null;
+      ..utf8 = codepoint > 0 ? String.fromCharCode(codepoint) : null
+      ..composing = false;
 
     _keyEncoder.sync(terminal);
     final result = _keyEncoder.encode(_keyEvent);
@@ -532,10 +587,6 @@ class TerminalControllerImpl extends TerminalController
 
   @override
   void showKeyboard() => _updateKeyboardState(.showing);
-
-  @visibleForTesting
-  @override
-  void testCommitText(String text) => _handleTextCommitted(text);
 
   @override
   void toggleMod(Mods mod) {
@@ -570,6 +621,21 @@ class TerminalControllerImpl extends TerminalController
   }
 
   @override
+  void updateTextInputGeometry({
+    required Size editableSize,
+    required Matrix4 transform,
+    required Rect caretRect,
+    required Rect composingRect,
+  }) {
+    _textInput.updateGeometry(
+      editableSize: editableSize,
+      transform: transform,
+      caretRect: caretRect,
+      composingRect: composingRect,
+    );
+  }
+
+  @override
   void write(Uint8List data) => terminal.write(data);
 
   void _applyModes() {
@@ -583,6 +649,21 @@ class TerminalControllerImpl extends TerminalController
     terminal.setApcBufferLimit(_config.apcBufferLimit);
   }
 
+  bool _consumeCommittedCompositionEditKey(
+    vt.Key key,
+    KeyAction action,
+    Mods mods,
+  ) {
+    // A plain deletion immediately after a desktop candidate commit belongs
+    // to the platform IME first. Modified deletions stay terminal-only so
+    // protocol modes and shell shortcuts keep their encoded semantics.
+    if (!_isDesktopPlatform) return false;
+    if (action != .press && action != .repeat) return false;
+    if (key != .backspace && key != .delete) return false;
+    if (!mods.isEmpty) return false;
+    return _textInput.consumeCommittedCompositionEdit();
+  }
+
   Mods _currentMods() {
     var mods = _virtualMods;
     final keyboard = HardwareKeyboard.instance;
@@ -591,6 +672,29 @@ class TerminalControllerImpl extends TerminalController
     if (keyboard.isAltPressed) mods = mods | const .alt();
     if (keyboard.isMetaPressed) mods = mods | const .superKey();
     return mods;
+  }
+
+  bool _emitKeyPress(
+    vt.Key key, {
+    Mods mods = const .none(),
+    bool clearMods = true,
+  }) {
+    final codepoint = unshiftedCodepointForKey(key);
+    _keyEvent
+      ..key = key
+      ..mods = mods
+      ..action = .press
+      ..unshiftedCodepoint = codepoint
+      ..utf8 = codepoint > 0 ? String.fromCharCode(codepoint) : null
+      ..composing = false;
+
+    _keyEncoder.sync(terminal);
+    final result = _keyEncoder.encode(_keyEvent);
+    if (result.isEmpty) return false;
+
+    _emitOutput(utf8.encode(result));
+    if (clearMods) clearVirtualMods();
+    return true;
   }
 
   void _emitOutput(Uint8List bytes) => onOutput?.call(bytes);
@@ -615,11 +719,17 @@ class TerminalControllerImpl extends TerminalController
   }
 
   void _handleDelete(int count) {
-    if (count == 1) {
-      _emitOutput(_delBytes);
-    } else {
-      _emitOutput(Uint8List(count)..fillRange(0, count, _del));
+    if (count <= 0) return;
+
+    var emitted = false;
+    for (var i = 0; i < count; i++) {
+      emitted =
+          _emitKeyPress(.backspace, mods: _currentMods(), clearMods: false) ||
+          emitted;
     }
+    if (!emitted) return;
+
+    clearVirtualMods();
     _onTextInput();
   }
 
@@ -627,6 +737,13 @@ class TerminalControllerImpl extends TerminalController
     _emitOutput(_crBytes);
     clearVirtualMods();
     _onTextInput();
+  }
+
+  void _handlePreeditChanged(String text) {
+    if (_preeditText == text) return;
+    _preeditText = text;
+    if (text.isNotEmpty) _onTextInput();
+    notifyListeners();
   }
 
   TerminalSizeInfo _handleSizeQuery() {
@@ -664,11 +781,12 @@ class TerminalControllerImpl extends TerminalController
     if (focused == _wasFocused) return;
     _wasFocused = focused;
 
-    if (focused && _keyboardState != .disabled) {
-      _keyboardState = .showing;
+    if (focused && _keyboardState == .showing) {
       _textInput.show();
-    } else if (!focused && _keyboardState == .showing) {
-      _keyboardState = .hidden;
+    } else if (focused && _keyboardState != .disabled) {
+      _textInput.ensureAttached(keyboardAppearance: _brightness);
+    } else if (!focused) {
+      if (_keyboardState == .showing) _keyboardState = .hidden;
       _textInput.hide();
     }
 
@@ -694,12 +812,7 @@ class TerminalControllerImpl extends TerminalController
     final newActiveScreen = terminal.activeScreen;
     if (newActiveScreen != _activeScreen) {
       _activeScreen = newActiveScreen;
-      if (newActiveScreen == .primary) {
-        _applyModes();
-        if (_keyboardState == .disabled) _keyboardState = .hidden;
-      } else {
-        disableKeyboard();
-      }
+      if (newActiveScreen == .primary) _applyModes();
       changed = true;
     }
 
@@ -737,6 +850,23 @@ class TerminalControllerImpl extends TerminalController
     if (policy == .onOutput || policy == .both) scrollToBottom();
   }
 
+  bool _shouldRouteKeyThroughTextInput({
+    required KeyAction action,
+    required String? character,
+    required String encoded,
+    required Mods mods,
+  }) {
+    // Desktop printable keys are offered to Flutter text input only when the
+    // terminal encoder produced the same literal character. Any protocol,
+    // modifier, or composition-sensitive key stays on the terminal path.
+    if (encoded != character) return false;
+    if (_hasActiveComposition || !_textInput.isAttached) return false;
+    if (!_isDesktopPlatform) return false;
+    if (action != .press && action != .repeat) return false;
+    if (!_virtualMods.isEmpty) return false;
+    return !mods.hasCtrl && !mods.hasAlt && !mods.hasSuper;
+  }
+
   Future<void> _updateKeyboardState(KeyboardState newState) async {
     if (newState == _keyboardState) return;
     _keyboardState = newState;
@@ -747,7 +877,12 @@ class TerminalControllerImpl extends TerminalController
         _textInput.show();
       case .showing:
         _focusNode?.requestFocus();
-      case .hidden || .disabled:
+      case .hidden when hasFocus:
+        _textInput.hide();
+        _textInput.ensureAttached(keyboardAppearance: _brightness);
+      case .hidden:
+        _textInput.hide();
+      case .disabled:
         _textInput.hide();
     }
 

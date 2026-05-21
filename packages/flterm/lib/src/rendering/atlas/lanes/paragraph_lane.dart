@@ -1,13 +1,21 @@
 import 'dart:math';
 import 'dart:ui';
 
+import 'package:meta/meta.dart';
+
 import '../atlas_config.dart';
 import '../atlas_entry.dart';
 import 'atlas_lane.dart';
 
+typedef _PendingParagraph = ({
+  Paragraph paragraph,
+  AtlasEntry entry,
+  double widthScale,
+});
+
 /// Shared paragraph setup for font-backed atlas lanes.
 abstract class ParagraphLane extends AtlasLane {
-  final List<(Paragraph, AtlasEntry)> _pending = [];
+  final List<_PendingParagraph> _pending = [];
 
   var _fontFamily = '';
   var _fontWeight = FontWeight.normal;
@@ -33,8 +41,12 @@ abstract class ParagraphLane extends AtlasLane {
 
   double get pxItalicOverhang => _pxItalicOverhang;
 
-  void addPendingParagraph(Paragraph paragraph, AtlasEntry entry) {
-    _pending.add((paragraph, entry));
+  void addPendingParagraph(
+    Paragraph paragraph,
+    AtlasEntry entry, {
+    double widthScale = 1.0,
+  }) {
+    _pending.add((paragraph: paragraph, entry: entry, widthScale: widthScale));
   }
 
   Paragraph buildParagraph(
@@ -81,8 +93,8 @@ abstract class ParagraphLane extends AtlasLane {
 
   @override
   void clearPending() {
-    for (final (paragraph, _) in _pending) {
-      paragraph.dispose();
+    for (final pending in _pending) {
+      pending.paragraph.dispose();
     }
     _pending.clear();
   }
@@ -99,11 +111,10 @@ abstract class ParagraphLane extends AtlasLane {
     _pxItalicOverhang = max(1.0, (_pxFontSize * 0.15).ceilToDouble());
   }
 
-  void paintPendingParagraphs(
-    Canvas canvas,
-    void Function(Canvas canvas, Paragraph paragraph, AtlasEntry entry) paint,
-  ) {
-    for (final (paragraph, entry) in _pending) {
+  @override
+  void paintPending(Canvas canvas) {
+    for (final pending in _pending) {
+      final entry = pending.entry;
       canvas.save();
       canvas.clipRect(
         Rect.fromLTRB(
@@ -113,10 +124,23 @@ abstract class ParagraphLane extends AtlasLane {
           entry.srcBottom,
         ),
       );
-      paint(canvas, paragraph, entry);
+      paintPendingParagraph(
+        canvas,
+        pending.paragraph,
+        entry,
+        pending.widthScale,
+      );
       canvas.restore();
-      paragraph.dispose();
+      pending.paragraph.dispose();
     }
     _pending.clear();
   }
+
+  @protected
+  void paintPendingParagraph(
+    Canvas canvas,
+    Paragraph paragraph,
+    AtlasEntry entry,
+    double widthScale,
+  );
 }

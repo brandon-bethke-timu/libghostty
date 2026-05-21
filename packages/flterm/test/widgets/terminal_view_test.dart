@@ -3,7 +3,11 @@ import 'dart:convert';
 import 'package:flterm/src/foundation.dart';
 import 'package:flterm/src/rendering.dart';
 import 'package:flterm/src/widgets.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart'
+    show
+        TargetPlatform,
+        debugDefaultTargetPlatformOverride,
+        defaultTargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,6 +38,59 @@ void main() {
 
     void writeUtf8(TerminalController controller, String text) {
       controller.write(Uint8List.fromList(utf8.encode(text)));
+    }
+
+    String decodeOutput(List<Uint8List> output) {
+      return utf8.decode(
+        Uint8List.fromList(output.expand((chunk) => chunk).toList()),
+      );
+    }
+
+    Future<void> sendTextInputDeltas(List<Map<String, Object?>> deltas) async {
+      final messageBytes = const JSONMessageCodec().encodeMessage({
+        'method': 'TextInputClient.updateEditingStateWithDeltas',
+        'args': [
+          -1,
+          {'deltas': deltas},
+        ],
+      });
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+            SystemChannels.textInput.name,
+            messageBytes,
+            (_) {},
+          );
+    }
+
+    List<MethodCall> recordTextInputCalls() {
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.textInput, (call) async {
+            calls.add(call);
+            return null;
+          });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.textInput, null);
+      });
+      return calls;
+    }
+
+    Map<String, Object?> lastTextInputCall(
+      List<MethodCall> calls,
+      String method,
+    ) {
+      return calls.lastWhere((call) => call.method == method).arguments!
+          as Map<String, Object?>;
+    }
+
+    Future<void> withMacOSPlatform(Future<void> Function() body) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        await body();
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     }
 
     Widget wrapInApp({
@@ -174,6 +231,19 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(controller.hasFocus, isTrue);
+      expect(controller.keyboardState, KeyboardState.showing);
+    });
+
+    testWidgets('alternate screen keeps soft keyboard enabled', (tester) async {
+      await tester.pumpWidget(
+        wrapInApp(controller: controller, autofocus: true),
+      );
+      await tester.pump();
+
+      writeUtf8(controller, '\x1b[?1049h');
+      await tester.pump();
+
+      expect(controller.keyboardState, KeyboardState.showing);
     });
 
     testWidgets('autofocus focuses on mount', (tester) async {
@@ -183,9 +253,10 @@ void main() {
       await tester.pump();
 
       expect(controller.hasFocus, isTrue);
+      expect(controller.keyboardState, KeyboardState.showing);
     });
 
-    testWidgets('keyboard input produces output via onOutput', (tester) async {
+    testWidgets('text input produces output via onOutput', (tester) async {
       final output = <Uint8List>[];
       controller.onOutput = output.add;
 
@@ -194,10 +265,511 @@ void main() {
       );
       await tester.pump();
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      tester.testTextInput.enterText('a');
       await tester.pump();
 
-      expect(output, isNotEmpty);
+      expect(utf8.decode(output.single), 'a');
+    });
+
+    testWidgets('text input applies virtual ctrl to single-char commit', (
+      tester,
+    ) async {
+      final output = <Uint8List>[];
+      controller.onOutput = output.add;
+      controller.toggleMod(const Mods.ctrl());
+
+      await tester.pumpWidget(
+        wrapInApp(controller: controller, autofocus: true),
+      );
+      await tester.pump();
+
+      tester.testTextInput.enterText('c');
+      await tester.pump();
+
+      expect(output.single, utf8.encode('\x03'));
+      expect(controller.virtualMods, const Mods.none());
+    });
+
+    testWidgets('text input applies virtual ctrl to punctuation commit', (
+      tester,
+    ) async {
+      final output = <Uint8List>[];
+      controller.onOutput = output.add;
+      controller.toggleMod(const Mods.ctrl());
+
+      await tester.pumpWidget(
+        wrapInApp(controller: controller, autofocus: true),
+      );
+      await tester.pump();
+
+      tester.testTextInput.enterText('[');
+      await tester.pump();
+
+      expect(output.single, utf8.encode('\x1b[91;5u'));
+      expect(controller.virtualMods, const Mods.none());
+    });
+
+    testWidgets('text input emits multi-character commit as plain text', (
+      tester,
+    ) async {
+      final output = <Uint8List>[];
+      controller.onOutput = output.add;
+      controller.toggleMod(const Mods.ctrl());
+
+      await tester.pumpWidget(
+        wrapInApp(controller: controller, autofocus: true),
+      );
+      await tester.pump();
+
+      tester.testTextInput.enterText('hello');
+      await tester.pump();
+
+      expect(decodeOutput(output), 'hello');
+      expect(controller.virtualMods, const Mods.none());
+    });
+
+    testWidgets('text input emits unmapped commit as plain text', (
+      tester,
+    ) async {
+      final output = <Uint8List>[];
+      controller.onOutput = output.add;
+      controller.toggleMod(const Mods.ctrl());
+
+      await tester.pumpWidget(
+        wrapInApp(controller: controller, autofocus: true),
+      );
+      await tester.pump();
+
+      tester.testTextInput.enterText('\u{1F600}');
+      await tester.pump();
+
+      expect(decodeOutput(output), '\u{1F600}');
+      expect(controller.virtualMods, const Mods.none());
+    });
+
+    testWidgets('text input deletion respects back-arrow key mode', (
+      tester,
+    ) async {
+      final output = <Uint8List>[];
+      controller.onOutput = output.add;
+      controller.modeSet(const TerminalMode.backArrowKeyMode(), value: true);
+
+      await tester.pumpWidget(
+        wrapInApp(controller: controller, autofocus: true),
+      );
+      await tester.pump();
+
+      await sendTextInputDeltas([
+        {
+          'oldText': 'x',
+          'deltaText': '',
+          'deltaStart': 0,
+          'deltaEnd': 1,
+          'selectionBase': 0,
+          'selectionExtent': 0,
+          'selectionAffinity': 'TextAffinity.downstream',
+          'selectionIsDirectional': false,
+          'composingBase': -1,
+          'composingExtent': -1,
+        },
+      ]);
+      await tester.pump();
+
+      expect(output.single, utf8.encode('\x08'));
+    });
+
+    testWidgets('desktop text input commit after key event produces output', (
+      tester,
+    ) async {
+      await withMacOSPlatform(() async {
+        final output = <Uint8List>[];
+        controller.onOutput = output.add;
+
+        await tester.pumpWidget(
+          wrapInApp(controller: controller, autofocus: true),
+        );
+        await tester.pump();
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+        tester.testTextInput.enterText('a');
+        await tester.pump();
+
+        expect(utf8.decode(output.single), 'a');
+      });
+    });
+
+    testWidgets('keyboard input remains available to desktop text input', (
+      tester,
+    ) async {
+      await withMacOSPlatform(() async {
+        await tester.pumpWidget(
+          wrapInApp(controller: controller, autofocus: true),
+        );
+        await tester.pump();
+
+        final handled = await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+
+        expect(handled, isFalse);
+      });
+    });
+
+    testWidgets('desktop printable key respects terminal keyboard protocol', (
+      tester,
+    ) async {
+      await withMacOSPlatform(() async {
+        writeUtf8(controller, '\x1b[=31u');
+        final output = <Uint8List>[];
+        controller.onOutput = output.add;
+
+        await tester.pumpWidget(
+          wrapInApp(controller: controller, autofocus: true),
+        );
+        await tester.pump();
+
+        final handled = await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+        await tester.pump();
+
+        expect(handled, isTrue);
+        expect(decodeOutput(output), isNot('a'));
+        expect(decodeOutput(output), startsWith('\x1b'));
+      });
+    });
+
+    testWidgets('composition updates preedit without output', (tester) async {
+      final output = <Uint8List>[];
+      controller.onOutput = output.add;
+
+      await tester.pumpWidget(
+        wrapInApp(controller: controller, autofocus: true),
+      );
+      await tester.pump();
+
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'ni',
+          selection: TextSelection.collapsed(offset: 2),
+          composing: TextRange(start: 0, end: 2),
+        ),
+      );
+      await tester.pump();
+
+      expect((controller as TerminalViewBinding).preeditText, 'ni');
+      expect(output, isEmpty);
+    });
+
+    testWidgets('composition clears selection when it starts', (tester) async {
+      await tester.pumpWidget(
+        wrapInApp(controller: controller, autofocus: true),
+      );
+      await tester.pump();
+      controller.selection = const TerminalSelection(
+        startRow: 0,
+        startCol: 0,
+        endRow: 0,
+        endCol: 5,
+      );
+
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'ni',
+          selection: TextSelection.collapsed(offset: 2),
+          composing: TextRange(start: 0, end: 2),
+        ),
+      );
+      await tester.pump();
+
+      expect(controller.selection, isNull);
+    });
+
+    testWidgets('composition scrolls to bottom when it starts', (tester) async {
+      controller.dispose();
+      controller = TerminalController(
+        config: const TerminalConfig(cols: 20, rows: 3),
+      );
+
+      await tester.pumpWidget(
+        wrapInApp(controller: controller, autofocus: true),
+      );
+      await tester.pump();
+      writeNumberedLines(100);
+      controller.scrollToTop();
+
+      expect(controller.scrollbar.offset, lessThan(controller.scrollbackRows));
+
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'ni',
+          selection: TextSelection.collapsed(offset: 2),
+          composing: TextRange(start: 0, end: 2),
+        ),
+      );
+      await tester.pump();
+
+      expect(controller.scrollbar.offset, controller.scrollbackRows);
+    });
+
+    testWidgets('delayed desktop composition emits only committed text', (
+      tester,
+    ) async {
+      await withMacOSPlatform(() async {
+        final output = <Uint8List>[];
+        controller.onOutput = output.add;
+
+        await tester.pumpWidget(
+          wrapInApp(controller: controller, autofocus: true),
+        );
+        await tester.pump();
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+        await tester.pump(const Duration(milliseconds: 2));
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+        await tester.pump(const Duration(milliseconds: 2));
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: 'ni',
+            selection: TextSelection.collapsed(offset: 2),
+            composing: TextRange(start: 0, end: 2),
+          ),
+        );
+        await tester.pump();
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: '你',
+            selection: TextSelection.collapsed(offset: 1),
+          ),
+        );
+        await tester.pump();
+
+        expect(decodeOutput(output), '你');
+      });
+    });
+
+    testWidgets('composition keeps desktop keyboard input available', (
+      tester,
+    ) async {
+      await withMacOSPlatform(() async {
+        final output = <Uint8List>[];
+        controller.onOutput = output.add;
+
+        await tester.pumpWidget(
+          wrapInApp(controller: controller, autofocus: true),
+        );
+        await tester.pump();
+
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: 'n',
+            selection: TextSelection.collapsed(offset: 1),
+            composing: TextRange(start: 0, end: 1),
+          ),
+        );
+        await tester.pump();
+
+        final handled = await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        expect(handled, isFalse);
+        expect(output, isEmpty);
+      });
+    });
+
+    testWidgets('finalized composition commits text and clears preedit', (
+      tester,
+    ) async {
+      final output = <Uint8List>[];
+      controller.onOutput = output.add;
+
+      await tester.pumpWidget(
+        wrapInApp(controller: controller, autofocus: true),
+      );
+      await tester.pump();
+
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'ni',
+          selection: TextSelection.collapsed(offset: 2),
+          composing: TextRange(start: 0, end: 2),
+        ),
+      );
+      await tester.pump();
+
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: '日',
+          selection: TextSelection.collapsed(offset: 1),
+        ),
+      );
+      await tester.pump();
+
+      expect((controller as TerminalViewBinding).preeditText, '');
+      expect(utf8.decode(output.single), '日');
+    });
+
+    testWidgets(
+      'desktop backspace after candidate commit forwards to platform IME',
+      (tester) async {
+        await withMacOSPlatform(() async {
+          final calls = recordTextInputCalls();
+          final output = <Uint8List>[];
+          controller.onOutput = output.add;
+          controller.modeSet(
+            const TerminalMode.backArrowKeyMode(),
+            value: true,
+          );
+
+          await tester.pumpWidget(
+            wrapInApp(controller: controller, autofocus: true),
+          );
+          await tester.pump();
+          tester.testTextInput.updateEditingValue(
+            const TextEditingValue(
+              text: 'ni',
+              selection: TextSelection.collapsed(offset: 2),
+              composing: TextRange(start: 0, end: 2),
+            ),
+          );
+          await tester.pump();
+          tester.testTextInput.updateEditingValue(
+            const TextEditingValue(
+              text: '你',
+              selection: TextSelection.collapsed(offset: 1),
+            ),
+          );
+          await tester.pump();
+          calls.clear();
+          output.clear();
+
+          final handled = await tester.sendKeyEvent(
+            LogicalKeyboardKey.backspace,
+          );
+          await tester.pump();
+
+          expect(handled, isFalse);
+          expect(decodeOutput(output), '\x08');
+          expect(
+            calls.where((call) => call.method == 'TextInput.clearClient'),
+            isEmpty,
+          );
+          expect(
+            calls.where((call) => call.method == 'TextInput.hide'),
+            isEmpty,
+          );
+
+          await sendTextInputDeltas([
+            {
+              'oldText': '你',
+              'deltaText': '',
+              'deltaStart': 0,
+              'deltaEnd': 1,
+              'selectionBase': 0,
+              'selectionExtent': 0,
+              'selectionAffinity': 'TextAffinity.downstream',
+              'selectionIsDirectional': false,
+              'composingBase': -1,
+              'composingExtent': -1,
+            },
+          ]);
+          await tester.pump();
+
+          expect(decodeOutput(output), '\x08');
+        });
+      },
+    );
+
+    testWidgets(
+      'desktop modified backspace after candidate commit stays terminal-only',
+      (tester) async {
+        await withMacOSPlatform(() async {
+          final output = <Uint8List>[];
+          controller.onOutput = output.add;
+          controller.modeSet(
+            const TerminalMode.backArrowKeyMode(),
+            value: true,
+          );
+
+          await tester.pumpWidget(
+            wrapInApp(controller: controller, autofocus: true),
+          );
+          await tester.pump();
+          tester.testTextInput.updateEditingValue(
+            const TextEditingValue(
+              text: 'ni',
+              selection: TextSelection.collapsed(offset: 2),
+              composing: TextRange(start: 0, end: 2),
+            ),
+          );
+          await tester.pump();
+          tester.testTextInput.updateEditingValue(
+            const TextEditingValue(
+              text: '你',
+              selection: TextSelection.collapsed(offset: 1),
+            ),
+          );
+          await tester.pump();
+          output.clear();
+
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+          final handled = await tester.sendKeyEvent(
+            LogicalKeyboardKey.backspace,
+          );
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+          await tester.pump();
+
+          expect(handled, isTrue);
+          expect(output, hasLength(1));
+
+          await sendTextInputDeltas([
+            {
+              'oldText': 'x',
+              'deltaText': '',
+              'deltaStart': 0,
+              'deltaEnd': 1,
+              'selectionBase': 0,
+              'selectionExtent': 0,
+              'selectionAffinity': 'TextAffinity.downstream',
+              'selectionIsDirectional': false,
+              'composingBase': -1,
+              'composingExtent': -1,
+            },
+          ]);
+          await tester.pump();
+
+          expect(output, hasLength(2));
+        });
+      },
+    );
+
+    testWidgets('text input geometry tracks terminal cursor cell', (
+      tester,
+    ) async {
+      final calls = recordTextInputCalls();
+      writeUtf8(controller, 'prompt\r\nab');
+
+      await tester.pumpWidget(
+        wrapInApp(controller: controller, autofocus: true),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final renderBox = tester.renderObject<TerminalRenderBox>(
+        find.byType(TerminalRenderer),
+      );
+      final expected = renderBox.textInputCaretRect;
+      final editable = lastTextInputCall(
+        calls,
+        'TextInput.setEditableSizeAndTransform',
+      );
+      final caret = lastTextInputCall(calls, 'TextInput.setCaretRect');
+      final composing = lastTextInputCall(calls, 'TextInput.setMarkedTextRect');
+
+      expect(editable['width'], renderBox.size.width);
+      expect(editable['height'], renderBox.size.height);
+      expect(caret['x'], expected.left);
+      expect(caret['y'], expected.top);
+      expect(composing['x'], expected.left);
+      expect(composing['y'], expected.top);
+      expect(expected.left, greaterThan(0));
+      expect(expected.top, greaterThan(0));
     });
 
     testWidgets('unmount clears focus state', (tester) async {
@@ -305,6 +877,8 @@ void main() {
     testWidgets('showKeyboard false skips keyboard show on focus', (
       tester,
     ) async {
+      final calls = recordTextInputCalls();
+
       await tester.pumpWidget(
         wrapInApp(controller: controller, showKeyboard: false),
       );
@@ -313,6 +887,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(controller.hasFocus, isTrue);
+      expect(controller.keyboardState, KeyboardState.hidden);
+      expect(
+        calls.where((call) => call.method == 'TextInput.setClient'),
+        hasLength(1),
+      );
+      expect(calls.where((call) => call.method == 'TextInput.show'), isEmpty);
     });
 
     testWidgets('touch drag does not create selection', (tester) async {

@@ -32,6 +32,7 @@ class CursorPainter implements TerminalPainter {
   @override
   void paint(Canvas canvas) {
     final cursor = _state.cursor;
+    if (_state.preeditActive) return;
     if (!cursor.visible ||
         cursor.row < 0 ||
         cursor.row >= _state.rows ||
@@ -102,8 +103,7 @@ class CursorPainter implements TerminalPainter {
 
       case .underline:
         final thickness = metrics.underlineThickness;
-        final underlineY =
-            cursor.row * metrics.cellHeight + metrics.underlinePosition;
+        final underlineY = rect.top + metrics.underlinePosition;
         canvas.drawRect(
           .fromLTWH(rect.left, underlineY, rect.width, thickness),
           _paint,

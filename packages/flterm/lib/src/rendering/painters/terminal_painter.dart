@@ -6,9 +6,9 @@ import 'dart:ui';
 /// during the paint phase. All painters draw in terminal-local coordinates
 /// (the render box applies the canvas translate before calling [paint]).
 ///
-/// Painters are stateless beyond pre-allocated [Paint] objects. All data
-/// comes from [TerminalPaintState] and [SpriteBuffer], which are populated
-/// by the terminal frame builder before painting begins.
+/// Painters are stateless beyond pre-allocated [Paint] objects. Paint data
+/// comes from frame buffers such as [TerminalPaintState], [SpriteBuffer], and
+/// paint-ready layers prepared before painting begins.
 abstract interface class TerminalPainter {
   void paint(Canvas canvas);
 }

@@ -76,6 +76,7 @@ void main() {
       double? maxHeight,
       bool focused = true,
       bool blinkVisible = true,
+      String preeditText = '',
       OnResize? onResize,
     }) {
       final width = maxWidth ?? defaultCols * metrics.cellWidth;
@@ -101,6 +102,7 @@ void main() {
                 hasFocus: focused,
               ),
               blinkVisible: blinkVisible,
+              preeditText: preeditText,
               onResize: onResize,
             ),
           ),
@@ -214,6 +216,93 @@ void main() {
     });
 
     group('wide characters', () {
+      testWidgets('preedit replaces suggestion cells', (tester) async {
+        final cjk24 = cjkTheme.copyWith(fontSize: 24.0);
+        final cjkMetrics = measureCellMetrics(
+          fontFamily: cjk24.fontFamily,
+          fontSize: cjk24.fontSize,
+          fontData: jetBrainsMonoBytes,
+        );
+        const cols = 25;
+        const rows = 2;
+        final terminal = Terminal(cols: cols, rows: rows);
+        writeUtf8(terminal, 'Input: suggestion\x1b[10D');
+        tester.view.devicePixelRatio = 1.0;
+        await tester.pumpWidget(
+          wrap(
+            terminal,
+            theme: cjk24,
+            metrics: cjkMetrics,
+            maxWidth: cols * cjkMetrics.cellWidth,
+            maxHeight: rows * cjkMetrics.cellHeight,
+            preeditText: '日本',
+          ),
+        );
+        await expectLater(
+          find.byType(TerminalRenderer),
+          matchesGoldenFile('goldens/preedit_replaces_suggestion_cells.png'),
+        );
+        terminal.dispose();
+      });
+
+      testWidgets('long preedit clips after prompt', (tester) async {
+        final cjk24 = cjkTheme.copyWith(fontSize: 24.0);
+        final cjkMetrics = measureCellMetrics(
+          fontFamily: cjk24.fontFamily,
+          fontSize: cjk24.fontSize,
+          fontData: jetBrainsMonoBytes,
+        );
+        const cols = 22;
+        const rows = 2;
+        final terminal = Terminal(cols: cols, rows: rows);
+        writeUtf8(terminal, '~/project \$ suggestion\x1b[10D');
+        tester.view.devicePixelRatio = 1.0;
+        await tester.pumpWidget(
+          wrap(
+            terminal,
+            theme: cjk24,
+            metrics: cjkMetrics,
+            maxWidth: cols * cjkMetrics.cellWidth,
+            maxHeight: rows * cjkMetrics.cellHeight,
+            preeditText: '一二三四五六七八',
+          ),
+        );
+        await expectLater(
+          find.byType(TerminalRenderer),
+          matchesGoldenFile('goldens/preedit_long_clips_after_prompt.png'),
+        );
+        terminal.dispose();
+      });
+
+      testWidgets('very long preedit keeps visible tail', (tester) async {
+        final cjk24 = cjkTheme.copyWith(fontSize: 24.0);
+        final cjkMetrics = measureCellMetrics(
+          fontFamily: cjk24.fontFamily,
+          fontSize: cjk24.fontSize,
+          fontData: jetBrainsMonoBytes,
+        );
+        const cols = 22;
+        const rows = 2;
+        final terminal = Terminal(cols: cols, rows: rows);
+        writeUtf8(terminal, '~/project \$ suggestion\x1b[10D');
+        tester.view.devicePixelRatio = 1.0;
+        await tester.pumpWidget(
+          wrap(
+            terminal,
+            theme: cjk24,
+            metrics: cjkMetrics,
+            maxWidth: cols * cjkMetrics.cellWidth,
+            maxHeight: rows * cjkMetrics.cellHeight,
+            preeditText: '一二三四五六七八九十一二三四五六七八九十',
+          ),
+        );
+        await expectLater(
+          find.byType(TerminalRenderer),
+          matchesGoldenFile('goldens/preedit_very_long_visible_tail.png'),
+        );
+        terminal.dispose();
+      });
+
       testWidgets('CJK mixed with ASCII', (tester) async {
         final cjk24 = cjkTheme.copyWith(fontSize: 24.0);
         final cjkMetrics = measureCellMetrics(

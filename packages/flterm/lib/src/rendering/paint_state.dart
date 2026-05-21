@@ -13,7 +13,8 @@ import 'atlas/atlas.dart';
 /// and never mutates this object.
 ///
 /// Contains grid dimensions, device pixel ratio, resolved terminal
-/// colors, selection state, cursor state, and faint text opacity.
+/// colors, selection state, cursor state, IME preedit state, and faint text
+/// opacity.
 class TerminalPaintState {
   TerminalTheme theme;
   CellMetrics metrics;
@@ -42,6 +43,12 @@ class TerminalPaintState {
   var cursorColorArgb = 0xFFFFFFFF;
   AtlasEntry? cursorAtlasEntry;
   final cursorGlyphPaint = Paint();
+
+  /// Whether preedit text currently replaces cells at the cursor row.
+  ///
+  /// Cursor painting reads this to avoid drawing the normal terminal cursor
+  /// over the active composing range.
+  var preeditActive = false;
 
   TerminalPaintState(this.theme, this.metrics)
     : faintAlpha = (theme.faintOpacity * 255).ceil() {

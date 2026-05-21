@@ -36,6 +36,36 @@ void main() {
       lane.dispose();
     });
 
+    Future<({int left, int right, int width})> paintedBounds(
+      Image image,
+      AtlasEntry entry,
+    ) async {
+      final bytes = await image.toByteData();
+      final data = bytes!.buffer.asUint8List();
+      final imageWidth = image.width;
+      final left = entry.srcLeft.floor();
+      final right = entry.srcRight.ceil();
+      final top = entry.srcTop.floor();
+      final bottom = entry.srcBottom.ceil();
+      var paintedLeft = right;
+      var paintedRight = left - 1;
+      for (var y = top; y < bottom; y++) {
+        for (var x = left; x < right; x++) {
+          final alpha = data[(y * imageWidth + x) * 4 + 3];
+          if (alpha > 0) {
+            paintedLeft = x < paintedLeft ? x : paintedLeft;
+            paintedRight = x > paintedRight ? x : paintedRight;
+          }
+        }
+      }
+
+      return (
+        left: paintedLeft,
+        right: paintedRight,
+        width: paintedRight >= paintedLeft ? paintedRight - paintedLeft + 1 : 0,
+      );
+    }
+
     test('rasterizeText allocates a pending text entry', () {
       final entry = lane.rasterizeText('A', bold: false, italic: false);
 
@@ -52,6 +82,58 @@ void main() {
 
       expect(lane.image, isNotNull);
       expect(lane.hasPending, isFalse);
+    });
+
+    test('rasterizeText preserves narrow glyph width in wide spans', () async {
+      final lane = TextLane(initialSize: 128, maxSize: 128)
+        ..configure(
+          config(
+            metrics: const CellMetrics(
+              cellWidth: 32,
+              cellHeight: 32,
+              baseline: 24,
+            ),
+          ),
+        );
+      addTearDown(lane.dispose);
+      final single = lane.rasterizeText('A', bold: false, italic: false);
+      final wide = lane.rasterizeText('A', bold: false, italic: false, span: 2);
+
+      lane.ensureImage();
+      final image = lane.image!;
+      final singleBounds = await paintedBounds(image, single);
+      final wideBounds = await paintedBounds(image, wide);
+
+      expect(wideBounds.width, lessThanOrEqualTo(singleBounds.width + 2));
+    });
+
+    test('rasterizeText centers narrow glyphs in wide spans', () async {
+      final lane = TextLane(initialSize: 128, maxSize: 128)
+        ..configure(
+          config(
+            metrics: const CellMetrics(
+              cellWidth: 32,
+              cellHeight: 32,
+              baseline: 24,
+            ),
+          ),
+        );
+      addTearDown(lane.dispose);
+      final entry = lane.rasterizeText(
+        'A',
+        bold: false,
+        italic: false,
+        span: 2,
+      );
+
+      lane.ensureImage();
+      final image = lane.image!;
+      final bounds = await paintedBounds(image, entry);
+      final leftInset = bounds.left - entry.srcLeft.floor();
+      final rightInset = entry.srcRight.ceil() - bounds.right - 1;
+      final insetDelta = (leftInset - rightInset).abs();
+
+      expect(insetDelta, lessThanOrEqualTo(2));
     });
 
     test('clear drops pending text and releases the image', () {

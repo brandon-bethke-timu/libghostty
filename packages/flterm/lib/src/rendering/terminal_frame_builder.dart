@@ -10,6 +10,7 @@ import '../foundation/terminal_theme.dart';
 import 'atlas/atlas.dart';
 import 'atlas/sprite_buffer.dart';
 import 'cell_content_resolver.dart';
+import 'codepoint_classification.dart';
 import 'paint_state.dart';
 
 const _italicOverhangFontSizeFactor = 0.15;
@@ -26,6 +27,34 @@ bool _isOperator(int cp) {
       (cp > 0x39 && cp < 0x41) ||
       (cp > 0x5A && cp < 0x61) ||
       cp > 0x7A;
+}
+
+bool _isRemovedPreeditCodepoint(int cp) {
+  return (cp >= 0x0000 && cp <= 0x001F) ||
+      (cp >= 0x007F && cp <= 0x009F) ||
+      (cp >= 0x200B && cp <= 0x200F) ||
+      (cp >= 0x202A && cp <= 0x202E) ||
+      (cp >= 0x2060 && cp <= 0x206F) ||
+      cp == 0xFFFC ||
+      cp == 0xFEFF;
+}
+
+bool _isWideEmojiCodepoint(int cp) {
+  return (cp >= 0x1F000 && cp <= 0x1FAFF) || (cp >= 0x2600 && cp <= 0x27BF);
+}
+
+bool _isZeroWidthPreeditCodepoint(int cp) {
+  return (cp >= 0x0300 && cp <= 0x036F) ||
+      (cp >= 0x1AB0 && cp <= 0x1AFF) ||
+      (cp >= 0x1DC0 && cp <= 0x1DFF) ||
+      (cp >= 0x20D0 && cp <= 0x20FF) ||
+      (cp >= 0xFE00 && cp <= 0xFE0F) ||
+      (cp >= 0xFE20 && cp <= 0xFE2F) ||
+      (cp >= 0xE0100 && cp <= 0xE01EF);
+}
+
+int _preeditCellWidth(int cp) {
+  return isCjkCodepoint(cp) || _isWideEmojiCodepoint(cp) ? 2 : 1;
 }
 
 int _resolveColorArgb(
@@ -201,11 +230,15 @@ class TerminalFrameBuilder {
   void refreshCursorGlyph() => _cursorBuilder.refreshGlyph();
 
   /// Syncs terminal state into paint-ready buffers.
-  void sync(Terminal terminal, {required bool terminalDirty}) {
-    final hasDirtyRows = _dirtyRows.anyDirty;
+  void sync(
+    Terminal terminal, {
+    required bool terminalDirty,
+    String preeditText = '',
+  }) {
+    var dirty = DirtyState.clean;
 
     if (terminalDirty) {
-      final dirty = _renderState.update(terminal);
+      dirty = _renderState.update(terminal);
       final scrollbar = terminal.scrollbar;
 
       _state.viewportOffset = scrollbar.offset;
@@ -213,16 +246,30 @@ class TerminalFrameBuilder {
         _state.updateTerminalColors(_renderState.colors);
       }
 
-      if (dirty != .clean || hasDirtyRows) {
-        _build(dirty);
-        _renderState.dirty = .clean;
-      }
-
       _cursorBuilder.sync(
         terminal: terminal,
         renderState: _renderState,
         scrollbar: scrollbar,
       );
+    }
+
+    // Preedit text is render-only state. It can dirty rows even when the
+    // terminal render state is unchanged, such as a composing update over a
+    // stable prompt.
+    final preeditRows = _rowBuilder.updatePreedit(
+      preeditText,
+      cursor: _state.cursor,
+    );
+    if (preeditRows.previous case final row?) _dirtyRows.markRow(row);
+    if (preeditRows.current case final row?) _dirtyRows.markRow(row);
+    _state.preeditActive = _rowBuilder.hasPreedit;
+
+    final hasDirtyRows = _dirtyRows.anyDirty;
+    if (terminalDirty) {
+      if (dirty != .clean || hasDirtyRows) {
+        _build(dirty == .clean ? .partial : dirty);
+        _renderState.dirty = .clean;
+      }
     } else if (hasDirtyRows) {
       _build(.partial);
     }
@@ -457,6 +504,29 @@ final class _ForegroundEmitter {
     _emitEntry(entry, row, x: row.spriteX, wideText: span == 2);
   }
 
+  void emitPreedit(
+    _PreeditCodepoint codepoint,
+    _RowBuildState row, {
+    required double x,
+  }) {
+    final content = String.fromCharCode(codepoint.codepoint);
+    final entry = _content.resolve(
+      content: content,
+      codepoint: codepoint.codepoint,
+      graphemeLength: 1,
+      style: const Style(),
+      span: codepoint.span,
+    );
+    if (entry == null) return;
+    _emitEntry(
+      entry,
+      row,
+      x: x,
+      wideText: codepoint.span == 2,
+      foreground: _state.terminalForegroundArgb,
+    );
+  }
+
   void flush(_RowBuildState row) {
     if (_operators.isEmpty) return;
 
@@ -484,21 +554,17 @@ final class _ForegroundEmitter {
     _RowBuildState row, {
     required double x,
     required bool wideText,
+    int? foreground,
   }) {
+    final color = foreground ?? row.foreground;
     switch (entry.lane) {
       case .emoji:
         _sprites.emoji.add(x, row.rowY, entry, _frame.inverseDpr);
       case .sprite:
-        _sprites.sprite.add(
-          x,
-          row.rowY,
-          entry,
-          _frame.inverseDpr,
-          row.foreground,
-        );
+        _sprites.sprite.add(x, row.rowY, entry, _frame.inverseDpr, color);
       case .text:
         final sprites = wideText ? _sprites.wide : _sprites.regular;
-        sprites.add(x, row.rowY, entry, _frame.inverseDpr, row.foreground);
+        sprites.add(x, row.rowY, entry, _frame.inverseDpr, color);
       case .decoration:
         throw StateError('Decoration atlas entries cannot paint cell content.');
     }
@@ -620,6 +686,7 @@ final class _FrameSnapshot {
   TerminalTheme? _paragraphStyleTheme;
   var cellWidth = 0.0;
   var cellHeight = 0.0;
+  var underlinePosition = 0.0;
   var underlineThickness = 0.0;
   var strikethroughPosition = 0.0;
   var strikethroughThickness = 0.0;
@@ -649,6 +716,7 @@ final class _FrameSnapshot {
     final metrics = state.metrics;
     cellWidth = metrics.cellWidth;
     cellHeight = metrics.cellHeight;
+    underlinePosition = metrics.underlinePosition;
     underlineThickness = metrics.underlineThickness;
     strikethroughPosition = metrics.strikethroughPosition;
     strikethroughThickness = metrics.strikethroughThickness;
@@ -672,6 +740,129 @@ final class _FrameSnapshot {
     cellOpacityAlpha = theme.backgroundOpacityAlpha;
     viewportOffset = state.viewportOffset;
     selection = state.selection;
+  }
+}
+
+final class _PreeditCodepoint {
+  final int codepoint;
+  final int span;
+
+  const _PreeditCodepoint(this.codepoint, this.span);
+}
+
+/// Cell-based terminal range temporarily replaced by visible preedit text.
+///
+/// [startCol] and [endCol] are terminal columns. [codepointOffset] points at
+/// the first visible codepoint when overflow clips the preedit from the left.
+final class _PreeditRange {
+  final int row;
+  final int startCol;
+  final int endCol;
+  final int codepointOffset;
+  final List<_PreeditCodepoint> codepoints;
+
+  const _PreeditRange({
+    required this.row,
+    required this.startCol,
+    required this.endCol,
+    required this.codepointOffset,
+    required this.codepoints,
+  });
+
+  bool overlaps(int row, int col, int span) {
+    final cellEndCol = col + span;
+    return row == this.row && col < endCol && cellEndCol > startCol;
+  }
+
+  bool sameGeometry(_PreeditRange? other) {
+    return other != null &&
+        row == other.row &&
+        startCol == other.startCol &&
+        endCol == other.endCol &&
+        codepointOffset == other.codepointOffset;
+  }
+
+  static _PreeditRange? resolve({
+    required String text,
+    required Cursor cursor,
+    required int rows,
+    required int cols,
+  }) {
+    if (!cursor.visible ||
+        cursor.row < 0 ||
+        cursor.row >= rows ||
+        cursor.col < 0 ||
+        cursor.col >= cols ||
+        rows <= 0 ||
+        cols <= 0) {
+      return null;
+    }
+
+    final preedit = _PreeditText.parse(text);
+    if (preedit.isEmpty) return null;
+
+    final startCol = preedit.startCol(cursor.col, cols);
+    final visible = preedit.visibleSuffix(cols - startCol);
+    final visibleWidth = visible.width;
+    final endCol = startCol + visibleWidth;
+    if (startCol >= endCol) return null;
+
+    return _PreeditRange(
+      row: cursor.row,
+      startCol: startCol,
+      endCol: endCol,
+      codepointOffset: visible.codepointOffset,
+      codepoints: preedit.codepoints,
+    );
+  }
+}
+
+/// Preedit text split into terminal-cell spans.
+///
+/// Rendering uses these spans instead of paragraph widths so CJK, emoji, and
+/// narrow text replace exactly the terminal cells they occupy.
+final class _PreeditText {
+  final List<_PreeditCodepoint> codepoints;
+  final int cellWidth;
+
+  const _PreeditText(this.codepoints, this.cellWidth);
+
+  factory _PreeditText.parse(String text) {
+    if (text.isEmpty) return const _PreeditText([], 0);
+
+    final codepoints = <_PreeditCodepoint>[];
+    var cellWidth = 0;
+    for (final cp in text.runes) {
+      if (_isRemovedPreeditCodepoint(cp) || _isZeroWidthPreeditCodepoint(cp)) {
+        continue;
+      }
+      final span = _preeditCellWidth(cp);
+      cellWidth += span;
+      codepoints.add(_PreeditCodepoint(cp, span));
+    }
+
+    return _PreeditText(codepoints, cellWidth);
+  }
+
+  bool get isEmpty => codepoints.isEmpty;
+
+  int startCol(int cursorCol, int cols) {
+    final rightWidth = cols - cursorCol;
+    return cellWidth <= rightWidth
+        ? cursorCol
+        : math.max(0, cursorCol - (cellWidth - rightWidth));
+  }
+
+  ({int codepointOffset, int width}) visibleSuffix(int maxWidth) {
+    var codepointOffset = codepoints.length;
+    var width = 0;
+    for (var i = codepoints.length - 1; i >= 0; i--) {
+      final nextWidth = width + codepoints[i].span;
+      if (nextWidth > maxWidth) break;
+      width = nextWidth;
+      codepointOffset = i;
+    }
+    return (codepointOffset: codepointOffset, width: width);
   }
 }
 
@@ -701,6 +892,7 @@ final class _RowBuildState {
   var bgRunArgb = 0;
   var bgRunInverse = false;
   var bgRunExplicit = false;
+  var preeditEmitted = false;
 
   void advance(int span, double cellWidth) {
     col += span;
@@ -729,6 +921,7 @@ final class _RowBuildState {
     bgRunArgb = frame.defaultBackgroundArgb;
     bgRunInverse = false;
     bgRunExplicit = false;
+    preeditEmitted = false;
   }
 }
 
@@ -861,6 +1054,8 @@ final class _TerminalRowBuilder {
   final _RowBuildState _row;
   final _StyleResolver _styles;
   late final _ForegroundEmitter _foreground;
+  var _preeditText = '';
+  _PreeditRange? _preeditRange;
 
   _TerminalRowBuilder({
     required this._atlas,
@@ -872,6 +1067,8 @@ final class _TerminalRowBuilder {
        _styles = _StyleResolver(_state) {
     _foreground = _ForegroundEmitter(_sprites, content, _frame, _state);
   }
+
+  bool get hasPreedit => _preeditRange != null;
 
   void beginFrame() {
     _frame.update(_state, atlas: _atlas);
@@ -890,6 +1087,30 @@ final class _TerminalRowBuilder {
     _foreground.flush(_row);
     _finishBackgroundRun(_row);
     _sprites.endRow();
+  }
+
+  ({int? previous, int? current}) updatePreedit(
+    String text, {
+    required Cursor cursor,
+  }) {
+    final previous = _preeditRange;
+    final previousText = _preeditText;
+    final next = _PreeditRange.resolve(
+      text: text,
+      cursor: cursor,
+      rows: _state.rows,
+      cols: _state.cols,
+    );
+
+    _preeditText = text;
+    _preeditRange = next;
+
+    if (previousText == text &&
+        (next?.sameGeometry(previous) ?? previous == null)) {
+      return (previous: null, current: null);
+    }
+
+    return (previous: previous?.row, current: next?.row);
   }
 
   void _closeBackgroundSpan(_RowBuildState row, int span) {
@@ -950,6 +1171,28 @@ final class _TerminalRowBuilder {
     }
   }
 
+  void _emitPreedit(_PreeditRange range) {
+    final row = _row;
+    final underlineY = row.rowY + _frame.underlinePosition;
+    _sprites.decoration.add(
+      range.startCol * _frame.cellWidth,
+      underlineY,
+      range.endCol * _frame.cellWidth,
+      underlineY + _frame.underlineThickness,
+      _state.terminalForegroundArgb,
+    );
+
+    var col = range.startCol;
+    for (var i = range.codepointOffset; i < range.codepoints.length; i++) {
+      final codepoint = range.codepoints[i];
+      final nextCol = col + codepoint.span;
+      if (nextCol > range.endCol) break;
+      final x = col * _frame.cellWidth;
+      _foreground.emitPreedit(codepoint, row, x: x);
+      col = nextCol;
+    }
+  }
+
   void _finishBackgroundRun(_RowBuildState row) {
     _flushBackgroundRun(row, _frame.cols);
   }
@@ -963,6 +1206,25 @@ final class _TerminalRowBuilder {
       row.rowBottom,
       _frame.resolveBgArgb(row.bgRunArgb, inverse: row.bgRunInverse),
     );
+  }
+
+  void _skipPreeditCell(CellIterator cell, _PreeditRange range, int span) {
+    final row = _row;
+    if (!row.preeditEmitted) {
+      // Emit the overlay once at the first covered terminal cell, after
+      // closing real background/text runs up to the overlay boundary.
+      _foreground.flush(row);
+      _flushBackgroundRun(row, range.startCol);
+      row.bgRunStart = range.endCol;
+      row.bgRunArgb = _frame.defaultBackgroundArgb;
+      row.bgRunInverse = false;
+      row.bgRunExplicit = false;
+      _emitPreedit(range);
+      row.preeditEmitted = true;
+    }
+
+    if (span == 2) cell.next();
+    row.advance(span, _frame.cellWidth);
   }
 
   void _syncBackgroundRun(_RowBuildState row) {
@@ -983,6 +1245,12 @@ final class _TerminalRowBuilder {
   void _writeCell(CellIterator cell) {
     final row = _row;
     final span = cell.wide == .wide ? 2 : 1;
+    final preedit = _preeditRange;
+    if (preedit != null && preedit.overlaps(row.row, row.col, span)) {
+      _skipPreeditCell(cell, preedit, span);
+      return;
+    }
+
     final selected = _frame.isSelected(row.row, row.col);
 
     if (cell.styleId != row.prevStyleId || selected != row.prevSelected) {

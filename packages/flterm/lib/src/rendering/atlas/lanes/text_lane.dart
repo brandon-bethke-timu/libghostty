@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'dart:ui';
 
 import '../atlas_entry.dart';
@@ -9,13 +8,23 @@ class TextLane extends ParagraphLane {
   TextLane({super.initialSize, super.maxSize}) : super(entryLane: .text);
 
   @override
-  void paintPending(Canvas canvas) {
-    paintPendingParagraphs(canvas, (canvas, paragraph, entry) {
-      canvas.drawParagraph(
-        paragraph,
-        Offset(entry.srcLeft + entry.bearingX, entry.srcTop + entry.bearingY),
-      );
-    });
+  void paintPendingParagraph(
+    Canvas canvas,
+    Paragraph paragraph,
+    AtlasEntry entry,
+    double widthScale,
+  ) {
+    final offset = Offset(
+      entry.srcLeft + entry.bearingX,
+      entry.srcTop + entry.bearingY,
+    );
+    if (widthScale == 1.0) {
+      canvas.drawParagraph(paragraph, offset);
+    } else {
+      canvas.translate(offset.dx, offset.dy);
+      canvas.scale(widthScale, 1.0);
+      canvas.drawParagraph(paragraph, Offset.zero);
+    }
   }
 
   /// Builds a paragraph for [text], packs it into the atlas, and returns
@@ -46,25 +55,28 @@ class TextLane extends ParagraphLane {
       width: double.infinity,
     );
 
-    final bearingY = pxBaseline - paragraph.alphabeticBaseline;
-    final bearingX = span > 1
-        ? max(0.0, (pxCellWidth - paragraph.maxIntrinsicWidth) / 2)
+    final textWidth = paragraph.maxIntrinsicWidth;
+    final widthScale = span > 1 && textWidth > pxCellWidth
+        ? pxCellWidth / textWidth
+        : 1.0;
+    final bearingX = span > 1 && textWidth > 0.0 && textWidth < pxCellWidth
+        ? (pxCellWidth - textWidth) / 2
         : 0.0;
-
+    final bearingY = pxBaseline - paragraph.alphabeticBaseline;
     late final AtlasEntry entry;
     try {
       entry = allocate(
         width: pxWidth,
         height: pxHeight,
-        bearingY: bearingY,
         bearingX: bearingX,
+        bearingY: bearingY,
       );
     } catch (_) {
       paragraph.dispose();
       rethrow;
     }
 
-    addPendingParagraph(paragraph, entry);
+    addPendingParagraph(paragraph, entry, widthScale: widthScale);
     return entry;
   }
 }

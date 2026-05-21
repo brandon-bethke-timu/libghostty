@@ -127,6 +127,7 @@ class _TerminalViewState extends State<TerminalView> {
   late CellMetrics _metrics;
   late TerminalViewBinding _binding;
   late TerminalScrollController _scrollController;
+  final _rendererKey = GlobalKey();
 
   Uint8List? _resolvedFontData;
   var _ownsFocusNode = false;
@@ -298,12 +299,14 @@ class _TerminalViewState extends State<TerminalView> {
                       controller: _scrollController,
                       physics: widget.scrollPhysics,
                       viewportBuilder: (_, offset) => TerminalRenderer(
+                        key: _rendererKey,
                         theme: _theme,
                         offset: offset,
                         metrics: _metrics,
                         renderObserver: _controller,
                         terminal: _binding.terminal,
                         renderCache: cache,
+                        preeditText: _binding.preeditText,
                         blinkVisible: _blinkVisible,
                         onResize: _handleResize,
                       ),
@@ -325,13 +328,20 @@ class _TerminalViewState extends State<TerminalView> {
   }
 
   void _handleFocusChange(bool focused) {
-    if (focused && widget.showKeyboard) _controller.showKeyboard();
+    if (focused &&
+        widget.showKeyboard &&
+        _controller.keyboardState != .disabled) {
+      _controller.showKeyboard();
+      _updateTextInputGeometry();
+    }
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    _updateTextInputGeometry();
     final result = _binding.handleKeyEvent(event);
 
-    if (result == .handled) {
+    if (result == .handled || result == .skipRemainingHandlers) {
+      _updateTextInputGeometry();
       _syncBlink();
       if (widget.mouseAutoHide == .onInput && !_mouseCursorHidden) {
         setState(() => _mouseCursorHidden = true);
@@ -375,6 +385,7 @@ class _TerminalViewState extends State<TerminalView> {
 
   void _onControllerChanged() {
     _scrollController.activeScreen = _controller.activeScreen;
+    _updateTextInputGeometry();
     setState(_syncBlink);
   }
 
@@ -389,6 +400,23 @@ class _TerminalViewState extends State<TerminalView> {
     if (lines == 0) return;
     _lastAlternatePixels += lines * cellHeight;
     _binding.handleScroll(lines);
+    _updateTextInputGeometry();
+  }
+
+  void _updateTextInputGeometry() {
+    final renderObject = _rendererKey.currentContext?.findRenderObject();
+    if (renderObject is! TerminalRenderBox ||
+        !renderObject.attached ||
+        !renderObject.hasSize) {
+      return;
+    }
+
+    _binding.updateTextInputGeometry(
+      editableSize: renderObject.size,
+      transform: renderObject.getTransformTo(null),
+      caretRect: renderObject.textInputCaretRect,
+      composingRect: renderObject.textInputComposingRect,
+    );
   }
 
   /// Asynchronously resolves font data and recomputes metrics when found.
