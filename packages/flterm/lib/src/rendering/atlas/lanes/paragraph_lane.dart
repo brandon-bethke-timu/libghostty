@@ -43,13 +43,21 @@ abstract class ParagraphLane extends AtlasLane {
     required bool italic,
     required double size,
     required double width,
+    double? height,
+    String? fontFamily,
+    List<String>? fontFamilyFallback,
   }) {
+    final resolvedFontFamily = fontFamily ?? _fontFamily;
+    final resolvedFontFamilyFallback =
+        fontFamilyFallback ?? _fontFamilyFallback;
+
     // All glyphs use textAlign: .start. Centering is handled by the
     // individual lanes so CJK text and emoji do not double-center.
     return (ParagraphBuilder(
             ParagraphStyle(
               fontSize: size,
-              fontFamily: _fontFamily,
+              fontFamily: resolvedFontFamily,
+              height: height,
               textAlign: .start,
             ),
           )
@@ -57,11 +65,12 @@ abstract class ParagraphLane extends AtlasLane {
             TextStyle(
               color: const Color(0xFFFFFFFF),
               fontSize: size,
-              fontFamily: _fontFamily,
+              fontFamily: resolvedFontFamily,
+              height: height,
               decoration: TextDecoration.none,
               fontWeight: bold ? .bold : _fontWeight,
               fontStyle: italic ? .italic : .normal,
-              fontFamilyFallback: _fontFamilyFallback,
+              fontFamilyFallback: resolvedFontFamilyFallback,
             ),
           )
           ..addText(text)
