@@ -196,6 +196,49 @@ void main() {
       expect(sprites.regular.sealedColors.single, 0xFF010203.toSigned(32));
     });
 
+    test('sync updates terminal background after OSC 11', () {
+      terminal.foreground = const RgbColor(255, 255, 255);
+      terminal.background = const RgbColor(0, 0, 0);
+      builder.sync(terminal, terminalDirty: true);
+      writeUtf8(terminal, '\x1b]11;rgb:1e/20/24\x1b\\');
+
+      builder.sync(terminal, terminalDirty: true);
+
+      expect(state.terminalBackgroundArgb, 0xFF1E2024);
+    });
+
+    test('sync rebuilds retained text colors after OSC 10', () {
+      terminal.foreground = const RgbColor(255, 255, 255);
+      terminal.background = const RgbColor(0, 0, 0);
+      writeUtf8(terminal, 'A\r\nB');
+      builder.sync(terminal, terminalDirty: true);
+      writeUtf8(terminal, '\x1b]10;rgb:01/02/03\x1b\\');
+
+      builder.sync(terminal, terminalDirty: true);
+
+      expect(sprites.regular.sealedColors, [
+        0xFF010203.toSigned(32),
+        0xFF010203.toSigned(32),
+      ]);
+    });
+
+    test('sync emits erase backgrounds after resize', () {
+      final frame = createFrame(cols: 8, rows: 2);
+      writeUtf8(frame.terminal, '\x1b[2;2H\x1b[48;2;30;32;36m\x1b[K\x1b[0m');
+      frame.builder.sync(frame.terminal, terminalDirty: true);
+      frame.terminal.resize(cols: 10, rows: 2);
+      frame.state
+        ..cols = 10
+        ..rows = 2;
+      frame.builder
+        ..configure(2, 10)
+        ..markAllRowsDirty();
+
+      frame.builder.sync(frame.terminal, terminalDirty: true);
+
+      expect(frame.sprites.background.count, greaterThan(0));
+    });
+
     test('sync resolves cursor dynamic colors from render state colors', () {
       state.updateTheme(
         TerminalTheme.dark().copyWith(

@@ -63,13 +63,30 @@ class TerminalPaintState {
     _updateThemePalette();
   }
 
-  void updateTerminalColors(TerminalColors colors) {
-    terminalForegroundArgb = colors.foreground.toArgb32;
-    terminalBackgroundArgb = colors.background.toArgb32;
+  /// Updates resolved terminal colors.
+  ///
+  /// Returns true when any color changed so cached paint data containing
+  /// packed ARGB values can be rebuilt.
+  bool updateTerminalColors(TerminalColors colors) {
+    var changed = false;
+    final foreground = colors.foreground.toArgb32;
+    final background = colors.background.toArgb32;
+    if (terminalForegroundArgb != foreground) {
+      terminalForegroundArgb = foreground;
+      changed = true;
+    }
+    if (terminalBackgroundArgb != background) {
+      terminalBackgroundArgb = background;
+      changed = true;
+    }
     final palette = colors.palette;
     for (var i = 0; i < terminalPaletteArgb.length; i++) {
-      terminalPaletteArgb[i] = palette[i].toArgb32;
+      final color = palette[i].toArgb32;
+      if (terminalPaletteArgb[i] == color) continue;
+      terminalPaletteArgb[i] = color;
+      changed = true;
     }
+    return changed;
   }
 
   void _updateThemePalette() {

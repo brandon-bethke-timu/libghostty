@@ -240,11 +240,15 @@ class TerminalFrameBuilder {
     if (terminalDirty) {
       dirty = _renderState.update(terminal);
       final scrollbar = terminal.scrollbar;
+      final terminalColorsChanged = _state.updateTerminalColors(
+        _renderState.colors,
+      );
 
       _state.viewportOffset = scrollbar.offset;
-      if (dirty == DirtyState.full) {
-        _state.updateTerminalColors(_renderState.colors);
-      }
+      // RenderState updates colors even when its dirty result is clean.
+      // Since sprite buffers cache resolved ARGB values, color changes need
+      // the same full rebuild as other global terminal-state changes.
+      if (terminalColorsChanged) dirty = .full;
 
       _cursorBuilder.sync(
         terminal: terminal,
@@ -875,6 +879,7 @@ final class _RowBuildState {
   var rowBottom = 0.0;
 
   var prevStyleId = -1;
+  int? prevBackgroundArgb;
   var prevSelected = false;
 
   var baseForeground = 0xFFFFFFFF;
@@ -906,6 +911,7 @@ final class _RowBuildState {
     col = 0;
     spriteX = 0.0;
     prevStyleId = -1;
+    prevBackgroundArgb = null;
     prevSelected = false;
     baseForeground = 0xFFFFFFFF;
     baseBackground = frame.defaultBackgroundArgb;
@@ -956,12 +962,18 @@ final class _StyleResolver {
 
   void update(
     CellIterator cell, {
+    required int? backgroundArgb,
     required bool selected,
     required _RowBuildState row,
   }) {
-    if (cell.styleId != row.prevStyleId) {
-      final (fg, bg, style, explicitBg) = _resolveBase(cell);
+    if (cell.styleId != row.prevStyleId ||
+        backgroundArgb != row.prevBackgroundArgb) {
+      final (fg, bg, style, explicitBg) = _resolveBase(
+        cell,
+        backgroundArgb: backgroundArgb,
+      );
       row.prevStyleId = cell.styleId;
+      row.prevBackgroundArgb = backgroundArgb;
       row.baseForeground = fg;
       row.baseBackground = bg;
       row.baseBackgroundExplicit = explicitBg;
@@ -995,9 +1007,28 @@ final class _StyleResolver {
   }
 
   (int foreground, int background, Style style, bool explicitBg) _resolveBase(
-    CellIterator cell,
-  ) {
+    CellIterator cell, {
+    required int? backgroundArgb,
+  }) {
     final id = cell.styleId;
+    final style = cell.style;
+    final contentBackground = style.background is DefaultColor
+        ? backgroundArgb
+        : null;
+    if (contentBackground != null) {
+      final (foreground, background) = _resolveStyleColors(
+        _state,
+        style,
+        defaultForeground: _defaultFg,
+        defaultBackground: _defaultBg,
+      );
+      return (
+        foreground,
+        style.inverse ? background : contentBackground,
+        style,
+        true,
+      );
+    }
 
     if (id < _maxEntries && _gen[id] == _generation) {
       return (
@@ -1008,7 +1039,6 @@ final class _StyleResolver {
       );
     }
 
-    final style = cell.style;
     final (foreground, background) = _resolveStyleColors(
       _state,
       style,
@@ -1253,9 +1283,17 @@ final class _TerminalRowBuilder {
 
     final selected = _frame.isSelected(row.row, row.col);
 
-    if (cell.styleId != row.prevStyleId || selected != row.prevSelected) {
+    final backgroundArgb = cell.hasText ? null : cell.backgroundArgb;
+    if (cell.styleId != row.prevStyleId ||
+        backgroundArgb != row.prevBackgroundArgb ||
+        selected != row.prevSelected) {
       _foreground.flush(row);
-      _styles.update(cell, selected: selected, row: row);
+      _styles.update(
+        cell,
+        backgroundArgb: backgroundArgb,
+        selected: selected,
+        row: row,
+      );
     }
     _syncBackgroundRun(row);
 
