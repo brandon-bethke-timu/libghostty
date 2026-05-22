@@ -278,12 +278,18 @@ class TerminalControllerImpl extends TerminalController
     final unshiftedCodepoint = unshiftedCodepointForKey(key);
     final mods = _currentMods();
     final character = _encoderCharacter(event.character);
+    final consumedMods = _consumedModsFor(
+      character,
+      unshiftedCodepoint: unshiftedCodepoint,
+      mods: mods,
+    );
 
     _keyEvent
       ..key = key
       ..mods = mods
       ..action = action
       ..utf8 = character
+      ..consumedMods = consumedMods
       ..unshiftedCodepoint = unshiftedCodepoint
       ..composing = _hasActiveComposition;
 
@@ -567,6 +573,7 @@ class TerminalControllerImpl extends TerminalController
       ..key = key
       ..mods = effectiveMods
       ..action = .press
+      ..consumedMods = const .none()
       ..unshiftedCodepoint = codepoint
       ..utf8 = codepoint > 0 ? String.fromCharCode(codepoint) : null
       ..composing = false;
@@ -674,6 +681,23 @@ class TerminalControllerImpl extends TerminalController
     return mods;
   }
 
+  Mods _consumedModsFor(
+    String? character, {
+    required int unshiftedCodepoint,
+    required Mods mods,
+  }) {
+    if (!mods.hasShift || character == null || unshiftedCodepoint == 0) {
+      return const .none();
+    }
+
+    final codepoints = character.runes.iterator;
+    if (!codepoints.moveNext()) return const .none();
+    final codepoint = codepoints.current;
+    if (codepoints.moveNext()) return const .none();
+    if (codepoint == unshiftedCodepoint) return const .none();
+    return const .shift();
+  }
+
   bool _emitKeyPress(
     vt.Key key, {
     Mods mods = const .none(),
@@ -684,6 +708,7 @@ class TerminalControllerImpl extends TerminalController
       ..key = key
       ..mods = mods
       ..action = .press
+      ..consumedMods = const .none()
       ..unshiftedCodepoint = codepoint
       ..utf8 = codepoint > 0 ? String.fromCharCode(codepoint) : null
       ..composing = false;

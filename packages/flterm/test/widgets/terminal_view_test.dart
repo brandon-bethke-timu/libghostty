@@ -435,6 +435,30 @@ void main() {
       });
     });
 
+    testWidgets('shifted printable key emits text in keyboard protocol mode', (
+      tester,
+    ) async {
+      writeUtf8(controller, '\x1b[=1u');
+      final output = <Uint8List>[];
+      controller.onOutput = output.add;
+
+      await tester.pumpWidget(
+        wrapInApp(controller: controller, autofocus: true, showKeyboard: false),
+      );
+      await tester.pump();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+      await tester.sendKeyEvent(
+        LogicalKeyboardKey.semicolon,
+        physicalKey: PhysicalKeyboardKey.semicolon,
+        character: ':',
+      );
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+      await tester.pump();
+
+      expect(decodeOutput(output), ':');
+    });
+
     testWidgets('composition updates preedit without output', (tester) async {
       final output = <Uint8List>[];
       controller.onOutput = output.add;
