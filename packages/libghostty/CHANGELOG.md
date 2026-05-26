@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.0.9
+
+### Added
+
+- **Back-arrow key mode**: `TerminalMode.backArrowKeyMode()` and
+  `KeyEncoder.setBackArrowKeyMode()` expose DEC mode 67, letting legacy
+  Backspace encoding switch between DEL and BS.
+- **APC buffer limits**: `Terminal.setApcBufferLimit()` and
+  `Terminal.setKittyApcBufferLimit()` configure general and Kitty-specific
+  APC payload limits.
+
+### Fixed
+
+- **Resize callbacks**: `ghostty_terminal_resize` is no longer bound as a
+  leaf FFI call, preventing callback crashes when resize emits in-band size
+  reports through `onWritePty`.
+
 ## 0.0.8
 
 ### Breaking
