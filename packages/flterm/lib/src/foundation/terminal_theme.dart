@@ -27,16 +27,16 @@ const _darkAnsiColors = [
 ];
 
 const _defaultFontFamilyFallback = [
-  'Apple Color Emoji',
-  'Noto Color Emoji',
-  'Noto Emoji',
-  'Segoe UI Emoji',
   'JetBrains Mono',
   'Menlo',
   'Consolas',
   'Ubuntu Mono',
   'DejaVu Sans Mono',
   'Courier New',
+  'Apple Color Emoji',
+  'Noto Color Emoji',
+  'Noto Emoji',
+  'Segoe UI Emoji',
 ];
 
 const _lightAnsiColors = [
@@ -299,8 +299,9 @@ final class TerminalTheme {
 
   /// Fallback font families tried when a glyph is missing from [fontFamily].
   ///
-  /// Defaults to platform emoji fonts (Apple Color Emoji, Segoe UI Emoji,
-  /// Noto Color Emoji) followed by a cross-platform monospace chain.
+  /// Defaults to common monospace fonts followed by platform emoji fonts. Emoji
+  /// fonts are kept last so text-like glyphs, including digits and symbols,
+  /// stay grid-aligned when a monospace fallback can render them.
   final List<String> fontFamilyFallback;
 
   /// Font size in logical pixels.
