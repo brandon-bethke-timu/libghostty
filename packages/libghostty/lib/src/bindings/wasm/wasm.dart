@@ -802,6 +802,11 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<bool> terminalGetViewportActive(int handle) {
+    return _terminalGetBool(handle, .viewportActive);
+  }
+
+  @override
   Result terminalSetTitle(int handle, String? title) {
     return _terminalSetString(handle, TerminalOption.title, title);
   }
@@ -809,6 +814,21 @@ class WasmBindings implements GhosttyBindings {
   @override
   Result terminalSetPwd(int handle, String? pwd) {
     return _terminalSetString(handle, TerminalOption.pwd, pwd);
+  }
+
+  @override
+  Result terminalSetDefaultCursorShape(int handle, CursorShape? shape) {
+    return _terminalSetI32(handle, .defaultCursorStyle, shape?.value);
+  }
+
+  @override
+  Result terminalSetDefaultCursorBlink(int handle, {bool? blinking}) {
+    return _terminalSetBool(handle, .defaultCursorBlink, blinking);
+  }
+
+  @override
+  Result terminalSetGlyphProtocol(int handle, {required bool enabled}) {
+    return _terminalSetBool(handle, .glyphProtocol, enabled);
   }
 
   @override
@@ -1061,6 +1081,32 @@ class WasmBindings implements GhosttyBindings {
   void terminalSetOnTitleChanged(int handle, VoidCallback? callback) {
     final map = _callbacks.putIfAbsent(handle, () => {});
     const option = TerminalOption.titleChanged;
+
+    if (callback == null) {
+      final existing = map.remove(option);
+      if (existing != null) _table.set(existing.$1);
+      _exports.ghostty_terminal_set(handle, option.value, 0);
+      return;
+    }
+
+    final reuseIndex = map[option]?.$1;
+    final index = _registerCallback(
+      ((int terminal, int userdata) {
+        try {
+          callback();
+        } on Object catch (_) {}
+      }).toJS,
+      ['i32', 'i32'],
+      reuseIndex: reuseIndex,
+    );
+    map[option] = (index, callback);
+    _exports.ghostty_terminal_set(handle, option.value, index);
+  }
+
+  @override
+  void terminalSetOnPwdChanged(int handle, VoidCallback? callback) {
+    final map = _callbacks.putIfAbsent(handle, () => {});
+    const option = TerminalOption.pwdChanged;
 
     if (callback == null) {
       final existing = map.remove(option);
@@ -1968,6 +2014,67 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<String> rowCellsGetGraphemesUtf8(int cells) {
+    const inlineCap = 64;
+    final bufferPtr = _exports.ghostty_wasm_alloc_u8_array(_layout.bufferSize);
+    var dataPtr = _exports.ghostty_wasm_alloc_u8_array(inlineCap);
+    var dataCap = inlineCap;
+
+    void writeBuffer() {
+      _mem.writeU32(bufferPtr + _layout.bufferPtr, dataPtr);
+      _mem.writeU32(bufferPtr + _layout.bufferCap, dataCap);
+      _mem.writeU32(bufferPtr + _layout.bufferLen, 0);
+    }
+
+    writeBuffer();
+    var result = Result.fromValue(
+      _exports.ghostty_render_state_row_cells_get(
+        cells,
+        RenderStateRowCellsData.graphemesUtf8.value,
+        bufferPtr,
+      ),
+    );
+    var len = _mem.readU32(bufferPtr + _layout.bufferLen);
+
+    if (result == .outOfSpace) {
+      _exports.ghostty_wasm_free_u8_array(dataPtr, dataCap);
+      dataCap = len;
+      dataPtr = _exports.ghostty_wasm_alloc_u8_array(dataCap);
+      writeBuffer();
+      result = Result.fromValue(
+        _exports.ghostty_render_state_row_cells_get(
+          cells,
+          RenderStateRowCellsData.graphemesUtf8.value,
+          bufferPtr,
+        ),
+      );
+      len = _mem.readU32(bufferPtr + _layout.bufferLen);
+    }
+
+    final value = result == .success && len > 0
+        ? utf8.decode(_mem.readBytes(dataPtr, len))
+        : '';
+    _exports.ghostty_wasm_free_u8_array(dataPtr, dataCap);
+    _exports.ghostty_wasm_free_u8_array(bufferPtr, _layout.bufferSize);
+    return (result, value);
+  }
+
+  @override
+  CResult<bool> rowCellsGetHasStyling(int cells) {
+    final outPtr = _exports.ghostty_wasm_alloc_u8();
+    final result = Result.fromValue(
+      _exports.ghostty_render_state_row_cells_get(
+        cells,
+        RenderStateRowCellsData.hasStyling.value,
+        outPtr,
+      ),
+    );
+    final value = _mem.readU8(outPtr) != 0;
+    _exports.ghostty_wasm_free_u8(outPtr);
+    return (result, value);
+  }
+
+  @override
   CResult<RgbColor> rowCellsGetBgColor(int cells) {
     final outPtr = _exports.ghostty_wasm_alloc_u8_array(3);
     final result = Result.fromValue(
@@ -2262,9 +2369,7 @@ class WasmBindings implements GhosttyBindings {
     final gridRefPtr = _exports.ghostty_wasm_alloc_u8_array(
       _layout.gridRefSize,
     );
-    _mem.writeU32(pointPtr, pointTag.value);
-    _mem.writeU16(pointPtr + _layout.pointX, x);
-    _mem.writeU32(pointPtr + _layout.pointY, y);
+    _writePoint(pointPtr, pointTag, x, y);
     _mem.writeU32(gridRefPtr, _layout.gridRefSize);
     final result = _exports.ghostty_terminal_grid_ref(
       terminal,
@@ -2273,6 +2378,27 @@ class WasmBindings implements GhosttyBindings {
     );
     _exports.ghostty_wasm_free_u8_array(pointPtr, _layout.pointSize);
     return (.fromValue(result), gridRefPtr);
+  }
+
+  @override
+  CResult<int> terminalGridRefTrack(
+    int terminal,
+    PointTag pointTag,
+    int x,
+    int y,
+  ) {
+    final pointPtr = _exports.ghostty_wasm_alloc_u8_array(_layout.pointSize);
+    final outPtr = _exports.ghostty_wasm_alloc_opaque();
+    _writePoint(pointPtr, pointTag, x, y);
+    final result = _exports.ghostty_terminal_grid_ref_track(
+      terminal,
+      pointPtr,
+      outPtr,
+    );
+    final handle = _mem.readPtr(outPtr);
+    _exports.ghostty_wasm_free_opaque(outPtr);
+    _exports.ghostty_wasm_free_u8_array(pointPtr, _layout.pointSize);
+    return (.fromValue(result), handle);
   }
 
   @override
@@ -2285,7 +2411,7 @@ class WasmBindings implements GhosttyBindings {
     const u64Size = 8;
     final outPtr = _exports.ghostty_wasm_alloc_u8_array(u64Size);
     final result = _exports.ghostty_grid_ref_cell(ref, outPtr);
-    final value = _mem.readU32(outPtr);
+    final value = _mem.readU64(outPtr);
     _exports.ghostty_wasm_free_u8_array(outPtr, u64Size);
     return (.fromValue(result), value);
   }
@@ -2295,7 +2421,7 @@ class WasmBindings implements GhosttyBindings {
     const u64Size = 8;
     final outPtr = _exports.ghostty_wasm_alloc_u8_array(u64Size);
     final result = _exports.ghostty_grid_ref_row(ref, outPtr);
-    final value = _mem.readU32(outPtr);
+    final value = _mem.readU64(outPtr);
     _exports.ghostty_wasm_free_u8_array(outPtr, u64Size);
     return (.fromValue(result), value);
   }
@@ -2371,6 +2497,67 @@ class WasmBindings implements GhosttyBindings {
     _exports.ghostty_wasm_free_usize(outLen);
     _exports.ghostty_wasm_free_u8_array(buf, initSize);
     return (result, value);
+  }
+
+  @override
+  void trackedGridRefFree(int ref) {
+    _exports.ghostty_tracked_grid_ref_free(ref);
+  }
+
+  @override
+  bool trackedGridRefHasValue(int ref) {
+    return _exports.ghostty_tracked_grid_ref_has_value(ref) != 0;
+  }
+
+  @override
+  CResult<({int col, int row})> trackedGridRefPoint(
+    int ref,
+    PointTag pointTag,
+  ) {
+    final size = _layout.pointCoordinateSize;
+    final outPtr = _exports.ghostty_wasm_alloc_u8_array(size);
+    final result = Result.fromValue(
+      _exports.ghostty_tracked_grid_ref_point(ref, pointTag.value, outPtr),
+    );
+    final col = _mem.readU16(outPtr + _layout.pointCoordinateX);
+    final row = _mem.readU32(outPtr + _layout.pointCoordinateY);
+    _exports.ghostty_wasm_free_u8_array(outPtr, size);
+    return (result, (col: col, row: row));
+  }
+
+  @override
+  Result trackedGridRefSet(
+    int ref,
+    int terminal,
+    PointTag pointTag,
+    int x,
+    int y,
+  ) {
+    final pointPtr = _exports.ghostty_wasm_alloc_u8_array(_layout.pointSize);
+    _writePoint(pointPtr, pointTag, x, y);
+    final result = _exports.ghostty_tracked_grid_ref_set(
+      ref,
+      terminal,
+      pointPtr,
+    );
+    _exports.ghostty_wasm_free_u8_array(pointPtr, _layout.pointSize);
+    return .fromValue(result);
+  }
+
+  @override
+  CResult<int> trackedGridRefSnapshot(int ref) {
+    final gridRefPtr = _exports.ghostty_wasm_alloc_u8_array(
+      _layout.gridRefSize,
+    );
+    _mem.writeU32(gridRefPtr, _layout.gridRefSize);
+    final result = Result.fromValue(
+      _exports.ghostty_tracked_grid_ref_snapshot(ref, gridRefPtr),
+    );
+    if (result != .success) {
+      _exports.ghostty_wasm_free_u8_array(gridRefPtr, _layout.gridRefSize);
+      return (result, 0);
+    }
+    return (result, gridRefPtr);
   }
 
   @override
@@ -2577,6 +2764,17 @@ class WasmBindings implements GhosttyBindings {
     _mem.writeU8(ptr, value ? 1 : 0);
     final result = _exports.ghostty_terminal_set(handle, option.value, ptr);
     _exports.ghostty_wasm_free_u8(ptr);
+    return .fromValue(result);
+  }
+
+  Result _terminalSetI32(int handle, TerminalOption option, int? value) {
+    if (value == null) {
+      return .fromValue(_exports.ghostty_terminal_set(handle, option.value, 0));
+    }
+    final ptr = _exports.ghostty_wasm_alloc_usize();
+    _mem.writeI32(ptr, value);
+    final result = _exports.ghostty_terminal_set(handle, option.value, ptr);
+    _exports.ghostty_wasm_free_usize(ptr);
     return .fromValue(result);
   }
 
@@ -2848,6 +3046,12 @@ class WasmBindings implements GhosttyBindings {
         _mem.writeU8(addr + _layout.styleColorG, 0);
         _mem.writeU8(addr + _layout.styleColorB, 0);
     }
+  }
+
+  void _writePoint(int pointPtr, PointTag pointTag, int x, int y) {
+    _mem.writeU32(pointPtr, pointTag.value);
+    _mem.writeU16(pointPtr + _layout.pointX, x);
+    _mem.writeU32(pointPtr + _layout.pointY, y);
   }
 
   SgrAttribute _readSgrAttribute(int attrPtr) {

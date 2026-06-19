@@ -4,6 +4,12 @@
 /// are final ints resolved from the JSON, so method calls use direct
 /// field access with no map lookups.
 class Layouts {
+  // GhosttyBuffer
+  late final int bufferSize;
+  late final int bufferPtr;
+  late final int bufferCap;
+  late final int bufferLen;
+
   // GhosttyColorRgb
   late final int colorRgbSize;
   late final int colorRgbG;
@@ -145,6 +151,13 @@ class Layouts {
   late final int scrollViewportDelta;
 
   Layouts(Map<String, dynamic> types) {
+    // TODO(elias8): migrate to `_Struct(types, ...)` once upstream ghostty
+    // registers `GhosttyBuffer` in `types.zig`.
+    bufferSize = 12;
+    bufferPtr = 0;
+    bufferCap = 4;
+    bufferLen = 8;
+
     var struct = _Struct(types, 'GhosttyColorRgb');
     colorRgbSize = struct.size;
     colorRgbG = struct['g'];

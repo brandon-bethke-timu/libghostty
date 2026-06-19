@@ -82,6 +82,7 @@ export 'src/impl/terminal/terminal.dart'
         RenderState,
         RowIterator,
         Selection,
-        Terminal;
+        Terminal,
+        TrackedGridRef;
 export 'src/impl/terminal/terminal_mode.dart' show TerminalMode;
 export 'src/listenable.dart' show Listenable;
