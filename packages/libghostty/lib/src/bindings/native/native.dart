@@ -750,6 +750,11 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<bool> terminalGetViewportActive(int handle) {
+    return _terminalGetBool(handle, .viewportActive);
+  }
+
+  @override
   Result terminalSetTitle(int handle, String? title) {
     return _terminalSetString(handle, .title, title);
   }
@@ -757,6 +762,21 @@ class NativeBindings implements GhosttyBindings {
   @override
   Result terminalSetPwd(int handle, String? pwd) {
     return _terminalSetString(handle, .pwd, pwd);
+  }
+
+  @override
+  Result terminalSetDefaultCursorShape(int handle, CursorShape? shape) {
+    return _terminalSetI32(handle, .defaultCursorStyle, shape?.value);
+  }
+
+  @override
+  Result terminalSetDefaultCursorBlink(int handle, {bool? blinking}) {
+    return _terminalSetBool(handle, .defaultCursorBlink, blinking);
+  }
+
+  @override
+  Result terminalSetGlyphProtocol(int handle, {required bool enabled}) {
+    return _terminalSetBool(handle, .glyphProtocol, enabled);
   }
 
   @override
@@ -1218,6 +1238,52 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<String> rowCellsGetGraphemesUtf8(int cells) {
+    return using((arena) {
+      const inlineCap = 64;
+      final buffer = arena<Buffer>();
+      var data = arena<Uint8>(inlineCap);
+      buffer.ref
+        ..ptr = data
+        ..cap = inlineCap
+        ..len = 0;
+
+      var result = ghostty_render_state_row_cells_get(
+        Pointer.fromAddress(cells),
+        RenderStateRowCellsData.graphemesUtf8,
+        buffer.cast(),
+      );
+      var len = buffer.ref.len;
+
+      if (result == Result.outOfSpace) {
+        data = arena<Uint8>(len);
+        buffer.ref
+          ..ptr = data
+          ..cap = len
+          ..len = 0;
+        result = ghostty_render_state_row_cells_get(
+          Pointer.fromAddress(cells),
+          RenderStateRowCellsData.graphemesUtf8,
+          buffer.cast(),
+        );
+        len = buffer.ref.len;
+      }
+
+      return (result, len == 0 ? '' : utf8.decode(data.asTypedList(len)));
+    });
+  }
+
+  @override
+  CResult<bool> rowCellsGetHasStyling(int cells) {
+    final result = ghostty_render_state_row_cells_get(
+      Pointer.fromAddress(cells),
+      RenderStateRowCellsData.hasStyling,
+      _outBool.cast(),
+    );
+    return (result, _outBool.value);
+  }
+
+  @override
   CResult<RgbColor> rowCellsGetBgColor(int cells) {
     final result = ghostty_render_state_row_cells_get(
       Pointer.fromAddress(cells),
@@ -1463,6 +1529,18 @@ class NativeBindings implements GhosttyBindings {
     );
   }
 
+  Result _terminalSetI32(int handle, TerminalOption option, int? value) {
+    if (value == null) {
+      return ghostty_terminal_set(Pointer.fromAddress(handle), option, nullptr);
+    }
+    _outI32.value = value;
+    return ghostty_terminal_set(
+      Pointer.fromAddress(handle),
+      option,
+      _outI32.cast(),
+    );
+  }
+
   Result _terminalSetU64(int handle, TerminalOption option, int? value) {
     if (value == null) {
       return ghostty_terminal_set(Pointer.fromAddress(handle), option, nullptr);
@@ -1621,6 +1699,12 @@ class NativeBindings implements GhosttyBindings {
     ref.value.rgb.r = color.r;
     ref.value.rgb.g = color.g;
     ref.value.rgb.b = color.b;
+  }
+
+  static void _writePoint(Point point, PointTag pointTag, int x, int y) {
+    point.tagAsInt = pointTag.value;
+    point.value.coordinate.x = x;
+    point.value.coordinate.y = y;
   }
 
   static RawColor _cellColorToRaw(CellColor color) => switch (color) {
@@ -1809,9 +1893,7 @@ class NativeBindings implements GhosttyBindings {
   CResult<int> terminalGridRef(int terminal, PointTag pointTag, int x, int y) {
     return using((arena) {
       final point = arena<Point>();
-      point.ref.tagAsInt = pointTag.value;
-      point.ref.value.coordinate.x = x;
-      point.ref.value.coordinate.y = y;
+      _writePoint(point.ref, pointTag, x, y);
       final gridRef = calloc<GridRef>();
       gridRef.ref.size = sizeOf<GridRef>();
       final result = ghostty_terminal_grid_ref(
@@ -1820,6 +1902,26 @@ class NativeBindings implements GhosttyBindings {
         gridRef,
       );
       return (result, gridRef.address);
+    });
+  }
+
+  @override
+  CResult<int> terminalGridRefTrack(
+    int terminal,
+    PointTag pointTag,
+    int x,
+    int y,
+  ) {
+    return using((arena) {
+      final point = arena<Point>();
+      final out = arena<Pointer<TrackedGridRefImpl>>();
+      _writePoint(point.ref, pointTag, x, y);
+      final result = ghostty_terminal_grid_ref_track(
+        Pointer.fromAddress(terminal),
+        point.ref,
+        out,
+      );
+      return (result, out.value.address);
     });
   }
 
@@ -1899,6 +2001,66 @@ class NativeBindings implements GhosttyBindings {
       if (len == 0) return (result, '');
       return (result, utf8.decode(buf.asTypedList(len)));
     });
+  }
+
+  @override
+  void trackedGridRefFree(int ref) {
+    ghostty_tracked_grid_ref_free(Pointer.fromAddress(ref));
+  }
+
+  @override
+  bool trackedGridRefHasValue(int ref) {
+    return ghostty_tracked_grid_ref_has_value(Pointer.fromAddress(ref));
+  }
+
+  @override
+  CResult<({int col, int row})> trackedGridRefPoint(
+    int ref,
+    PointTag pointTag,
+  ) {
+    return using((arena) {
+      final out = arena<PointCoordinate>();
+      final result = ghostty_tracked_grid_ref_point(
+        Pointer.fromAddress(ref),
+        pointTag,
+        out,
+      );
+      return (result, (col: out.ref.x, row: out.ref.y));
+    });
+  }
+
+  @override
+  Result trackedGridRefSet(
+    int ref,
+    int terminal,
+    PointTag pointTag,
+    int x,
+    int y,
+  ) {
+    return using((arena) {
+      final point = arena<Point>();
+      _writePoint(point.ref, pointTag, x, y);
+      return ghostty_tracked_grid_ref_set(
+        Pointer.fromAddress(ref),
+        Pointer.fromAddress(terminal),
+        point.ref,
+      );
+    });
+  }
+
+  @override
+  CResult<int> trackedGridRefSnapshot(int ref) {
+    final gridRef = calloc<GridRef>();
+    gridRef.ref.size = sizeOf<GridRef>();
+    final result = ghostty_tracked_grid_ref_snapshot(
+      Pointer.fromAddress(ref),
+      gridRef,
+    );
+    if (result != Result.success) {
+      calloc.free(gridRef);
+      return (result, 0);
+    }
+    return (result, gridRef.address);
   }
 
   @override
@@ -2097,6 +2259,38 @@ class NativeBindings implements GhosttyBindings {
     ghostty_terminal_set(
       Pointer.fromAddress(handle),
       TerminalOption.titleChanged,
+      callable.nativeFunction.cast(),
+    );
+  }
+
+  @override
+  void terminalSetOnPwdChanged(int handle, VoidCallback? callback) {
+    final map = _callables.putIfAbsent(handle, () => {});
+    map[TerminalOption.pwdChanged]?.close();
+
+    if (callback == null) {
+      map.remove(TerminalOption.pwdChanged);
+      ghostty_terminal_set(
+        Pointer.fromAddress(handle),
+        TerminalOption.pwdChanged,
+        nullptr,
+      );
+      return;
+    }
+
+    final callable =
+        NativeCallable<Void Function(Terminal, Pointer<Void>)>.isolateLocal((
+          Terminal terminal,
+          Pointer<Void> userdata,
+        ) {
+          try {
+            callback();
+          } on Object catch (_) {}
+        });
+    map[TerminalOption.pwdChanged] = callable;
+    ghostty_terminal_set(
+      Pointer.fromAddress(handle),
+      TerminalOption.pwdChanged,
       callable.nativeFunction.cast(),
     );
   }

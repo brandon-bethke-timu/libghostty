@@ -120,8 +120,12 @@ abstract interface class GhosttyBindings {
   CResult<int> terminalGetScrollbackRows(int handle);
   CResult<int> terminalGetWidthPx(int handle);
   CResult<int> terminalGetHeightPx(int handle);
+  CResult<bool> terminalGetViewportActive(int handle);
   Result terminalSetTitle(int handle, String? title);
   Result terminalSetPwd(int handle, String? pwd);
+  Result terminalSetDefaultCursorShape(int handle, CursorShape? shape);
+  Result terminalSetDefaultCursorBlink(int handle, {bool? blinking});
+  Result terminalSetGlyphProtocol(int handle, {required bool enabled});
   Result terminalSetColorForeground(int handle, RgbColor? color);
   Result terminalSetColorBackground(int handle, RgbColor? color);
   Result terminalSetColorCursor(int handle, RgbColor? color);
@@ -156,6 +160,7 @@ abstract interface class GhosttyBindings {
   void terminalSetOnWritePty(int handle, ValueSetter<Uint8List>? callback);
   void terminalSetOnBell(int handle, VoidCallback? callback);
   void terminalSetOnTitleChanged(int handle, VoidCallback? callback);
+  void terminalSetOnPwdChanged(int handle, VoidCallback? callback);
   void terminalSetOnEnquiry(int handle, ValueGetter<Uint8List>? callback);
   void terminalSetOnXtversion(int handle, ValueGetter<String>? callback);
   void terminalSetOnColorScheme(
@@ -264,6 +269,8 @@ abstract interface class GhosttyBindings {
   CResult<Style> rowCellsGetStyle(int cells);
   CResult<int> rowCellsGetGraphemeLen(int cells);
   CResult<List<int>> rowCellsGetGraphemes(int cells, int len);
+  CResult<String> rowCellsGetGraphemesUtf8(int cells);
+  CResult<bool> rowCellsGetHasStyling(int cells);
   CResult<RgbColor> rowCellsGetBgColor(int cells);
   CResult<RgbColor> rowCellsGetFgColor(int cells);
   CResult<int> rowCellsGetBgColorArgb(int cells);
@@ -310,6 +317,12 @@ abstract interface class GhosttyBindings {
   bool styleIsDefault(Style style);
 
   CResult<int> terminalGridRef(int terminal, PointTag pointTag, int x, int y);
+  CResult<int> terminalGridRefTrack(
+    int terminal,
+    PointTag pointTag,
+    int x,
+    int y,
+  );
   CResult<({int col, int row})> terminalPointFromGridRef(
     int terminal,
     int ref,
@@ -321,6 +334,17 @@ abstract interface class GhosttyBindings {
   CResult<Style> gridRefStyle(int ref);
   CResult<List<int>> gridRefGraphemes(int ref);
   CResult<String> gridRefHyperlinkUri(int ref);
+  void trackedGridRefFree(int ref);
+  bool trackedGridRefHasValue(int ref);
+  CResult<({int col, int row})> trackedGridRefPoint(int ref, PointTag pointTag);
+  Result trackedGridRefSet(
+    int ref,
+    int terminal,
+    PointTag pointTag,
+    int x,
+    int y,
+  );
+  CResult<int> trackedGridRefSnapshot(int ref);
 
   CResult<int> formatterTerminalNew(
     int terminal,

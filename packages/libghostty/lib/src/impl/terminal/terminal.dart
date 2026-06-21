@@ -21,6 +21,7 @@ part 'kitty_graphics.dart';
 part 'render_state.dart';
 part 'row_iterator.dart';
 part 'selection.dart';
+part 'tracked_grid_ref.dart';
 
 /// Complete terminal emulator managing screen state, scrollback, cursor,
 /// styles, modes, and VT stream processing.
@@ -38,6 +39,7 @@ part 'selection.dart';
 ///
 /// - [RenderState] with [RowIterator] / [CellIterator] for rendering
 /// - [GridRef.at] for one-off cell lookups
+/// - [TrackedGridRef.at] for grid references that survive terminal mutations
 /// - [KittyGraphics.of] for Kitty graphics storage access
 /// - [Formatter] for extracting terminal content
 /// - [KeyEncoder] / [MouseEncoder] for encoding input events
@@ -153,6 +155,16 @@ final class Terminal with Listenable {
   /// The cursor's current SGR style (applied to newly printed characters).
   Style get cursorStyle => check(bindings.terminalGetCursorStyle(_handle));
 
+  /// Sets whether DECSCUSR reset (CSI 0 q) restores a blinking cursor.
+  set defaultCursorBlink(bool? value) {
+    checkCode(bindings.terminalSetDefaultCursorBlink(_handle, blinking: value));
+  }
+
+  /// Sets the cursor shape restored by DECSCUSR reset (CSI 0 q).
+  set defaultCursorShape(CursorShape? value) {
+    checkCode(bindings.terminalSetDefaultCursorShape(_handle, value));
+  }
+
   /// Effective foreground color (OSC override if active, otherwise default).
   ///
   /// Returns null if no color is configured (neither a default nor an OSC
@@ -203,6 +215,11 @@ final class Terminal with Listenable {
 
   /// Whether any mouse tracking mode is currently active.
   bool get isMouseTracking => check(bindings.terminalGetMouseTracking(_handle));
+
+  /// Whether the viewport is at the active terminal area instead of scrollback.
+  bool get isViewportActive {
+    return check(bindings.terminalGetViewportActive(_handle));
+  }
 
   /// Kitty image storage limit in bytes for the active screen.
   ///
@@ -284,6 +301,14 @@ final class Terminal with Listenable {
   /// during [write].
   set onTitleChanged(VoidCallback? value) {
     bindings.terminalSetOnTitleChanged(_handle, value);
+  }
+
+  /// Registers a callback for working-directory changes via OSC 7/9/1337.
+  ///
+  /// Query the new [pwd] after the callback returns. Fires synchronously
+  /// during [write].
+  set onPwdChanged(VoidCallback? value) {
+    bindings.terminalSetOnPwdChanged(_handle, value);
   }
 
   /// Registers a callback for PTY write-back data.
@@ -455,6 +480,11 @@ final class Terminal with Listenable {
     checkCode(
       bindings.terminalSetKittyImageMediumFile(_handle, enabled: enabled),
     );
+  }
+
+  /// Enables or disables Glyph Protocol APC handling.
+  void setGlyphProtocol({required bool enabled}) {
+    checkCode(bindings.terminalSetGlyphProtocol(_handle, enabled: enabled));
   }
 
   /// Enables or disables the shared memory medium for Kitty image loading.

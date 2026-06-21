@@ -101,7 +101,7 @@ final class CellIterator {
   bool get hasHyperlink => bindings.cellGetHasHyperlink(_rawCell).$2;
 
   /// Whether the current cell has non-default styling attributes.
-  bool get hasStyling => bindings.cellGetHasStyling(_rawCell).$2;
+  bool get hasStyling => check(bindings.rowCellsGetHasStyling(_handle));
 
   /// Whether the current cell contains any text.
   bool get hasText => _graphemeLen > 0;

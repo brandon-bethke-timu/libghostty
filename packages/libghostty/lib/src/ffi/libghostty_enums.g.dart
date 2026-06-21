@@ -288,7 +288,7 @@ enum FocusEvent {
   };
 }
 
-/// Output format.
+/// Terminal content output format.
 ///
 /// @ingroup formatter
 enum FormatterFormat {
@@ -1581,7 +1581,35 @@ enum RenderStateRowCellsData {
   /// Returns GHOSTTY_INVALID_VALUE if the cell has no explicit foreground
   /// color, in which case the caller should use whatever default foreground
   /// color it wants (e.g. the terminal foreground).
-  fgColor(6);
+  fgColor(6),
+
+  /// Whether the cell is contained within the current selection (bool).
+  /// This returns true when the cell's column is within the current row's
+  /// row-local selection range, and false otherwise. Rendering policy for
+  /// selected cells (colors, inversion, etc.) is left to the caller.
+  ///
+  /// Renderers that can draw cells in spans may be more efficient querying
+  /// GHOSTTY_RENDER_STATE_ROW_DATA_SELECTION once per row and applying that
+  /// range directly, avoiding one C API call per cell for selection state.
+  selected(7),
+
+  /// Whether the cell has any explicit styling (bool).
+  /// This is equivalent to querying the raw cell's
+  /// GHOSTTY_CELL_DATA_HAS_STYLING value, but avoids materializing the raw
+  /// Cell for renderers that only need to know whether fetching the
+  /// full style is necessary.
+  hasStyling(8),
+
+  /// Encode the current cell's full grapheme cluster as UTF-8 into a
+  /// caller-provided buffer (Buffer).
+  ///
+  /// The base codepoint is encoded first, followed by any extra grapheme
+  /// codepoints. Returns GHOSTTY_SUCCESS with len=0 when the cell has no text.
+  ///
+  /// If ptr is NULL or cap is too small for a non-empty cell, returns
+  /// GHOSTTY_OUT_OF_SPACE without writing any bytes and sets len to the required
+  /// buffer size in bytes.
+  graphemesUtf8(9);
 
   final int value;
   const RenderStateRowCellsData(this.value);
@@ -1594,6 +1622,9 @@ enum RenderStateRowCellsData {
     4 => graphemesBuf,
     5 => bgColor,
     6 => fgColor,
+    7 => selected,
+    8 => hasStyling,
+    9 => graphemesUtf8,
     _ => throw ArgumentError(
       'Unknown value for RenderStateRowCellsData: $value',
     ),
@@ -1617,7 +1648,10 @@ enum RenderStateRowData {
   /// the current row (RenderStateRowCells). Cell data is only
   /// valid as long as the underlying render state is not updated.
   /// It is unsafe to use cell data after updating the render state.
-  cells(3);
+  cells(3),
+
+  /// Row-local selected cell range (RenderStateRowSelection).
+  selection(4);
 
   final int value;
   const RenderStateRowData(this.value);
@@ -1627,6 +1661,7 @@ enum RenderStateRowData {
     1 => dirty,
     2 => raw,
     3 => cells,
+    4 => selection,
     _ => throw ArgumentError('Unknown value for RenderStateRowData: $value'),
   };
 }
@@ -1768,6 +1803,300 @@ enum RowSemanticPrompt {
     1 => prompt,
     2 => promptContinuation,
     _ => throw ArgumentError('Unknown value for RowSemanticPrompt: $value'),
+  };
+}
+
+/// Operation used to adjust a selection endpoint.
+///
+/// Adjustment mutates the selection's logical end endpoint, not whichever
+/// endpoint is visually bottom/right. This preserves keyboard and drag
+/// behavior for both forward and reversed selections.
+///
+/// @ingroup selection
+enum SelectionAdjust {
+  /// Move left to the previous non-empty cell, wrapping upward.
+  left(0),
+
+  /// Move right to the next non-empty cell, wrapping downward.
+  right(1),
+
+  /// Move up one row at the current column, or to the beginning of the
+  /// line if already at the top.
+  up(2),
+
+  /// Move down to the next non-blank row at the current column, or to the
+  /// end of the line if none exists.
+  down(3),
+
+  /// Move to the top-left cell of the screen.
+  home(4),
+
+  /// Move to the right edge of the last non-blank row on the screen.
+  end(5),
+
+  /// Move up by one terminal page height, or to home if that would move
+  /// past the top.
+  pageUp(6),
+
+  /// Move down by one terminal page height, or to end if that would move
+  /// past the bottom.
+  pageDown(7),
+
+  /// Move to the left edge of the current line.
+  beginningOfLine(8),
+
+  /// Move to the right edge of the current line.
+  endOfLine(9);
+
+  final int value;
+  const SelectionAdjust(this.value);
+
+  static SelectionAdjust fromValue(int value) => switch (value) {
+    0 => left,
+    1 => right,
+    2 => up,
+    3 => down,
+    4 => home,
+    5 => end,
+    6 => pageUp,
+    7 => pageDown,
+    8 => beginningOfLine,
+    9 => endOfLine,
+    _ => throw ArgumentError('Unknown value for SelectionAdjust: $value'),
+  };
+}
+
+/// Current autoscroll direction for an active selection drag gesture.
+///
+/// @ingroup selection
+enum SelectionGestureAutoscroll {
+  /// No selection autoscroll is requested.
+  none(0),
+
+  /// Selection dragging should autoscroll the viewport upward.
+  up(1),
+
+  /// Selection dragging should autoscroll the viewport downward.
+  down(2);
+
+  final int value;
+  const SelectionGestureAutoscroll(this.value);
+
+  static SelectionGestureAutoscroll fromValue(int value) => switch (value) {
+    0 => none,
+    1 => up,
+    2 => down,
+    _ => throw ArgumentError(
+      'Unknown value for SelectionGestureAutoscroll: $value',
+    ),
+  };
+}
+
+/// Selection behavior chosen for a gesture's click sequence.
+///
+/// @ingroup selection
+enum SelectionGestureBehavior {
+  /// Cell-granular drag selection.
+  cell(0),
+
+  /// Word selection on press and word-granular drag selection.
+  word(1),
+
+  /// Line selection on press and line-granular drag selection.
+  line(2),
+
+  /// Semantic command output selection on press and drag.
+  output(3);
+
+  final int value;
+  const SelectionGestureBehavior(this.value);
+
+  static SelectionGestureBehavior fromValue(int value) => switch (value) {
+    0 => cell,
+    1 => word,
+    2 => line,
+    3 => output,
+    _ => throw ArgumentError(
+      'Unknown value for SelectionGestureBehavior: $value',
+    ),
+  };
+}
+
+/// Data fields readable from a selection gesture with
+/// ghostty_selection_gesture_get().
+///
+/// @ingroup selection
+enum SelectionGestureData {
+  /// Current click count: uint8_t*. 0 means inactive.
+  clickCount(0),
+
+  /// Whether the current/last left-click gesture has dragged: bool*.
+  dragged(1),
+
+  /// Current autoscroll request: SelectionGestureAutoscroll*.
+  autoscroll(2),
+
+  /// Current gesture behavior: SelectionGestureBehavior*.
+  behavior(3),
+
+  /// Current left-click anchor: GridRef*.
+  ///
+  /// Returns GHOSTTY_NO_VALUE if there is no valid active anchor. On success,
+  /// writes an untracked GridRef snapshot with normal GhosttyGridRef
+  /// lifetime rules.
+  anchor(4);
+
+  final int value;
+  const SelectionGestureData(this.value);
+
+  static SelectionGestureData fromValue(int value) => switch (value) {
+    0 => clickCount,
+    1 => dragged,
+    2 => autoscroll,
+    3 => behavior,
+    4 => anchor,
+    _ => throw ArgumentError('Unknown value for SelectionGestureData: $value'),
+  };
+}
+
+/// Options stored on a reusable selection gesture event.
+///
+/// Passing NULL as the value to ghostty_selection_gesture_event_set() clears the
+/// corresponding option.
+///
+/// @ingroup selection
+enum SelectionGestureEventOption {
+  /// Grid reference under the pointer: GridRef*.
+  ///
+  /// Required for PRESS and DRAG events. Optional for RELEASE events; when unset
+  /// or cleared, release records that the pointer did not map to a valid cell.
+  ref(0),
+
+  /// Surface-space pointer position: SurfacePosition*.
+  ///
+  /// Valid for PRESS, DRAG, and AUTOSCROLL_TICK.
+  position(1),
+
+  /// Maximum repeat-click distance in pixels: double*.
+  repeatDistance(2),
+
+  /// Optional monotonic event time in nanoseconds: uint64_t*.
+  ///
+  /// If unset, press treats the event as untimed and only single-click behavior
+  /// is available.
+  timeNs(3),
+
+  /// Maximum interval between repeat clicks in nanoseconds: uint64_t*.
+  repeatIntervalNs(4),
+
+  /// Word-boundary codepoints: Codepoints*.
+  ///
+  /// The codepoints are copied into event-owned storage when set. If unset,
+  /// operations that need word boundaries use 's defaults.
+  ///
+  /// Valid for PRESS, DRAG, AUTOSCROLL_TICK, and DEEP_PRESS.
+  wordBoundaryCodepoints(5),
+
+  /// Selection behavior table: SelectionGestureBehaviors*.
+  ///
+  /// If unset, press uses the default behavior table: cell, word, line.
+  behaviors(6),
+
+  /// Whether a drag or autoscroll tick should produce a rectangular selection: bool*.
+  rectangle(7),
+
+  /// Drag display geometry: SelectionGestureGeometry*. Required for DRAG and AUTOSCROLL_TICK.
+  geometry(8),
+
+  /// Viewport coordinate for an autoscroll tick: PointCoordinate*. Required for AUTOSCROLL_TICK.
+  viewport(9);
+
+  final int value;
+  const SelectionGestureEventOption(this.value);
+
+  static SelectionGestureEventOption fromValue(int value) => switch (value) {
+    0 => ref,
+    1 => position,
+    2 => repeatDistance,
+    3 => timeNs,
+    4 => repeatIntervalNs,
+    5 => wordBoundaryCodepoints,
+    6 => behaviors,
+    7 => rectangle,
+    8 => geometry,
+    9 => viewport,
+    _ => throw ArgumentError(
+      'Unknown value for SelectionGestureEventOption: $value',
+    ),
+  };
+}
+
+/// Selection gesture event type.
+///
+/// The event type is fixed when the event is created. Each event type documents
+/// which options are valid and which options are required by gesture operations.
+///
+/// @ingroup selection
+enum SelectionGestureEventType {
+  /// Press event for ghostty_selection_gesture_event().
+  press(0),
+
+  /// Release event for ghostty_selection_gesture_event().
+  release(1),
+
+  /// Drag event for ghostty_selection_gesture_event().
+  drag(2),
+
+  /// Autoscroll tick event for ghostty_selection_gesture_event().
+  autoscrollTick(3),
+
+  /// Deep press event for ghostty_selection_gesture_event().
+  deepPress(4);
+
+  final int value;
+  const SelectionGestureEventType(this.value);
+
+  static SelectionGestureEventType fromValue(int value) => switch (value) {
+    0 => press,
+    1 => release,
+    2 => drag,
+    3 => autoscrollTick,
+    4 => deepPress,
+    _ => throw ArgumentError(
+      'Unknown value for SelectionGestureEventType: $value',
+    ),
+  };
+}
+
+/// Ordering of a selection's endpoints in terminal coordinates.
+///
+/// Mirrored orders are only produced by rectangular selections whose start
+/// and end endpoints are on opposite diagonal corners that are not simple
+/// top-left-to-bottom-right or bottom-right-to-top-left orderings.
+///
+/// @ingroup selection
+enum SelectionOrder {
+  /// Start is before end in top-left to bottom-right order.
+  forward(0),
+
+  /// End is before start in top-left to bottom-right order.
+  reverse(1),
+
+  /// Rectangular selection from top-right to bottom-left.
+  mirroredForward(2),
+
+  /// Rectangular selection from bottom-left to top-right.
+  mirroredReverse(3);
+
+  final int value;
+  const SelectionOrder(this.value);
+
+  static SelectionOrder fromValue(int value) => switch (value) {
+    0 => forward,
+    1 => reverse,
+    2 => mirroredForward,
+    3 => mirroredReverse,
+    _ => throw ArgumentError('Unknown value for SelectionOrder: $value'),
   };
 }
 
@@ -1988,6 +2317,34 @@ enum SysOption {
   };
 }
 
+/// Visual style of the terminal cursor.
+///
+/// @ingroup terminal
+enum TerminalCursorStyle {
+  /// Bar cursor (DECSCUSR 5, 6).
+  bar(0),
+
+  /// Block cursor (DECSCUSR 1, 2).
+  block(1),
+
+  /// Underline cursor (DECSCUSR 3, 4).
+  underline(2),
+
+  /// Hollow block cursor.
+  blockHollow(3);
+
+  final int value;
+  const TerminalCursorStyle(this.value);
+
+  static TerminalCursorStyle fromValue(int value) => switch (value) {
+    0 => bar,
+    1 => block,
+    2 => underline,
+    3 => blockHollow,
+    _ => throw ArgumentError('Unknown value for TerminalCursorStyle: $value'),
+  };
+}
+
 /// Terminal data types.
 ///
 /// These values specify what type of data to extract from a terminal
@@ -2198,7 +2555,30 @@ enum TerminalData {
   /// Returns GHOSTTY_NO_VALUE when Kitty graphics are disabled at build time.
   ///
   /// Output type: KittyGraphics *
-  kittyGraphics(30);
+  kittyGraphics(30),
+
+  /// The active screen's current selection.
+  ///
+  /// On success, writes an untracked snapshot of the terminal-owned selection
+  /// to the caller-provided Selection. The GhosttySelection struct is
+  /// caller-owned and may be kept, but the grid references inside it are
+  /// untracked borrowed references into the active screen. They are only valid
+  /// until the next mutating terminal call, such as ghostty_terminal_set(),
+  /// ghostty_terminal_vt_write(), ghostty_terminal_resize(), or
+  /// ghostty_terminal_reset().
+  ///
+  /// Returns GHOSTTY_NO_VALUE when there is no active selection.
+  ///
+  /// Output type: Selection *
+  selection(31),
+
+  /// Whether the viewport is currently pinned to the active area.
+  ///
+  /// This is true when the viewport is following the active terminal area,
+  /// and false when the user has scrolled into history.
+  ///
+  /// Output type: bool *
+  viewportActive(32);
 
   final int value;
   const TerminalData(this.value);
@@ -2235,6 +2615,8 @@ enum TerminalData {
     28 => kittyImageMediumTempFile,
     29 => kittyImageMediumSharedMem,
     30 => kittyGraphics,
+    31 => selection,
+    32 => viewportActive,
     _ => throw ArgumentError('Unknown value for TerminalData: $value'),
   };
 }
@@ -2398,7 +2780,51 @@ enum TerminalOption {
   /// to the built-in default.
   ///
   /// Input type: size_t*
-  apcMaxBytesKitty(20);
+  apcMaxBytesKitty(20),
+
+  /// Set the active screen selection.
+  ///
+  /// The value must point to a Selection whose grid references are
+  /// valid for this terminal's active screen at the time of the call. The
+  /// terminal copies the selection immediately and converts it to
+  /// terminal-owned tracked state, so the Selection struct and its
+  /// untracked grid references do not need to outlive this call.
+  ///
+  /// Passing NULL clears the active screen selection.
+  ///
+  /// Input type: Selection*
+  selection(21),
+
+  /// Set the default cursor style used by DECSCUSR reset (CSI 0 q).
+  ///
+  /// A NULL value pointer resets to the built-in default block cursor.
+  ///
+  /// Input type: TerminalCursorStyle*
+  defaultCursorStyle(22),
+
+  /// Set whether the default cursor should blink when reset by DECSCUSR
+  /// (CSI 0 q).
+  ///
+  /// A NULL value pointer resets to the built-in default of not blinking.
+  ///
+  /// Input type: bool*
+  defaultCursorBlink(23),
+
+  /// Enable or disable Glyph Protocol APC handling.
+  ///
+  /// When disabled, Glyph Protocol APC sequences are ignored and no
+  /// support/query/register/clear responses are emitted. Disabling also clears
+  /// the terminal session's glyph glossary. A NULL value pointer is a no-op.
+  ///
+  /// Input type: bool*
+  glyphProtocol(24),
+
+  /// Callback invoked when the terminal pwd changes via escape
+  /// sequences (OSC 7, OSC 9, or OSC 1337 CurrentDir). Set to NULL
+  /// to ignore pwd change events.
+  ///
+  /// Input type: TerminalPwdChangedFn
+  pwdChanged(25);
 
   final int value;
   const TerminalOption(this.value);
@@ -2425,6 +2851,11 @@ enum TerminalOption {
     18 => kittyImageMediumSharedMem,
     19 => apcMaxBytes,
     20 => apcMaxBytesKitty,
+    21 => selection,
+    22 => defaultCursorStyle,
+    23 => defaultCursorBlink,
+    24 => glyphProtocol,
+    25 => pwdChanged,
     _ => throw ArgumentError('Unknown value for TerminalOption: $value'),
   };
 }

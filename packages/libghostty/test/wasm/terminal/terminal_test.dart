@@ -136,6 +136,24 @@ void main() {
         renderState.update(terminal);
         expect(renderState.cursor.visible, isTrue);
       });
+
+      test('uses defaultCursorShape for reset sequence', () {
+        terminal.defaultCursorShape = .underline;
+
+        terminal.write(Uint8List.fromList('\x1b[0 q'.codeUnits));
+        renderState.update(terminal);
+
+        expect(renderState.cursor.shape, CursorShape.underline);
+      });
+
+      test('uses defaultCursorBlink for reset sequence', () {
+        terminal.defaultCursorBlink = true;
+
+        terminal.write(Uint8List.fromList('\x1b[0 q'.codeUnits));
+        renderState.update(terminal);
+
+        expect(renderState.cursor.blinking, isTrue);
+      });
     });
 
     group('modes', () {
@@ -218,6 +236,22 @@ void main() {
       });
     });
 
+    group('isViewportActive', () {
+      test('is true for the active area', () {
+        expect(terminal.isViewportActive, isTrue);
+      });
+
+      test('is false after scrolling into history', () {
+        final t = Terminal(cols: 5, rows: 2);
+        addTearDown(t.dispose);
+        t.write(Uint8List.fromList('one\r\ntwo\r\nthree'.codeUnits));
+
+        t.scrollViewport(-1);
+
+        expect(t.isViewportActive, isFalse);
+      });
+    });
+
     group('listeners', () {
       test('notifies on write', () {
         var count = 0;
@@ -230,6 +264,17 @@ void main() {
         var count = 0;
         terminal.addListener(() => count++);
         terminal.resize(cols: 120, rows: 40);
+        expect(count, 1);
+      });
+    });
+
+    group('onPwdChanged', () {
+      test('fires for OSC 7 pwd change', () {
+        var count = 0;
+        terminal.onPwdChanged = () => count++;
+
+        terminal.write(Uint8List.fromList('\x1b]7;file:///tmp\x07'.codeUnits));
+
         expect(count, 1);
       });
     });

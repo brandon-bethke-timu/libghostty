@@ -1649,6 +1649,201 @@ extension type GhosttyExports(JSObject _) implements JSObject {
     Pointer out_written,
   );
 
+  /// Apply a selection gesture event and return the resulting selection snapshot.
+  ///
+  /// This dispatches to the gesture operation matching the event's fixed type.
+  /// For GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_PRESS, the event must have
+  /// GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REF set before calling this function.
+  /// All other press options use their initialized defaults when unset or cleared.
+  ///
+  /// For GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_RELEASE, only
+  /// GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REF is valid. It is optional; if unset or
+  /// cleared, release records that the pointer did not map to a valid cell. Release
+  /// events update gesture state but do not produce a selection, so this function
+  /// returns GHOSTTY_NO_VALUE after applying them.
+  ///
+  /// For GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_DRAG,
+  /// GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REF and
+  /// GHOSTTY_SELECTION_GESTURE_EVENT_OPT_GEOMETRY are required. Position,
+  /// rectangle, and word-boundary codepoints are optional and use initialized
+  /// defaults when unset or cleared.
+  ///
+  /// For GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_AUTOSCROLL_TICK,
+  /// GHOSTTY_SELECTION_GESTURE_EVENT_OPT_VIEWPORT and
+  /// GHOSTTY_SELECTION_GESTURE_EVENT_OPT_GEOMETRY are required. Position,
+  /// rectangle, and word-boundary codepoints are optional and use initialized
+  /// defaults when unset or cleared.
+  ///
+  /// For GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_DEEP_PRESS, only
+  /// GHOSTTY_SELECTION_GESTURE_EVENT_OPT_WORD_BOUNDARY_CODEPOINTS is valid. It is
+  /// optional and uses initialized defaults when unset or cleared.
+  ///
+  /// The returned selection is not installed as the terminal's current selection.
+  /// It is a snapshot with the same lifetime rules as GhosttySelection.
+  ///
+  /// @param gesture Selection gesture handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param terminal Terminal used to interpret and update gesture state
+  /// @param event Selection gesture event handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param[out] out_selection On success, receives the resulting selection. May
+  /// be NULL to apply the event and discard the selection result.
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_NO_VALUE if the event does not
+  /// currently produce a selection, GHOSTTY_OUT_OF_MEMORY if tracking
+  /// gesture state fails, or GHOSTTY_INVALID_VALUE if gesture, terminal,
+  /// event, or required event data is invalid
+  ///
+  /// @ingroup selection
+  external int ghostty_selection_gesture_event(
+    int gesture,
+    int terminal,
+    int event,
+    Pointer out_selection,
+  );
+
+  /// Free a selection gesture event object.
+  ///
+  /// Passing NULL is allowed and is a no-op.
+  ///
+  /// @param event Selection gesture event handle to free
+  ///
+  /// @ingroup selection
+  external void ghostty_selection_gesture_event_free(int event);
+
+  /// Create a reusable selection gesture event object.
+  ///
+  /// @param allocator Allocator, or NULL for the default allocator
+  /// @param out_event Receives the created event handle
+  /// @param type Event type. This is fixed for the lifetime of the event.
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if out_event is
+  /// NULL or type is invalid, or GHOSTTY_OUT_OF_MEMORY if allocation fails
+  ///
+  /// @ingroup selection
+  external int ghostty_selection_gesture_event_new(
+    Pointer allocator,
+    Pointer out_event,
+    int type,
+  );
+
+  /// Set or clear an option on a selection gesture event.
+  ///
+  /// The value type depends on option and is documented by
+  /// GhosttySelectionGestureEventOption. Passing NULL for value clears the option.
+  ///
+  /// @param event Selection gesture event handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param option Event option to set or clear
+  /// @param value Pointer to the input value for option, or NULL to clear
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_OUT_OF_MEMORY if copying
+  /// event-owned data fails, or GHOSTTY_INVALID_VALUE if event, option, or
+  /// value is invalid
+  ///
+  /// @ingroup selection
+  external int ghostty_selection_gesture_event_set(
+    int event,
+    int option,
+    Pointer value,
+  );
+
+  /// Free a selection gesture object.
+  ///
+  /// This releases any tracked terminal references owned by the gesture using the
+  /// provided terminal, then frees the gesture object. Passing NULL for gesture is
+  /// allowed and is a no-op.
+  ///
+  /// If the terminal is still alive, pass the terminal most recently used with the
+  /// gesture so any tracked terminal references can be released correctly. If the
+  /// terminal has already been freed, pass NULL for terminal; the terminal's page
+  /// storage has already released the underlying tracked references, so the
+  /// gesture wrapper can be safely discarded without touching the stale terminal
+  /// state.
+  ///
+  /// @param gesture Selection gesture handle to free
+  /// @param terminal Terminal used to release tracked gesture state, or NULL if
+  /// the terminal has already been freed
+  ///
+  /// @ingroup selection
+  external void ghostty_selection_gesture_free(int gesture, int terminal);
+
+  /// Read data from a selection gesture.
+  ///
+  /// The type of value depends on data and is documented by
+  /// GhosttySelectionGestureData. For GHOSTTY_SELECTION_GESTURE_DATA_ANCHOR,
+  /// the returned GhosttyGridRef is an untracked snapshot with normal grid-ref
+  /// lifetime rules.
+  ///
+  /// @param gesture Selection gesture handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param terminal Terminal used to validate terminal-backed gesture state
+  /// @param data Data field to read
+  /// @param value Output pointer whose type depends on data
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_NO_VALUE if the requested data
+  /// has no value, or GHOSTTY_INVALID_VALUE if gesture, terminal, data, or
+  /// value is invalid
+  ///
+  /// @ingroup selection
+  external int ghostty_selection_gesture_get(
+    int gesture,
+    int terminal,
+    int data,
+    Pointer value,
+  );
+
+  /// Read multiple data fields from a selection gesture in a single call.
+  ///
+  /// This is an optimization over calling ghostty_selection_gesture_get() multiple
+  /// times. Each entry in values must point to storage of the type documented by
+  /// the corresponding GhosttySelectionGestureData key.
+  ///
+  /// If any individual read fails, the function returns that error and writes the
+  /// index of the failing key to out_written when out_written is non-NULL. On
+  /// success, out_written receives count when non-NULL.
+  ///
+  /// @param gesture Selection gesture handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param terminal Terminal used to validate terminal-backed gesture state
+  /// @param count Number of data fields to read
+  /// @param keys Data fields to read (must not be NULL)
+  /// @param values Output pointers corresponding to keys (must not be NULL)
+  /// @param out_written Optional number of fields read, or failing index on error
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_NO_VALUE if a requested data
+  /// field has no value, or GHOSTTY_INVALID_VALUE if gesture, terminal,
+  /// keys, values, or a value pointer is invalid
+  ///
+  /// @ingroup selection
+  external int ghostty_selection_gesture_get_multi(
+    int gesture,
+    int terminal,
+    int count,
+    Pointer keys,
+    Pointer values,
+    Pointer out_written,
+  );
+
+  /// Create a selection gesture object.
+  ///
+  /// The gesture stores mutable state for terminal text selection gestures. The
+  /// gesture is not bound to a terminal at creation time; terminal-dependent APIs
+  /// take the terminal explicitly.
+  ///
+  /// @param allocator Allocator, or NULL for the default allocator
+  /// @param out_gesture Receives the created gesture handle
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if out_gesture is
+  /// NULL, or GHOSTTY_OUT_OF_MEMORY if allocation fails
+  ///
+  /// @ingroup selection
+  external int ghostty_selection_gesture_new(
+    Pointer allocator,
+    Pointer out_gesture,
+  );
+
+  /// Reset any active selection gesture state.
+  ///
+  /// This cancels the active click sequence and releases any tracked terminal
+  /// references owned by the gesture without freeing the gesture object.
+  /// Passing NULL is allowed and is a no-op.
+  ///
+  /// @param gesture Selection gesture handle to reset
+  /// @param terminal Terminal used to release tracked gesture state
+  ///
+  /// @ingroup selection
+  external void ghostty_selection_gesture_reset(int gesture, int terminal);
+
   /// Get the tag from an SGR attribute.
   ///
   /// This function extracts the tag that identifies which type of attribute
@@ -1946,6 +2141,37 @@ extension type GhosttyExports(JSObject _) implements JSObject {
     Pointer out_ref,
   );
 
+  /// Create an owned tracked grid reference for a terminal point.
+  ///
+  /// This is the tracked variant of ghostty_terminal_grid_ref(). The returned
+  /// handle follows the referenced cell as the terminal's page list is modified:
+  /// scrolling, pruning, resize/reflow, and other page-list operations update the
+  /// tracked reference automatically.
+  ///
+  /// The reference is attached to the terminal screen/page-list that is active at
+  /// creation time.
+  ///
+  /// If the point is outside the requested coordinate space, this returns
+  /// GHOSTTY_INVALID_VALUE and writes NULL to out_ref.
+  ///
+  /// The returned handle must be freed with ghostty_tracked_grid_ref_free(). If
+  /// the terminal is freed first, the handle remains valid only for
+  /// tracked-grid-ref APIs: it reports no value and can still be freed.
+  ///
+  /// @param terminal Terminal instance.
+  /// @param point Point to track.
+  /// @param[out] out_ref On success, receives the tracked reference handle.
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if terminal,
+  /// point, or out_ref is invalid, or GHOSTTY_OUT_OF_MEMORY if allocation
+  /// fails.
+  ///
+  /// @ingroup terminal
+  external int ghostty_terminal_grid_ref_track(
+    int terminal,
+    int point,
+    Pointer out_ref,
+  );
+
   /// Get the current value of a terminal mode.
   ///
   /// Returns the value of the mode identified by the given mode.
@@ -2074,6 +2300,318 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   /// @ingroup terminal
   external void ghostty_terminal_scroll_viewport(int terminal, int behavior);
 
+  /// Derive a selection snapshot covering all selectable terminal content.
+  ///
+  /// The returned selection is not installed as the terminal's current
+  /// selection. It is a snapshot with the same lifetime rules as GhosttySelection.
+  ///
+  /// @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param[out] out_selection On success, receives the derived selection
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_NO_VALUE if there is no
+  /// selectable content, or GHOSTTY_INVALID_VALUE if the terminal or
+  /// output pointer is invalid.
+  ///
+  /// @ingroup selection
+  external int ghostty_terminal_select_all(int terminal, Pointer out_selection);
+
+  /// Derive a line selection snapshot from a terminal grid reference.
+  ///
+  /// The returned selection is not installed as the terminal's current
+  /// selection. It is a snapshot with the same lifetime rules as GhosttySelection.
+  ///
+  /// @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param options Line-selection options
+  /// @param[out] out_selection On success, receives the derived selection
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_NO_VALUE if the valid ref has
+  /// no selectable line content, or GHOSTTY_INVALID_VALUE if the
+  /// terminal, options, ref, codepoint pointer, or output pointer are
+  /// invalid.
+  ///
+  /// @ingroup selection
+  external int ghostty_terminal_select_line(
+    int terminal,
+    Pointer options,
+    Pointer out_selection,
+  );
+
+  /// Derive a command-output selection snapshot from a terminal grid reference.
+  ///
+  /// The returned selection is not installed as the terminal's current
+  /// selection. It is a snapshot with the same lifetime rules as GhosttySelection.
+  ///
+  /// @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param ref Grid reference within command output to select
+  /// @param[out] out_selection On success, receives the derived selection
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_NO_VALUE if the valid ref is
+  /// not selectable command output, or GHOSTTY_INVALID_VALUE if the
+  /// terminal, ref, or output pointer is invalid.
+  ///
+  /// @ingroup selection
+  external int ghostty_terminal_select_output(
+    int terminal,
+    int ref,
+    Pointer out_selection,
+  );
+
+  /// Derive a word selection snapshot from a terminal grid reference.
+  ///
+  /// The returned selection is not installed as the terminal's current
+  /// selection. It is a snapshot with the same lifetime rules as GhosttySelection.
+  ///
+  /// @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param options Word-selection options
+  /// @param[out] out_selection On success, receives the derived selection
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_NO_VALUE if the valid ref has
+  /// no selectable word content, or GHOSTTY_INVALID_VALUE if the
+  /// terminal, options, ref, codepoint pointer, or output pointer are
+  /// invalid.
+  ///
+  /// @ingroup selection
+  external int ghostty_terminal_select_word(
+    int terminal,
+    Pointer options,
+    Pointer out_selection,
+  );
+
+  /// Derive the nearest word selection snapshot between two terminal grid refs.
+  ///
+  /// Starting at options->start, this searches toward options->end (inclusive)
+  /// and returns the first selectable word found using Ghostty's word-selection
+  /// rules.
+  ///
+  /// This is useful for implementing double-click-and-drag selection in a UI. If
+  /// a user double-clicks one word and drags across spaces or punctuation toward
+  /// another word, selecting only the word directly under the current pointer can
+  /// flicker or collapse when the pointer is between words. Instead, ask for the
+  /// nearest word between the original click and the drag point, ask again in the
+  /// reverse direction, and combine the two word bounds into the drag selection.
+  ///
+  /// @snippet c-vt-selection/src/main.c selection-word-between
+  ///
+  /// The returned selection is not installed as the terminal's current
+  /// selection. It is a snapshot with the same lifetime rules as GhosttySelection.
+  ///
+  /// @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param options Word-between-selection options
+  /// @param[out] out_selection On success, receives the derived selection
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_NO_VALUE if there is no
+  /// selectable word content between the valid refs, or
+  /// GHOSTTY_INVALID_VALUE if the terminal, options, refs, codepoint
+  /// pointer, or output pointer are invalid.
+  ///
+  /// @ingroup selection
+  external int ghostty_terminal_select_word_between(
+    int terminal,
+    Pointer options,
+    Pointer out_selection,
+  );
+
+  /// Adjust a selection snapshot using terminal selection semantics.
+  ///
+  /// This mutates the caller-provided GhosttySelection in place. The logical end
+  /// endpoint is always moved, regardless of whether the selection is forward or
+  /// reversed visually. The input selection remains a snapshot: after adjustment,
+  /// call ghostty_terminal_set() with GHOSTTY_TERMINAL_OPT_SELECTION to install it
+  /// as the terminal-owned selection if desired.
+  ///
+  /// The selection's start and end grid refs must both be valid untracked
+  /// snapshots for the given terminal's currently active screen. In practice,
+  /// they must come from that terminal and screen, and no mutating terminal call
+  /// may have occurred since the refs were produced or reconstructed from
+  /// tracked refs. Passing refs from another terminal, another screen, or stale
+  /// refs violates this precondition.
+  ///
+  /// @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param selection Selection snapshot to adjust in place
+  /// @param adjustment The adjustment operation to apply
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the terminal,
+  /// selection, or adjustment are invalid. Selection reference validity
+  /// is a precondition and is not checked.
+  ///
+  /// @ingroup selection
+  external int ghostty_terminal_selection_adjust(
+    int terminal,
+    Pointer selection,
+    int adjustment,
+  );
+
+  /// Test whether a terminal point is inside a selection snapshot.
+  ///
+  /// This uses the same selection semantics as the terminal, including
+  /// rectangular/block selections and linear selections spanning multiple rows.
+  ///
+  /// The selection's start and end grid refs must both be valid untracked
+  /// snapshots for the given terminal's currently active screen. In practice,
+  /// they must come from that terminal and screen, and no mutating terminal call
+  /// may have occurred since the refs were produced or reconstructed from
+  /// tracked refs. Passing refs from another terminal, another screen, or stale
+  /// refs violates this precondition.
+  ///
+  /// @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param selection Selection snapshot to inspect
+  /// @param point Point to test for containment
+  /// @param[out] out_contains On success, receives whether point is inside selection
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the terminal,
+  /// selection, point, or output pointer are invalid. Selection reference
+  /// validity is a precondition and is not checked.
+  ///
+  /// @ingroup selection
+  external int ghostty_terminal_selection_contains(
+    int terminal,
+    Pointer selection,
+    int point,
+    Pointer out_contains,
+  );
+
+  /// Test whether two selection snapshots are equal.
+  ///
+  /// Equality uses the terminal's internal selection semantics: both endpoint
+  /// pins must match and both selections must have the same rectangular/block
+  /// state. This avoids requiring callers to compare raw GhosttyGridRef internals.
+  ///
+  /// Both selections' start and end grid refs must be valid untracked snapshots
+  /// for the given terminal's currently active screen. In practice, they must
+  /// come from that terminal and screen, and no mutating terminal call may have
+  /// occurred since the refs were produced or reconstructed from tracked refs.
+  /// Passing refs from another terminal, another screen, or stale refs violates
+  /// this precondition.
+  ///
+  /// @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param a First selection snapshot to compare
+  /// @param b Second selection snapshot to compare
+  /// @param[out] out_equal On success, receives whether the selections are equal
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the terminal,
+  /// selections, or output pointer are invalid. Selection reference
+  /// validity is a precondition and is not checked.
+  ///
+  /// @ingroup selection
+  external int ghostty_terminal_selection_equal(
+    int terminal,
+    Pointer a,
+    Pointer b,
+    Pointer out_equal,
+  );
+
+  /// Format a terminal selection into an allocated buffer.
+  ///
+  /// This is a one-shot convenience API for formatting either the terminal's
+  /// active selection or a caller-provided GhosttySelection without explicitly
+  /// creating a GhosttyFormatter.
+  ///
+  /// The returned buffer is allocated using allocator, or the default allocator
+  /// if NULL is passed. The caller owns the returned buffer and must free it with
+  /// ghostty_free(), passing the same allocator and returned length.
+  ///
+  /// The returned bytes are not NUL-terminated. This supports plain text, VT, and
+  /// HTML uniformly as byte output.
+  ///
+  /// If options.selection is NULL and the terminal has no active selection, the
+  /// function returns GHOSTTY_NO_VALUE and leaves out_ptr as NULL and out_len as 0.
+  ///
+  /// @param terminal The terminal to read from (must not be NULL)
+  /// @param allocator Allocator used for the returned buffer, or NULL for the default allocator
+  /// @param options Selection formatting options
+  /// @param out_ptr Receives the allocated output buffer (must not be NULL)
+  /// @param out_len Receives the output length in bytes (must not be NULL)
+  /// @return GHOSTTY_SUCCESS on success, or an error code on failure
+  ///
+  /// @ingroup selection
+  external int ghostty_terminal_selection_format_alloc(
+    int terminal,
+    Pointer allocator,
+    int options,
+    Pointer out_ptr,
+    Pointer out_len,
+  );
+
+  /// Format a terminal selection into a caller-provided buffer.
+  ///
+  /// This is a one-shot convenience API for formatting either the terminal's
+  /// active selection or a caller-provided GhosttySelection without explicitly
+  /// creating a GhosttyFormatter.
+  ///
+  /// Pass NULL for buf to query the required output size. In that case,
+  /// out_written receives the required size and the function returns
+  /// GHOSTTY_OUT_OF_SPACE.
+  ///
+  /// If buf is too small, the function returns GHOSTTY_OUT_OF_SPACE and writes
+  /// the required size to out_written. The caller can then retry with a larger
+  /// buffer.
+  ///
+  /// If options.selection is NULL and the terminal has no active selection, the
+  /// function returns GHOSTTY_NO_VALUE.
+  ///
+  /// @param terminal The terminal to read from (must not be NULL)
+  /// @param options Selection formatting options
+  /// @param buf Output buffer, or NULL to query required size
+  /// @param buf_len Length of buf in bytes
+  /// @param out_written Number of bytes written, or required size on
+  /// GHOSTTY_OUT_OF_SPACE (must not be NULL)
+  /// @return GHOSTTY_SUCCESS on success, or an error code on failure
+  ///
+  /// @ingroup selection
+  external int ghostty_terminal_selection_format_buf(
+    int terminal,
+    int options,
+    Pointer buf,
+    int buf_len,
+    Pointer out_written,
+  );
+
+  /// Get the current endpoint ordering of a selection snapshot.
+  ///
+  /// The selection's start and end grid refs must both be valid untracked
+  /// snapshots for the given terminal's currently active screen. In practice,
+  /// they must come from that terminal and screen, and no mutating terminal call
+  /// may have occurred since the refs were produced or reconstructed from
+  /// tracked refs. Passing refs from another terminal, another screen, or stale
+  /// refs violates this precondition.
+  ///
+  /// @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param selection Selection snapshot to inspect
+  /// @param[out] out_order On success, receives the selection order
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the terminal,
+  /// selection, or output pointer are invalid. Selection reference
+  /// validity is a precondition and is not checked.
+  ///
+  /// @ingroup selection
+  external int ghostty_terminal_selection_order(
+    int terminal,
+    Pointer selection,
+    Pointer out_order,
+  );
+
+  /// Return a selection snapshot with endpoints ordered as requested.
+  ///
+  /// Use GHOSTTY_SELECTION_ORDER_FORWARD to get top-left to bottom-right bounds,
+  /// and GHOSTTY_SELECTION_ORDER_REVERSE to get bottom-right to top-left bounds.
+  /// Mirrored desired orders are accepted but normalized the same as forward.
+  /// The output selection is a fresh untracked snapshot and is not installed as
+  /// the terminal's current selection.
+  ///
+  /// The selection's start and end grid refs must both be valid untracked
+  /// snapshots for the given terminal's currently active screen. In practice,
+  /// they must come from that terminal and screen, and no mutating terminal call
+  /// may have occurred since the refs were produced or reconstructed from
+  /// tracked refs. Passing refs from another terminal, another screen, or stale
+  /// refs violates this precondition.
+  ///
+  /// @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
+  /// @param selection Selection snapshot to order
+  /// @param desired Desired endpoint order
+  /// @param[out] out_selection On success, receives the ordered selection
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the terminal,
+  /// selection, desired order, or output pointer are invalid. Selection
+  /// reference validity is a precondition and is not checked.
+  ///
+  /// @ingroup selection
+  external int ghostty_terminal_selection_ordered(
+    int terminal,
+    Pointer selection,
+    int desired,
+    Pointer out_selection,
+  );
+
   /// Set an option on the terminal.
   ///
   /// Configures terminal callbacks and associated state such as the
@@ -2114,6 +2652,99 @@ extension type GhosttyExports(JSObject _) implements JSObject {
   ///
   /// @ingroup terminal
   external void ghostty_terminal_vt_write(int terminal, Pointer data, int len);
+
+  /// Free a tracked grid reference.
+  ///
+  /// Passing NULL is allowed and has no effect. A tracked reference may be freed
+  /// after the terminal that created it is freed.
+  ///
+  /// @param ref Tracked grid reference to free.
+  ///
+  /// @ingroup grid_ref
+  external void ghostty_tracked_grid_ref_free(int ref);
+
+  /// Return whether a tracked grid reference currently has a meaningful value.
+  ///
+  /// If the terminal that created the tracked reference has been freed, this
+  /// returns false.
+  ///
+  /// @param ref Tracked grid reference.
+  /// @return true if the reference currently has a meaningful value.
+  ///
+  /// @ingroup grid_ref
+  external int ghostty_tracked_grid_ref_has_value(int ref);
+
+  /// Convert a tracked grid reference to a point in the requested coordinate
+  /// space.
+  ///
+  /// This is the tracked equivalent of ghostty_terminal_point_from_grid_ref().
+  /// Unlike snapshotting, this does not expose an intermediate untracked
+  /// GhosttyGridRef.
+  ///
+  /// A tracked reference is resolved against the terminal screen/page-list that
+  /// currently owns the reference. If the terminal has switched between primary
+  /// and alternate screens since the reference was created or last set, this may
+  /// be different from the terminal's currently active screen.
+  ///
+  /// If the tracked reference no longer has a meaningful value, this returns
+  /// GHOSTTY_NO_VALUE. GHOSTTY_NO_VALUE is also returned when the reference cannot
+  /// be represented in the requested coordinate space, including after the
+  /// terminal that created the tracked reference has been freed.
+  ///
+  /// @param ref Tracked grid reference.
+  /// @param tag Coordinate space to convert into.
+  /// @param[out] out_point On success, receives the coordinate. May be NULL.
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if ref is invalid,
+  /// or GHOSTTY_NO_VALUE if there is no representable value.
+  ///
+  /// @ingroup grid_ref
+  external int ghostty_tracked_grid_ref_point(
+    int ref,
+    int tag,
+    Pointer out_point,
+  );
+
+  /// Move an existing tracked grid reference to a new terminal point.
+  ///
+  /// On success, the tracked reference begins tracking the new point and any prior
+  /// "no value" state is cleared. On GHOSTTY_OUT_OF_MEMORY, the original tracked
+  /// reference is left unchanged.
+  ///
+  /// The terminal must be the same terminal that created the tracked reference.
+  /// The point is resolved against the terminal screen/page-list that is active at
+  /// the time this function is called. If the terminal has switched between
+  /// primary and alternate screens, this may move the tracked reference from one
+  /// screen/page-list to the other.
+  ///
+  /// @param ref Tracked grid reference.
+  /// @param terminal Terminal instance that owns the reference.
+  /// @param point New point to track.
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if ref, terminal,
+  /// or point is invalid, or GHOSTTY_OUT_OF_MEMORY if allocation fails.
+  ///
+  /// @ingroup grid_ref
+  external int ghostty_tracked_grid_ref_set(int ref, int terminal, int point);
+
+  /// Snapshot a tracked grid reference into a regular GhosttyGridRef.
+  ///
+  /// The returned GhosttyGridRef is an untracked snapshot and has the same
+  /// lifetime rules as ghostty_terminal_grid_ref(): it is only valid until the
+  /// next terminal update. Snapshot immediately before calling
+  /// ghostty_grid_ref_cell(), ghostty_grid_ref_row(),
+  /// ghostty_grid_ref_graphemes(), ghostty_grid_ref_hyperlink_uri(), or
+  /// ghostty_grid_ref_style().
+  ///
+  /// If the tracked reference no longer has a meaningful value, this returns
+  /// GHOSTTY_NO_VALUE. This includes references whose owning terminal has been
+  /// freed.
+  ///
+  /// @param ref Tracked grid reference.
+  /// @param[out] out_ref On success, receives an untracked snapshot. May be NULL.
+  /// @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if ref is invalid,
+  /// or GHOSTTY_NO_VALUE if the tracked location was discarded.
+  ///
+  /// @ingroup grid_ref
+  external int ghostty_tracked_grid_ref_snapshot(int ref, Pointer out_ref);
 
   /// Return a pointer to a null-terminated JSON string describing the
   /// layout of every C API struct for the current target.

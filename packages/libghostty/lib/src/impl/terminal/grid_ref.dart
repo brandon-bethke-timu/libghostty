@@ -36,18 +36,20 @@ final class GridRef {
     Terminal terminal, {
     required int col,
     required int row,
-    PointTag pointTag = PointTag.active,
+    PointTag pointTag = .active,
   }) => GridRef._(terminal, col: col, row: row, pointTag: pointTag);
 
   GridRef._(
     Terminal terminal, {
     required int col,
     required int row,
-    PointTag pointTag = PointTag.active,
-  }) : _terminal = terminal,
-       _handle = check(
-         bindings.terminalGridRef(terminal._handle, pointTag, col, row),
-       ) {
+    PointTag pointTag = .active,
+  }) : this._fromHandle(
+         terminal,
+         check(bindings.terminalGridRef(terminal._handle, pointTag, col, row)),
+       );
+
+  GridRef._fromHandle(this._terminal, this._handle) {
     _finalizer.attach(this, _handle, detach: this);
   }
 
