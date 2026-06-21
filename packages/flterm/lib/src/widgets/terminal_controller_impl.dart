@@ -87,7 +87,7 @@ class TerminalControllerImpl extends TerminalController
   }
 
   @override
-  TerminalScreen get activeScreen => _activeScreen;
+  TerminalScreen get activeScreen => terminal.activeScreen;
 
   @override
   set brightness(Brightness value) {
@@ -112,11 +112,13 @@ class TerminalControllerImpl extends TerminalController
   bool get cursorBlinks {
     if (!_cursorBlinking || !hasFocus) return false;
     if (_activeScreen == .alternate) return true;
-    final sc = _scrollController;
-    if (sc == null || !sc.hasClients) return true;
-    final pos = sc.position;
-    if (!pos.hasContentDimensions) return true;
-    return pos.pixels >= pos.maxScrollExtent - 1.0;
+    final scrollController = _scrollController;
+    if (scrollController == null || !scrollController.hasClients) {
+      return terminal.isViewportActive;
+    }
+    final position = scrollController.position;
+    if (!position.hasContentDimensions) return terminal.isViewportActive;
+    return position.pixels >= position.maxScrollExtent - 1.0;
   }
 
   @override
