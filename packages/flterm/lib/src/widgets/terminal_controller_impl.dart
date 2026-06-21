@@ -35,6 +35,8 @@ class TerminalControllerImpl extends TerminalController
   @override
   final Terminal terminal;
   final _renderState = RenderState();
+  final _rowIterator = RowIterator();
+  final _cellIterator = CellIterator();
   final _keyEncoder = KeyEncoder();
   final _mouseEncoder = MouseEncoder();
   final vt.KeyEvent _keyEvent;
@@ -75,7 +77,6 @@ class TerminalControllerImpl extends TerminalController
       ),
       super.base() {
     installDefaultKittyPngDecoder();
-    _applyTerminalOptions();
     _textInput
       ..onTextCommitted = _handleTextCommitted
       ..onDelete = _handleDelete
@@ -83,11 +84,12 @@ class TerminalControllerImpl extends TerminalController
       ..onNewline = _handleNewline;
     _wireTerminalCallbacks();
     _applyModes();
+    _applyTerminalOptions();
     terminal.addListener(_onTerminalChanged);
   }
 
   @override
-  TerminalScreen get activeScreen => _activeScreen;
+  TerminalScreen get activeScreen => terminal.activeScreen;
 
   @override
   set brightness(Brightness value) {
@@ -102,8 +104,8 @@ class TerminalControllerImpl extends TerminalController
   set config(TerminalConfig value) {
     if (_config == value) return;
     _config = value;
-    _applyTerminalOptions();
     _applyModes();
+    _applyTerminalOptions();
     _wireTerminalCallbacks();
     notifyListeners();
   }
@@ -112,11 +114,13 @@ class TerminalControllerImpl extends TerminalController
   bool get cursorBlinks {
     if (!_cursorBlinking || !hasFocus) return false;
     if (_activeScreen == .alternate) return true;
-    final sc = _scrollController;
-    if (sc == null || !sc.hasClients) return true;
-    final pos = sc.position;
-    if (!pos.hasContentDimensions) return true;
-    return pos.pixels >= pos.maxScrollExtent - 1.0;
+    final scrollController = _scrollController;
+    if (scrollController == null || !scrollController.hasClients) {
+      return terminal.isViewportActive;
+    }
+    final position = scrollController.position;
+    if (!position.hasContentDimensions) return terminal.isViewportActive;
+    return position.pixels >= position.maxScrollExtent - 1.0;
   }
 
   @override
@@ -247,6 +251,8 @@ class TerminalControllerImpl extends TerminalController
     _mouseEvent.dispose();
     _keyEncoder.dispose();
     _mouseEncoder.dispose();
+    _cellIterator.dispose();
+    _rowIterator.dispose();
     _renderState.dispose();
     terminal.dispose();
     super.dispose();
@@ -456,13 +462,13 @@ class TerminalControllerImpl extends TerminalController
 
     var lastScreenRow = -1;
     var lastContentCol = 0;
-    for (var row = 0; row < rows; row++) {
+    _rowIterator.reset(_renderState);
+    while (_rowIterator.next() && _rowIterator.index < rows) {
+      final row = _rowIterator.index;
       var rowLastCol = 0;
-      for (var col = 0; col < cols; col++) {
-        final ref = GridRef.at(terminal, col: col, row: row);
-        final hasContent = ref.graphemes.isNotEmpty;
-        ref.dispose();
-        if (hasContent) rowLastCol = col + 1;
+      _cellIterator.reset(_rowIterator);
+      while (_cellIterator.next() && _cellIterator.col < cols) {
+        if (_cellIterator.hasText) rowLastCol = _cellIterator.col + 1;
       }
       if (rowLastCol > 0) {
         lastScreenRow = row;
@@ -654,6 +660,10 @@ class TerminalControllerImpl extends TerminalController
   void _applyTerminalOptions() {
     terminal.kittyImageStorageLimit = _config.kittyImageStorageLimit;
     terminal.setApcBufferLimit(_config.apcBufferLimit);
+    terminal.setGlyphProtocol(enabled: _config.glyphProtocol);
+    terminal.defaultCursorShape = _config.cursorStyle;
+    terminal.defaultCursorBlink = _config.cursorBlink;
+    _cursorBlinking = _effectiveCursorBlinking();
   }
 
   bool _consumeCommittedCompositionEditKey(
@@ -669,16 +679,6 @@ class TerminalControllerImpl extends TerminalController
     if (key != .backspace && key != .delete) return false;
     if (!mods.isEmpty) return false;
     return _textInput.consumeCommittedCompositionEdit();
-  }
-
-  Mods _currentMods() {
-    var mods = _virtualMods;
-    final keyboard = HardwareKeyboard.instance;
-    if (keyboard.isShiftPressed) mods = mods | const .shift();
-    if (keyboard.isControlPressed) mods = mods | const .ctrl();
-    if (keyboard.isAltPressed) mods = mods | const .alt();
-    if (keyboard.isMetaPressed) mods = mods | const .superKey();
-    return mods;
   }
 
   Mods _consumedModsFor(
@@ -698,6 +698,20 @@ class TerminalControllerImpl extends TerminalController
     if (codepoints.moveNext()) return const .none();
     if (codepoint == unshiftedCodepoint) return const .none();
     return const .shift();
+  }
+
+  Mods _currentMods() {
+    var mods = _virtualMods;
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isShiftPressed) mods = mods | const .shift();
+    if (keyboard.isControlPressed) mods = mods | const .ctrl();
+    if (keyboard.isAltPressed) mods = mods | const .alt();
+    if (keyboard.isMetaPressed) mods = mods | const .superKey();
+    return mods;
+  }
+
+  bool _effectiveCursorBlinking() {
+    return _config.cursorBlink ?? terminal.modeGet(const .cursorBlinking());
   }
 
   bool _emitKeyPress(
@@ -849,8 +863,7 @@ class TerminalControllerImpl extends TerminalController
       changed = true;
     }
 
-    final newCursorBlinking =
-        _config.cursorBlink ?? terminal.modeGet(const .cursorBlinking());
+    final newCursorBlinking = _effectiveCursorBlinking();
     if (newCursorBlinking != _cursorBlinking) {
       _cursorBlinking = newCursorBlinking;
       changed = true;
@@ -920,6 +933,7 @@ class TerminalControllerImpl extends TerminalController
     terminal.onWritePty = _emitOutput;
     terminal.onBell = () => onBell?.call();
     terminal.onTitleChanged = () => onTitleChanged?.call();
+    terminal.onPwdChanged = _handlePwdChanged;
     terminal.onColorScheme = () => _brightness == .light ? .light : .dark;
     terminal.onSize = _handleSizeQuery;
     terminal.onDeviceAttributes = () => _config.deviceAttributes;
@@ -927,6 +941,11 @@ class TerminalControllerImpl extends TerminalController
     terminal.onEnquiry = enquiry.isEmpty
         ? null
         : () => .fromList(utf8.encode(enquiry));
+  }
+
+  void _handlePwdChanged() {
+    onPwdChanged?.call();
+    notifyListeners();
   }
 
   /// Filters out control characters and macOS function key private-use

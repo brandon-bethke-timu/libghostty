@@ -344,6 +344,63 @@ void main() {
 
         expect(binding.cursorBlinks, isFalse);
       });
+
+      testWidgets('uses libghostty viewport-active state on primary screen', (
+        tester,
+      ) async {
+        controller.dispose();
+        controller = TerminalControllerImpl(
+          config: const TerminalConfig(cols: 20, rows: 2),
+        );
+        binding = controller as TerminalViewBinding;
+        final focusNode = FocusNode();
+        final sc = ScrollController();
+        addTearDown(focusNode.dispose);
+        addTearDown(sc.dispose);
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Focus(focusNode: focusNode, child: const SizedBox()),
+          ),
+        );
+        binding.attach(focusNode, sc);
+        focusNode.requestFocus();
+        await tester.pump();
+
+        writeNumberedLines(controller, 10);
+        controller.terminal.scrollViewport(-1);
+
+        expect(controller.hasFocus, isTrue);
+        expect(controller.scrollbackRows, greaterThan(0));
+        expect(controller.terminal.isViewportActive, isFalse);
+        expect(binding.cursorBlinks, isFalse);
+      });
+
+      testWidgets('respects cursorBlink config before terminal changes', (
+        tester,
+      ) async {
+        controller.dispose();
+        controller = TerminalControllerImpl(
+          config: const TerminalConfig(cursorBlink: false),
+        );
+        binding = controller as TerminalViewBinding;
+        final focusNode = FocusNode();
+        final sc = ScrollController();
+        addTearDown(focusNode.dispose);
+        addTearDown(sc.dispose);
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Focus(focusNode: focusNode, child: const SizedBox()),
+          ),
+        );
+        binding.attach(focusNode, sc);
+        focusNode.requestFocus();
+        await tester.pump();
+
+        expect(controller.hasFocus, isTrue);
+        expect(binding.cursorBlinks, isFalse);
+      });
     });
 
     group('paste', () {

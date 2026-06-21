@@ -1,5 +1,5 @@
 import 'package:libghostty/libghostty.dart'
-    show CellWidth, GridRef, RenderState, Terminal;
+    show CellIterator, CellWidth, GridRef, RenderState, RowIterator, Terminal;
 
 final _defaultWordPattern = RegExp(r'\w');
 
@@ -130,74 +130,58 @@ extension TerminalScreenExtension on Terminal {
   }) {
     final isWord = wordPattern ?? _defaultWordPattern;
     final rs = RenderState()..update(this);
+    final rows = RowIterator();
+    final cells = CellIterator();
     try {
       if (row < 0 || row >= rs.rows) return (col, col + 1);
 
       final maxCol = rs.cols;
       if (col < 0 || col >= maxCol) return (col, col + 1);
 
-      int snapped;
-      {
-        final ref = GridRef.at(this, col: col, row: row);
-        snapped = ref.wide == CellWidth.spacerTail && col > 0 ? col - 1 : col;
-        ref.dispose();
+      rows.reset(rs);
+      for (var i = 0; i <= row; i++) {
+        if (!rows.next()) return (col, col + 1);
       }
+      cells.reset(rows);
 
-      String contentAt(int c) {
-        final ref = GridRef.at(this, col: c, row: row);
-        final s = ref.content;
-        ref.dispose();
-        return s;
-      }
+      cells.select(col);
+      final snapped = cells.wide == .spacerTail && col > 0 ? col - 1 : col;
 
-      CellWidth wideAt(int c) {
-        final ref = GridRef.at(this, col: c, row: row);
-        final w = ref.wide;
-        ref.dispose();
-        return w;
-      }
-
-      bool isWideAt(int c) {
-        final ref = GridRef.at(this, col: c, row: row);
-        final w = ref.isWide;
-        ref.dispose();
-        return w;
-      }
-
-      bool matchesWord(String s) => isWord.matchAsPrefix(s) != null;
-
-      final charAtPos = contentAt(snapped);
-      if (charAtPos.isEmpty || !matchesWord(charAtPos)) {
-        final span = isWideAt(snapped) ? 2 : 1;
+      cells.select(snapped);
+      final content = cells.content;
+      if (content.isEmpty || isWord.matchAsPrefix(content) == null) {
+        final span = cells.wide == .wide ? 2 : 1;
         return (snapped, snapped + span);
       }
 
       var start = snapped;
       while (start > 0) {
-        final w = wideAt(start - 1);
-        if (w == CellWidth.spacerTail) {
+        cells.select(start - 1);
+        if (cells.wide == .spacerTail) {
           start--;
           continue;
         }
-        final c = contentAt(start - 1);
-        if (c.isEmpty || !matchesWord(c)) break;
+        final content = cells.content;
+        if (content.isEmpty || isWord.matchAsPrefix(content) == null) break;
         start--;
       }
 
       var end = snapped + 1;
       while (end < maxCol) {
-        final w = wideAt(end);
-        if (w == CellWidth.spacerTail) {
+        cells.select(end);
+        if (cells.wide == .spacerTail) {
           end++;
           continue;
         }
-        final c = contentAt(end);
-        if (c.isEmpty || !matchesWord(c)) break;
+        final content = cells.content;
+        if (content.isEmpty || isWord.matchAsPrefix(content) == null) break;
         end++;
       }
 
       return (start, end);
     } finally {
+      cells.dispose();
+      rows.dispose();
       rs.dispose();
     }
   }

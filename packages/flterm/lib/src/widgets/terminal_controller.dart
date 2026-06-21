@@ -38,6 +38,9 @@ abstract class TerminalController extends ChangeNotifier
   /// Called when the terminal title changes. Read [title] for the value.
   VoidCallback? onTitleChanged;
 
+  /// Called when the working directory changes. Read [pwd] for the value.
+  VoidCallback? onPwdChanged;
+
   /// Called when the grid dimensions change. Forward to your backend.
   OnResize? onResize;
 

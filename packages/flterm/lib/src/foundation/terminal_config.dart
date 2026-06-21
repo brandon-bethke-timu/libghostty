@@ -98,6 +98,12 @@ class TerminalConfig {
   /// Defaults to 65 MiB. Set to 0 to reject APC payload data.
   final int apcBufferLimit;
 
+  /// Whether Glyph Protocol APC handling is enabled.
+  ///
+  /// Defaults to false. Enable when the embedder wants libghostty to parse
+  /// Glyph Protocol image payloads in addition to Kitty graphics.
+  final bool glyphProtocol;
+
   /// Initial cursor shape. Terminal programs can override via DECSCUSR.
   final CursorShape cursorStyle;
 
@@ -154,6 +160,7 @@ class TerminalConfig {
     this.rows = 24,
     this.wordPattern,
     this.cursorBlink,
+    this.glyphProtocol = false,
     this.apcBufferLimit = defaultApcBufferLimit,
     this.enquiryResponse = '',
     this.modes = defaultModes,
@@ -179,6 +186,7 @@ class TerminalConfig {
     scrollbackLimit,
     kittyImageStorageLimit,
     apcBufferLimit,
+    glyphProtocol,
     cursorStyle,
     cursorBlink,
     .hashAllUnordered(modes.entries.map((e) => .hash(e.key, e.value))),
@@ -198,6 +206,7 @@ class TerminalConfig {
           scrollbackLimit == other.scrollbackLimit &&
           kittyImageStorageLimit == other.kittyImageStorageLimit &&
           apcBufferLimit == other.apcBufferLimit &&
+          glyphProtocol == other.glyphProtocol &&
           cursorStyle == other.cursorStyle &&
           cursorBlink == other.cursorBlink &&
           _modesEqual(modes, other.modes) &&
@@ -214,6 +223,7 @@ class TerminalConfig {
     int? scrollbackLimit,
     int? kittyImageStorageLimit,
     int? apcBufferLimit,
+    bool? glyphProtocol,
     CursorShape? cursorStyle,
     bool? cursorBlink,
     Map<TerminalMode, bool>? modes,
@@ -230,6 +240,7 @@ class TerminalConfig {
       kittyImageStorageLimit:
           kittyImageStorageLimit ?? this.kittyImageStorageLimit,
       apcBufferLimit: apcBufferLimit ?? this.apcBufferLimit,
+      glyphProtocol: glyphProtocol ?? this.glyphProtocol,
       cursorStyle: cursorStyle ?? this.cursorStyle,
       cursorBlink: cursorBlink ?? this.cursorBlink,
       modes: modes ?? this.modes,

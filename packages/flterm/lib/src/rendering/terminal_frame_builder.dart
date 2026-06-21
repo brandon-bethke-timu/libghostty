@@ -1023,6 +1023,10 @@ final class _StyleResolver {
     required int? backgroundArgb,
   }) {
     final id = cell.styleId;
+    if (!cell.hasStyling && backgroundArgb == null) {
+      return (_defaultFg, _defaultBg, const Style(), false);
+    }
+
     final style = cell.style;
     final contentBackground = style.background is DefaultColor
         ? backgroundArgb

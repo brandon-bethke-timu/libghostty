@@ -482,6 +482,39 @@ void main() {
 
         expect(KittyGraphics.of(controller.terminal)!.image(92), isNull);
       });
+
+      test('initial config applies cursor reset defaults', () {
+        final custom = TerminalControllerImpl(
+          config: const TerminalConfig(
+            cursorStyle: CursorShape.underline,
+            cursorBlink: true,
+          ),
+        );
+        final renderState = RenderState();
+        addTearDown(custom.dispose);
+        addTearDown(renderState.dispose);
+
+        writeTerminalUtf8(custom.terminal, '\x1b[0 q');
+        renderState.update(custom.terminal);
+
+        expect(renderState.cursor.shape, CursorShape.underline);
+        expect(renderState.cursor.blinking, isTrue);
+      });
+
+      test('setter applies cursor reset defaults', () {
+        final renderState = RenderState();
+        addTearDown(renderState.dispose);
+
+        controller.config = const TerminalConfig(
+          cursorStyle: CursorShape.bar,
+          cursorBlink: false,
+        );
+        writeTerminalUtf8(controller.terminal, '\x1b[0 q');
+        renderState.update(controller.terminal);
+
+        expect(renderState.cursor.shape, CursorShape.bar);
+        expect(renderState.cursor.blinking, isFalse);
+      });
     });
 
     group('modeGet and modeSet', () {
@@ -522,6 +555,41 @@ void main() {
         writeTerminalUtf8(controller.terminal, '\x1b]0;new title\x1b\\');
 
         expect(fired, isTrue);
+      });
+    });
+
+    group('pwd', () {
+      test('updates via OSC 7 escape sequence', () {
+        writeTerminalUtf8(controller.terminal, '\x1b]7;file:///tmp\x07');
+
+        expect(controller.pwd, 'file:///tmp');
+      });
+
+      test('notifies listeners on OSC 7 change', () {
+        var notifyCount = 0;
+        controller.addListener(() => notifyCount++);
+
+        writeTerminalUtf8(controller.terminal, '\x1b]7;file:///tmp\x07');
+
+        expect(notifyCount, greaterThan(0));
+      });
+
+      test('fires onPwdChanged callback', () {
+        var fired = false;
+        controller.onPwdChanged = () => fired = true;
+
+        writeTerminalUtf8(controller.terminal, '\x1b]7;file:///tmp\x07');
+
+        expect(fired, isTrue);
+      });
+
+      test('exposes updated value during onPwdChanged callback', () {
+        var pwd = '';
+        controller.onPwdChanged = () => pwd = controller.pwd;
+
+        writeTerminalUtf8(controller.terminal, '\x1b]7;file:///tmp\x07');
+
+        expect(pwd, 'file:///tmp');
       });
     });
 

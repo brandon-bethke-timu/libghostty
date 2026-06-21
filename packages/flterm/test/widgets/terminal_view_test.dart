@@ -96,6 +96,7 @@ void main() {
     Widget wrapInApp({
       required TerminalController controller,
       TerminalTheme? theme,
+      TerminalScrollController? scrollController,
       bool autofocus = false,
       bool showKeyboard = true,
       MouseAutoHide mouseAutoHide = .onInput,
@@ -112,6 +113,7 @@ void main() {
             child: TerminalView(
               controller: controller,
               theme: theme,
+              scrollController: scrollController,
               autofocus: autofocus,
               showKeyboard: showKeyboard,
               mouseAutoHide: mouseAutoHide,
@@ -165,6 +167,40 @@ void main() {
       for (var i = 0; i < count; i++) {
         writeUtf8(controller, 'line $i\r\n');
       }
+    }
+
+    TerminalRenderer renderer(WidgetTester tester) {
+      return tester.widget<TerminalRenderer>(find.byType(TerminalRenderer));
+    }
+
+    Future<TerminalScrollController> pumpBlinkingScrollableTerminal(
+      WidgetTester tester,
+    ) async {
+      controller.dispose();
+      controller = TerminalController(
+        config: const TerminalConfig(cursorBlink: true),
+      );
+      final scrollController = TerminalScrollController();
+      final theme = TerminalTheme.dark().copyWith(
+        cursor: const CursorTheme(blinkInterval: Duration(milliseconds: 10)),
+      );
+      addTearDown(scrollController.dispose);
+      await tester.pumpWidget(
+        wrapInApp(
+          controller: controller,
+          theme: theme,
+          scrollController: scrollController,
+          autofocus: true,
+          showKeyboard: false,
+          width: 400,
+          height: 80,
+        ),
+      );
+      await tester.pump();
+      writeNumberedLines(40);
+      await tester.pump();
+      await tester.pump();
+      return scrollController;
     }
 
     testWidgets('renders with controller', (tester) async {
@@ -254,6 +290,47 @@ void main() {
 
       expect(controller.hasFocus, isTrue);
       expect(controller.keyboardState, KeyboardState.showing);
+    });
+
+    testWidgets('scrolling into scrollback keeps the cursor visible', (
+      tester,
+    ) async {
+      final scrollController = await pumpBlinkingScrollableTerminal(tester);
+
+      scrollController.jumpTo(0);
+      await tester.pump();
+
+      expect(
+        (controller as TerminalViewBinding).terminal.isViewportActive,
+        isFalse,
+      );
+      expect(renderer(tester).blinkVisible, isTrue);
+
+      await tester.pump(const Duration(milliseconds: 11));
+      await tester.pump();
+
+      expect(renderer(tester).blinkVisible, isTrue);
+    });
+
+    testWidgets('scrolling to the live viewport restarts cursor blinking', (
+      tester,
+    ) async {
+      final scrollController = await pumpBlinkingScrollableTerminal(tester);
+
+      scrollController.jumpTo(0);
+      await tester.pump();
+      scrollController.jumpTo(scrollController.position.maxScrollExtent);
+      await tester.pump();
+
+      expect(
+        (controller as TerminalViewBinding).terminal.isViewportActive,
+        isTrue,
+      );
+
+      await tester.pump(const Duration(milliseconds: 11));
+      await tester.pump();
+
+      expect(renderer(tester).blinkVisible, isFalse);
     });
 
     testWidgets('text input produces output via onOutput', (tester) async {
