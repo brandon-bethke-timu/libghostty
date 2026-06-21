@@ -350,6 +350,115 @@ abstract interface class GhosttyBindings {
   );
   CResult<RawGridRef> trackedGridRefSnapshot(int ref);
 
+  CResult<RawSelection?> terminalGetSelection(int handle);
+  Result terminalSetSelection(int handle, RawSelection? selection);
+  CResult<RawSelection?> terminalSelectAll(int terminal);
+  CResult<RawSelection?> terminalSelectWord(
+    int terminal,
+    RawGridRef ref, {
+    List<int>? boundaryCodepoints,
+  });
+  CResult<RawSelection?> terminalSelectWordBetween(
+    int terminal,
+    RawGridRef start,
+    RawGridRef end, {
+    List<int>? boundaryCodepoints,
+  });
+  CResult<RawSelection?> terminalSelectLine(
+    int terminal,
+    RawGridRef ref, {
+    List<int>? whitespace,
+    bool semanticPromptBoundary = false,
+  });
+  CResult<RawSelection?> terminalSelectOutput(int terminal, RawGridRef ref);
+  CResult<RawSelection?> terminalSelectionAdjust(
+    int terminal,
+    RawSelection selection,
+    SelectionAdjust adjustment,
+  );
+  CResult<SelectionOrder> terminalSelectionOrder(
+    int terminal,
+    RawSelection selection,
+  );
+  CResult<RawSelection?> terminalSelectionOrdered(
+    int terminal,
+    RawSelection selection,
+    SelectionOrder desired,
+  );
+  CResult<bool> terminalSelectionContains(
+    int terminal,
+    RawSelection selection,
+    PointTag pointTag,
+    int col,
+    int row,
+  );
+  CResult<bool> terminalSelectionEqual(
+    int terminal,
+    RawSelection a,
+    RawSelection b,
+  );
+  CResult<String> terminalSelectionFormat(
+    int terminal,
+    FormatterFormat format, {
+    bool unwrap = false,
+    bool trim = false,
+    RawSelection? selection,
+  });
+
+  CResult<int> selectionGestureNew();
+  void selectionGestureFree(int gesture, int terminal);
+  void selectionGestureReset(int gesture, int terminal);
+  CResult<RawSelection?> selectionGestureEvent(
+    int gesture,
+    int terminal,
+    int event,
+  );
+  CResult<int> selectionGestureEventNew(SelectionGestureEventType type);
+  void selectionGestureEventFree(int event);
+  Result selectionGestureEventClear(
+    int event,
+    SelectionGestureEventOption option,
+  );
+  Result selectionGestureEventSetRef(int event, RawGridRef ref);
+  Result selectionGestureEventSetPosition(int event, double x, double y);
+  Result selectionGestureEventSetRepeatDistance(int event, double value);
+  Result selectionGestureEventSetTimeNs(int event, int value);
+  Result selectionGestureEventSetRepeatIntervalNs(int event, int value);
+  Result selectionGestureEventSetWordBoundaryCodepoints(
+    int event,
+    List<int> codepoints,
+  );
+  Result selectionGestureEventSetBehaviors(
+    int event,
+    SelectionGestureBehavior singleClick,
+    SelectionGestureBehavior doubleClick,
+    SelectionGestureBehavior tripleClick,
+  );
+  Result selectionGestureEventSetRectangle(int event, {required bool value});
+  Result selectionGestureEventSetGeometry(
+    int event, {
+    required int columns,
+    required int cellWidth,
+    required int paddingLeft,
+    required int screenHeight,
+  });
+  Result selectionGestureEventSetViewport(
+    int event, {
+    required int col,
+    required int row,
+  });
+  CResult<int> selectionGestureGetClickCount(int gesture, int terminal);
+  CResult<bool> selectionGestureGetDragged(int gesture, int terminal);
+  CResult<SelectionGestureAutoscroll> selectionGestureGetAutoscroll(
+    int gesture,
+    int terminal,
+  );
+  CResult<SelectionGestureBehavior> selectionGestureGetBehavior(
+    int gesture,
+    int terminal,
+  );
+  CResult<RawGridRef> selectionGestureGetAnchor(int gesture, int terminal);
+
   CResult<int> formatterTerminalNew(
     int terminal,
     FormatterFormat format, {

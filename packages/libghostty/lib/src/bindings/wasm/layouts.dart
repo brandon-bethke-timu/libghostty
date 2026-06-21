@@ -56,6 +56,33 @@ class Layouts {
   late final int selectionEnd;
   late final int selectionRectangle;
 
+  // GhosttyTerminalSelectWordOptions
+  late final int selectWordSize;
+  late final int selectWordRef;
+  late final int selectWordBoundaryCodepoints;
+  late final int selectWordBoundaryCodepointsLen;
+
+  // GhosttyTerminalSelectWordBetweenOptions
+  late final int selectWordBetweenSize;
+  late final int selectWordBetweenStart;
+  late final int selectWordBetweenEnd;
+  late final int selectWordBetweenBoundaryCodepoints;
+  late final int selectWordBetweenBoundaryCodepointsLen;
+
+  // GhosttyTerminalSelectLineOptions
+  late final int selectLineSize;
+  late final int selectLineRef;
+  late final int selectLineWhitespace;
+  late final int selectLineWhitespaceLen;
+  late final int selectLineSemanticPromptBoundary;
+
+  // GhosttyTerminalSelectionFormatOptions
+  late final int selectionFormatSize;
+  late final int selectionFormatEmit;
+  late final int selectionFormatUnwrap;
+  late final int selectionFormatTrim;
+  late final int selectionFormatSelection;
+
   // GhosttyGridRef
   late final int gridRefSize;
   late final int gridRefNode;
@@ -80,6 +107,29 @@ class Layouts {
   late final int pointCoordinateSize;
   late final int pointCoordinateX;
   late final int pointCoordinateY;
+
+  // GhosttyCodepoints
+  late final int codepointsSize;
+  late final int codepointsPtr;
+  late final int codepointsLen;
+
+  // GhosttySurfacePosition
+  late final int surfacePositionSize;
+  late final int surfacePositionX;
+  late final int surfacePositionY;
+
+  // GhosttySelectionGestureBehaviors
+  late final int gestureBehaviorsSize;
+  late final int gestureBehaviorsSingleClick;
+  late final int gestureBehaviorsDoubleClick;
+  late final int gestureBehaviorsTripleClick;
+
+  // GhosttySelectionGestureGeometry
+  late final int gestureGeometrySize;
+  late final int gestureGeometryColumns;
+  late final int gestureGeometryCellWidth;
+  late final int gestureGeometryPaddingLeft;
+  late final int gestureGeometryScreenHeight;
 
   // GhosttyMouseEncoderSize
   late final int mouseEncoderSizeSize;
@@ -213,6 +263,43 @@ class Layouts {
     selectionEnd = struct['end'];
     selectionRectangle = struct['rectangle'];
 
+    struct = _Struct(types, 'GhosttyTerminalSelectWordOptions');
+    selectWordSize = struct.size;
+    selectWordRef = struct['ref'];
+    selectWordBoundaryCodepoints = struct['boundary_codepoints'];
+    selectWordBoundaryCodepointsLen = struct['boundary_codepoints_len'];
+
+    struct = _Struct(types, 'GhosttyTerminalSelectWordBetweenOptions');
+    selectWordBetweenSize = struct.size;
+    selectWordBetweenStart = struct['start'];
+    selectWordBetweenEnd = struct['end'];
+    selectWordBetweenBoundaryCodepoints = struct['boundary_codepoints'];
+    selectWordBetweenBoundaryCodepointsLen = struct['boundary_codepoints_len'];
+
+    struct = _Struct(types, 'GhosttyTerminalSelectLineOptions');
+    selectLineSize = struct.size;
+    selectLineRef = struct['ref'];
+    selectLineWhitespace = struct['whitespace'];
+    selectLineWhitespaceLen = struct['whitespace_len'];
+    selectLineSemanticPromptBoundary = struct['semantic_prompt_boundary'];
+
+    final selectionFormat = types['GhosttyTerminalSelectionFormatOptions'];
+    if (selectionFormat == null) {
+      // Some WASM artifacts omit this C struct from ghostty_type_json.
+      selectionFormatSize = 16;
+      selectionFormatEmit = 4;
+      selectionFormatUnwrap = 8;
+      selectionFormatTrim = 9;
+      selectionFormatSelection = 12;
+    } else {
+      struct = _Struct(types, 'GhosttyTerminalSelectionFormatOptions');
+      selectionFormatSize = struct.size;
+      selectionFormatEmit = struct['emit'];
+      selectionFormatUnwrap = struct['unwrap'];
+      selectionFormatTrim = struct['trim'];
+      selectionFormatSelection = struct['selection'];
+    }
+
     struct = _Struct(types, 'GhosttyGridRef');
     gridRefSize = struct.size;
     gridRefNode = struct['node'];
@@ -258,6 +345,29 @@ class Layouts {
     pointCoordinateSize = sub.size;
     pointCoordinateX = sub['x'];
     pointCoordinateY = sub['y'];
+
+    struct = _Struct(types, 'GhosttyCodepoints');
+    codepointsSize = struct.size;
+    codepointsPtr = struct['ptr'];
+    codepointsLen = struct['len'];
+
+    struct = _Struct(types, 'GhosttySurfacePosition');
+    surfacePositionSize = struct.size;
+    surfacePositionX = struct['x'];
+    surfacePositionY = struct['y'];
+
+    struct = _Struct(types, 'GhosttySelectionGestureBehaviors');
+    gestureBehaviorsSize = struct.size;
+    gestureBehaviorsSingleClick = struct['single_click'];
+    gestureBehaviorsDoubleClick = struct['double_click'];
+    gestureBehaviorsTripleClick = struct['triple_click'];
+
+    struct = _Struct(types, 'GhosttySelectionGestureGeometry');
+    gestureGeometrySize = struct.size;
+    gestureGeometryColumns = struct['columns'];
+    gestureGeometryCellWidth = struct['cell_width'];
+    gestureGeometryPaddingLeft = struct['padding_left'];
+    gestureGeometryScreenHeight = struct['screen_height'];
 
     struct = _Struct(types, 'GhosttyRenderStateColors');
     colorsSize = struct.size;
