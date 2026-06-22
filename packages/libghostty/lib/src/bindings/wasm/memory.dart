@@ -57,6 +57,8 @@ class Mem {
 
   void writeF32(int addr, double val) => view.setFloat32(addr, val, .little);
 
+  void writeF64(int addr, double val) => view.setFloat64(addr, val, .little);
+
   void writeI32(int addr, int val) => view.setInt32(addr, val, .little);
 
   void writeU16(int addr, int val) => view.setUint16(addr, val, .little);

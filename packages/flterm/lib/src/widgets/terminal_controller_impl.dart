@@ -519,13 +519,20 @@ class TerminalControllerImpl extends TerminalController
       terminal: terminal,
       format: format,
       unwrap: !block,
-      selection: Selection(
-        startCol: topCol,
-        startRow: topRow,
-        endCol: bottomCol,
-        endRow: bottomRow,
+      selection: Selection.fromRefs(
+        start: GridRef.at(
+          terminal,
+          col: topCol,
+          row: topRow,
+          pointTag: .screen,
+        ),
+        end: GridRef.at(
+          terminal,
+          col: bottomCol,
+          row: bottomRow,
+          pointTag: .screen,
+        ),
         rectangle: block,
-        pointTag: .screen,
       ),
     );
 

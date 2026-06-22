@@ -81,6 +81,8 @@ const RawPlacementRenderInfo _emptyRenderInfo = (
   sourceHeight: 0,
 );
 
+const RawGridRef _emptyGridRef = (node: 0, x: 0, y: 0);
+
 class WasmBindings implements GhosttyBindings {
   final Mem _mem;
   final web.Table _table;
@@ -2383,7 +2385,7 @@ class WasmBindings implements GhosttyBindings {
     );
     final value = _readGridRef(gridRefPtr);
     _exports.ghostty_wasm_free_u8_array(pointPtr, _layout.pointSize);
-    _freeGridRef(gridRefPtr);
+    _exports.ghostty_wasm_free_u8_array(gridRefPtr, _layout.gridRefSize);
     return (.fromValue(result), value);
   }
 
@@ -2568,7 +2570,7 @@ class WasmBindings implements GhosttyBindings {
       _exports.ghostty_tracked_grid_ref_snapshot(ref, gridRefPtr),
     );
     final value = _readGridRef(gridRefPtr);
-    _freeGridRef(gridRefPtr);
+    _exports.ghostty_wasm_free_u8_array(gridRefPtr, _layout.gridRefSize);
     return (result, value);
   }
 
@@ -2594,6 +2596,667 @@ class WasmBindings implements GhosttyBindings {
     _freeGridRef(refPtr);
     _exports.ghostty_wasm_free_u8_array(outPtr, size);
     return (result, (col: col, row: row));
+  }
+
+  @override
+  CResult<RawSelection?> terminalGetSelection(int handle) {
+    final ptr = _allocSelection();
+    final result = Result.fromValue(
+      _exports.ghostty_terminal_get(handle, TerminalData.selection.value, ptr),
+    );
+    final value = result == .success ? _readSelection(ptr) : null;
+    _exports.ghostty_wasm_free_u8_array(ptr, _layout.selectionSize);
+    return (result, value);
+  }
+
+  @override
+  Result terminalSetSelection(int handle, RawSelection? selection) {
+    if (selection == null) {
+      return .fromValue(
+        _exports.ghostty_terminal_set(
+          handle,
+          TerminalOption.selection.value,
+          0,
+        ),
+      );
+    }
+    final ptr = _allocSelection(selection);
+    final result = Result.fromValue(
+      _exports.ghostty_terminal_set(
+        handle,
+        TerminalOption.selection.value,
+        ptr,
+      ),
+    );
+    _exports.ghostty_wasm_free_u8_array(ptr, _layout.selectionSize);
+    return result;
+  }
+
+  @override
+  CResult<RawSelection?> terminalSelectAll(int terminal) {
+    final outPtr = _allocSelection();
+    final result = Result.fromValue(
+      _exports.ghostty_terminal_select_all(terminal, outPtr),
+    );
+    final value = result == .success ? _readSelection(outPtr) : null;
+    _exports.ghostty_wasm_free_u8_array(outPtr, _layout.selectionSize);
+    return (result, value);
+  }
+
+  @override
+  CResult<RawSelection?> terminalSelectWord(
+    int terminal,
+    RawGridRef ref, {
+    List<int>? boundaryCodepoints,
+  }) {
+    final optsPtr = _exports.ghostty_wasm_alloc_u8_array(
+      _layout.selectWordSize,
+    );
+    final outPtr = _allocSelection();
+    final codepoints = _allocCodepoints(boundaryCodepoints);
+    _zero(optsPtr, _layout.selectWordSize);
+    _mem.writeU32(optsPtr, _layout.selectWordSize);
+    _writeGridRef(optsPtr + _layout.selectWordRef, ref);
+    _mem.writeU32(
+      optsPtr + _layout.selectWordBoundaryCodepoints,
+      codepoints.ptr,
+    );
+    _mem.writeU32(
+      optsPtr + _layout.selectWordBoundaryCodepointsLen,
+      boundaryCodepoints?.length ?? 0,
+    );
+    final result = Result.fromValue(
+      _exports.ghostty_terminal_select_word(terminal, optsPtr, outPtr),
+    );
+    final value = result == .success ? _readSelection(outPtr) : null;
+    _freeCodepoints(codepoints);
+    _exports.ghostty_wasm_free_u8_array(optsPtr, _layout.selectWordSize);
+    _exports.ghostty_wasm_free_u8_array(outPtr, _layout.selectionSize);
+    return (result, value);
+  }
+
+  @override
+  CResult<RawSelection?> terminalSelectWordBetween(
+    int terminal,
+    RawGridRef start,
+    RawGridRef end, {
+    List<int>? boundaryCodepoints,
+  }) {
+    final optsPtr = _exports.ghostty_wasm_alloc_u8_array(
+      _layout.selectWordBetweenSize,
+    );
+    final outPtr = _allocSelection();
+    final codepoints = _allocCodepoints(boundaryCodepoints);
+    _zero(optsPtr, _layout.selectWordBetweenSize);
+    _mem.writeU32(optsPtr, _layout.selectWordBetweenSize);
+    _writeGridRef(optsPtr + _layout.selectWordBetweenStart, start);
+    _writeGridRef(optsPtr + _layout.selectWordBetweenEnd, end);
+    _mem.writeU32(
+      optsPtr + _layout.selectWordBetweenBoundaryCodepoints,
+      codepoints.ptr,
+    );
+    _mem.writeU32(
+      optsPtr + _layout.selectWordBetweenBoundaryCodepointsLen,
+      boundaryCodepoints?.length ?? 0,
+    );
+    final result = Result.fromValue(
+      _exports.ghostty_terminal_select_word_between(terminal, optsPtr, outPtr),
+    );
+    final value = result == .success ? _readSelection(outPtr) : null;
+    _freeCodepoints(codepoints);
+    _exports.ghostty_wasm_free_u8_array(optsPtr, _layout.selectWordBetweenSize);
+    _exports.ghostty_wasm_free_u8_array(outPtr, _layout.selectionSize);
+    return (result, value);
+  }
+
+  @override
+  CResult<RawSelection?> terminalSelectLine(
+    int terminal,
+    RawGridRef ref, {
+    List<int>? whitespace,
+    bool semanticPromptBoundary = false,
+  }) {
+    final optsPtr = _exports.ghostty_wasm_alloc_u8_array(
+      _layout.selectLineSize,
+    );
+    final outPtr = _allocSelection();
+    final codepoints = _allocCodepoints(whitespace);
+    _zero(optsPtr, _layout.selectLineSize);
+    _mem.writeU32(optsPtr, _layout.selectLineSize);
+    _writeGridRef(optsPtr + _layout.selectLineRef, ref);
+    _mem.writeU32(optsPtr + _layout.selectLineWhitespace, codepoints.ptr);
+    _mem.writeU32(
+      optsPtr + _layout.selectLineWhitespaceLen,
+      whitespace?.length ?? 0,
+    );
+    _mem.writeU8(
+      optsPtr + _layout.selectLineSemanticPromptBoundary,
+      semanticPromptBoundary ? 1 : 0,
+    );
+    final result = Result.fromValue(
+      _exports.ghostty_terminal_select_line(terminal, optsPtr, outPtr),
+    );
+    final value = result == .success ? _readSelection(outPtr) : null;
+    _freeCodepoints(codepoints);
+    _exports.ghostty_wasm_free_u8_array(optsPtr, _layout.selectLineSize);
+    _exports.ghostty_wasm_free_u8_array(outPtr, _layout.selectionSize);
+    return (result, value);
+  }
+
+  @override
+  CResult<RawSelection?> terminalSelectOutput(int terminal, RawGridRef ref) {
+    final refPtr = _allocGridRef(ref);
+    final outPtr = _allocSelection();
+    final result = Result.fromValue(
+      _exports.ghostty_terminal_select_output(terminal, refPtr, outPtr),
+    );
+    final value = result == .success ? _readSelection(outPtr) : null;
+    _freeGridRef(refPtr);
+    _exports.ghostty_wasm_free_u8_array(outPtr, _layout.selectionSize);
+    return (result, value);
+  }
+
+  @override
+  CResult<RawSelection?> terminalSelectionAdjust(
+    int terminal,
+    RawSelection selection,
+    SelectionAdjust adjustment,
+  ) {
+    final selPtr = _allocSelection(selection);
+    final result = Result.fromValue(
+      _exports.ghostty_terminal_selection_adjust(
+        terminal,
+        selPtr,
+        adjustment.value,
+      ),
+    );
+    final value = result == .success ? _readSelection(selPtr) : null;
+    _exports.ghostty_wasm_free_u8_array(selPtr, _layout.selectionSize);
+    return (result, value);
+  }
+
+  @override
+  CResult<SelectionOrder> terminalSelectionOrder(
+    int terminal,
+    RawSelection selection,
+  ) {
+    const u32Size = 4;
+    final selPtr = _allocSelection(selection);
+    final outPtr = _exports.ghostty_wasm_alloc_u8_array(u32Size);
+    final result = Result.fromValue(
+      _exports.ghostty_terminal_selection_order(terminal, selPtr, outPtr),
+    );
+    final value = result == .success
+        ? SelectionOrder.fromValue(_mem.readU32(outPtr))
+        : SelectionOrder.forward;
+    _exports.ghostty_wasm_free_u8_array(selPtr, _layout.selectionSize);
+    _exports.ghostty_wasm_free_u8_array(outPtr, u32Size);
+    return (result, value);
+  }
+
+  @override
+  CResult<RawSelection?> terminalSelectionOrdered(
+    int terminal,
+    RawSelection selection,
+    SelectionOrder desired,
+  ) {
+    final selPtr = _allocSelection(selection);
+    final outPtr = _allocSelection();
+    final result = Result.fromValue(
+      _exports.ghostty_terminal_selection_ordered(
+        terminal,
+        selPtr,
+        desired.value,
+        outPtr,
+      ),
+    );
+    final value = result == .success ? _readSelection(outPtr) : null;
+    _exports.ghostty_wasm_free_u8_array(selPtr, _layout.selectionSize);
+    _exports.ghostty_wasm_free_u8_array(outPtr, _layout.selectionSize);
+    return (result, value);
+  }
+
+  @override
+  CResult<bool> terminalSelectionContains(
+    int terminal,
+    RawSelection selection,
+    PointTag pointTag,
+    int col,
+    int row,
+  ) {
+    final selPtr = _allocSelection(selection);
+    final pointPtr = _exports.ghostty_wasm_alloc_u8_array(_layout.pointSize);
+    final outPtr = _exports.ghostty_wasm_alloc_u8_array(1);
+    _writePoint(pointPtr, pointTag, col, row);
+    final result = Result.fromValue(
+      _exports.ghostty_terminal_selection_contains(
+        terminal,
+        selPtr,
+        pointPtr,
+        outPtr,
+      ),
+    );
+    final value = _mem.readU8(outPtr) != 0;
+    _exports.ghostty_wasm_free_u8_array(selPtr, _layout.selectionSize);
+    _exports.ghostty_wasm_free_u8_array(pointPtr, _layout.pointSize);
+    _exports.ghostty_wasm_free_u8_array(outPtr, 1);
+    return (result, value);
+  }
+
+  @override
+  CResult<bool> terminalSelectionEqual(
+    int terminal,
+    RawSelection a,
+    RawSelection b,
+  ) {
+    final aPtr = _allocSelection(a);
+    final bPtr = _allocSelection(b);
+    final outPtr = _exports.ghostty_wasm_alloc_u8_array(1);
+    final result = Result.fromValue(
+      _exports.ghostty_terminal_selection_equal(terminal, aPtr, bPtr, outPtr),
+    );
+    final value = _mem.readU8(outPtr) != 0;
+    _exports.ghostty_wasm_free_u8_array(aPtr, _layout.selectionSize);
+    _exports.ghostty_wasm_free_u8_array(bPtr, _layout.selectionSize);
+    _exports.ghostty_wasm_free_u8_array(outPtr, 1);
+    return (result, value);
+  }
+
+  @override
+  CResult<String> terminalSelectionFormat(
+    int terminal,
+    FormatterFormat format, {
+    bool unwrap = false,
+    bool trim = false,
+    RawSelection? selection,
+  }) {
+    final optsPtr = _exports.ghostty_wasm_alloc_u8_array(
+      _layout.selectionFormatSize,
+    );
+    final outPtr = _exports.ghostty_wasm_alloc_opaque();
+    final outLen = _exports.ghostty_wasm_alloc_usize();
+    _zero(optsPtr, _layout.selectionFormatSize);
+    _mem.writeU32(optsPtr, _layout.selectionFormatSize);
+    _mem.writeU32(optsPtr + _layout.selectionFormatEmit, format.value);
+    _mem.writeU8(optsPtr + _layout.selectionFormatUnwrap, unwrap ? 1 : 0);
+    _mem.writeU8(optsPtr + _layout.selectionFormatTrim, trim ? 1 : 0);
+    var selPtr = 0;
+    if (selection != null) {
+      selPtr = _allocSelection(selection);
+    }
+    _mem.writeU32(optsPtr + _layout.selectionFormatSelection, selPtr);
+    final result = Result.fromValue(
+      _exports.ghostty_terminal_selection_format_alloc(
+        terminal,
+        0,
+        optsPtr,
+        outPtr,
+        outLen,
+      ),
+    );
+    final dataPtr = _mem.readPtr(outPtr);
+    final len = _mem.readU32(outLen);
+    final value = result == .success && dataPtr != 0 && len > 0
+        ? utf8.decode(_mem.readBytes(dataPtr, len))
+        : '';
+    if (dataPtr != 0 && len > 0) {
+      _exports.ghostty_free(0, dataPtr, len);
+    }
+    if (selPtr != 0) {
+      _exports.ghostty_wasm_free_u8_array(selPtr, _layout.selectionSize);
+    }
+    _exports.ghostty_wasm_free_u8_array(optsPtr, _layout.selectionFormatSize);
+    _exports.ghostty_wasm_free_opaque(outPtr);
+    _exports.ghostty_wasm_free_usize(outLen);
+    return (result, value);
+  }
+
+  @override
+  CResult<int> selectionGestureNew() {
+    final outPtr = _exports.ghostty_wasm_alloc_opaque();
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_new(0, outPtr),
+    );
+    final handle = _mem.readPtr(outPtr);
+    _exports.ghostty_wasm_free_opaque(outPtr);
+    return (result, handle);
+  }
+
+  @override
+  void selectionGestureFree(int gesture, int terminal) {
+    _exports.ghostty_selection_gesture_free(gesture, terminal);
+  }
+
+  @override
+  void selectionGestureReset(int gesture, int terminal) {
+    _exports.ghostty_selection_gesture_reset(gesture, terminal);
+  }
+
+  @override
+  CResult<RawSelection?> selectionGestureEvent(
+    int gesture,
+    int terminal,
+    int event,
+  ) {
+    final outPtr = _allocSelection();
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_event(
+        gesture,
+        terminal,
+        event,
+        outPtr,
+      ),
+    );
+    final value = result == .success ? _readSelection(outPtr) : null;
+    _exports.ghostty_wasm_free_u8_array(outPtr, _layout.selectionSize);
+    return (result, value);
+  }
+
+  @override
+  CResult<int> selectionGestureEventNew(SelectionGestureEventType type) {
+    final outPtr = _exports.ghostty_wasm_alloc_opaque();
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_event_new(0, outPtr, type.value),
+    );
+    final handle = _mem.readPtr(outPtr);
+    _exports.ghostty_wasm_free_opaque(outPtr);
+    return (result, handle);
+  }
+
+  @override
+  void selectionGestureEventFree(int event) {
+    _exports.ghostty_selection_gesture_event_free(event);
+  }
+
+  @override
+  Result selectionGestureEventClear(
+    int event,
+    SelectionGestureEventOption option,
+  ) {
+    return .fromValue(
+      _exports.ghostty_selection_gesture_event_set(event, option.value, 0),
+    );
+  }
+
+  @override
+  Result selectionGestureEventSetRef(int event, RawGridRef ref) {
+    final ptr = _allocGridRef(ref);
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_event_set(
+        event,
+        SelectionGestureEventOption.ref.value,
+        ptr,
+      ),
+    );
+    _freeGridRef(ptr);
+    return result;
+  }
+
+  @override
+  Result selectionGestureEventSetPosition(int event, double x, double y) {
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(
+      _layout.surfacePositionSize,
+    );
+    _mem.writeF64(ptr + _layout.surfacePositionX, x);
+    _mem.writeF64(ptr + _layout.surfacePositionY, y);
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_event_set(
+        event,
+        SelectionGestureEventOption.position.value,
+        ptr,
+      ),
+    );
+    _exports.ghostty_wasm_free_u8_array(ptr, _layout.surfacePositionSize);
+    return result;
+  }
+
+  @override
+  Result selectionGestureEventSetRepeatDistance(int event, double value) {
+    const size = 8;
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(size);
+    _mem.writeF64(ptr, value);
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_event_set(
+        event,
+        SelectionGestureEventOption.repeatDistance.value,
+        ptr,
+      ),
+    );
+    _exports.ghostty_wasm_free_u8_array(ptr, size);
+    return result;
+  }
+
+  @override
+  Result selectionGestureEventSetTimeNs(int event, int value) {
+    const size = 8;
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(size);
+    _mem.writeU64(ptr, value);
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_event_set(
+        event,
+        SelectionGestureEventOption.timeNs.value,
+        ptr,
+      ),
+    );
+    _exports.ghostty_wasm_free_u8_array(ptr, size);
+    return result;
+  }
+
+  @override
+  Result selectionGestureEventSetRepeatIntervalNs(int event, int value) {
+    const size = 8;
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(size);
+    _mem.writeU64(ptr, value);
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_event_set(
+        event,
+        SelectionGestureEventOption.repeatIntervalNs.value,
+        ptr,
+      ),
+    );
+    _exports.ghostty_wasm_free_u8_array(ptr, size);
+    return result;
+  }
+
+  @override
+  Result selectionGestureEventSetWordBoundaryCodepoints(
+    int event,
+    List<int> codepoints,
+  ) {
+    final values = _allocCodepoints(codepoints);
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(_layout.codepointsSize);
+    _zero(ptr, _layout.codepointsSize);
+    _mem.writeU32(ptr + _layout.codepointsPtr, values.ptr);
+    _mem.writeU32(ptr + _layout.codepointsLen, codepoints.length);
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_event_set(
+        event,
+        SelectionGestureEventOption.wordBoundaryCodepoints.value,
+        ptr,
+      ),
+    );
+    _freeCodepoints(values);
+    _exports.ghostty_wasm_free_u8_array(ptr, _layout.codepointsSize);
+    return result;
+  }
+
+  @override
+  Result selectionGestureEventSetBehaviors(
+    int event,
+    SelectionGestureBehavior singleClick,
+    SelectionGestureBehavior doubleClick,
+    SelectionGestureBehavior tripleClick,
+  ) {
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(
+      _layout.gestureBehaviorsSize,
+    );
+    _mem.writeU32(ptr + _layout.gestureBehaviorsSingleClick, singleClick.value);
+    _mem.writeU32(ptr + _layout.gestureBehaviorsDoubleClick, doubleClick.value);
+    _mem.writeU32(ptr + _layout.gestureBehaviorsTripleClick, tripleClick.value);
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_event_set(
+        event,
+        SelectionGestureEventOption.behaviors.value,
+        ptr,
+      ),
+    );
+    _exports.ghostty_wasm_free_u8_array(ptr, _layout.gestureBehaviorsSize);
+    return result;
+  }
+
+  @override
+  Result selectionGestureEventSetRectangle(int event, {required bool value}) {
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(1);
+    _mem.writeU8(ptr, value ? 1 : 0);
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_event_set(
+        event,
+        SelectionGestureEventOption.rectangle.value,
+        ptr,
+      ),
+    );
+    _exports.ghostty_wasm_free_u8_array(ptr, 1);
+    return result;
+  }
+
+  @override
+  Result selectionGestureEventSetGeometry(
+    int event, {
+    required int columns,
+    required int cellWidth,
+    required int paddingLeft,
+    required int screenHeight,
+  }) {
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(
+      _layout.gestureGeometrySize,
+    );
+    _mem.writeU32(ptr + _layout.gestureGeometryColumns, columns);
+    _mem.writeU32(ptr + _layout.gestureGeometryCellWidth, cellWidth);
+    _mem.writeU32(ptr + _layout.gestureGeometryPaddingLeft, paddingLeft);
+    _mem.writeU32(ptr + _layout.gestureGeometryScreenHeight, screenHeight);
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_event_set(
+        event,
+        SelectionGestureEventOption.geometry.value,
+        ptr,
+      ),
+    );
+    _exports.ghostty_wasm_free_u8_array(ptr, _layout.gestureGeometrySize);
+    return result;
+  }
+
+  @override
+  Result selectionGestureEventSetViewport(
+    int event, {
+    required int col,
+    required int row,
+  }) {
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(
+      _layout.pointCoordinateSize,
+    );
+    _mem.writeU16(ptr + _layout.pointCoordinateX, col);
+    _mem.writeU32(ptr + _layout.pointCoordinateY, row);
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_event_set(
+        event,
+        SelectionGestureEventOption.viewport.value,
+        ptr,
+      ),
+    );
+    _exports.ghostty_wasm_free_u8_array(ptr, _layout.pointCoordinateSize);
+    return result;
+  }
+
+  @override
+  CResult<int> selectionGestureGetClickCount(int gesture, int terminal) {
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(1);
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_get(
+        gesture,
+        terminal,
+        SelectionGestureData.clickCount.value,
+        ptr,
+      ),
+    );
+    final value = _mem.readU8(ptr);
+    _exports.ghostty_wasm_free_u8_array(ptr, 1);
+    return (result, value);
+  }
+
+  @override
+  CResult<bool> selectionGestureGetDragged(int gesture, int terminal) {
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(1);
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_get(
+        gesture,
+        terminal,
+        SelectionGestureData.dragged.value,
+        ptr,
+      ),
+    );
+    final value = _mem.readU8(ptr) != 0;
+    _exports.ghostty_wasm_free_u8_array(ptr, 1);
+    return (result, value);
+  }
+
+  @override
+  CResult<SelectionGestureAutoscroll> selectionGestureGetAutoscroll(
+    int gesture,
+    int terminal,
+  ) {
+    const size = 4;
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(size);
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_get(
+        gesture,
+        terminal,
+        SelectionGestureData.autoscroll.value,
+        ptr,
+      ),
+    );
+    final value = result == .success
+        ? SelectionGestureAutoscroll.fromValue(_mem.readU32(ptr))
+        : SelectionGestureAutoscroll.none;
+    _exports.ghostty_wasm_free_u8_array(ptr, size);
+    return (result, value);
+  }
+
+  @override
+  CResult<SelectionGestureBehavior> selectionGestureGetBehavior(
+    int gesture,
+    int terminal,
+  ) {
+    const size = 4;
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(size);
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_get(
+        gesture,
+        terminal,
+        SelectionGestureData.behavior.value,
+        ptr,
+      ),
+    );
+    final value = result == .success
+        ? SelectionGestureBehavior.fromValue(_mem.readU32(ptr))
+        : SelectionGestureBehavior.cell;
+    _exports.ghostty_wasm_free_u8_array(ptr, size);
+    return (result, value);
+  }
+
+  @override
+  CResult<RawGridRef> selectionGestureGetAnchor(int gesture, int terminal) {
+    final ptr = _allocGridRef(_emptyGridRef);
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_get(
+        gesture,
+        terminal,
+        SelectionGestureData.anchor.value,
+        ptr,
+      ),
+    );
+    final value = result == .success ? _readGridRef(ptr) : _emptyGridRef;
+    _freeGridRef(ptr);
+    return (result, value);
   }
 
   @override
@@ -2674,8 +3337,10 @@ class WasmBindings implements GhosttyBindings {
     if (selection != null) {
       selPtr = _exports.ghostty_wasm_alloc_u8_array(_layout.selectionSize);
       _mem.writeU32(selPtr, _layout.selectionSize);
-      _writeGridRef(selPtr + _layout.selectionStart, selection.start);
-      _writeGridRef(selPtr + _layout.selectionEnd, selection.end);
+      final startDst = selPtr + _layout.selectionStart;
+      final endDst = selPtr + _layout.selectionEnd;
+      _writeGridRef(startDst, selection.start);
+      _writeGridRef(endDst, selection.end);
       _mem.writeU8(
         selPtr + _layout.selectionRectangle,
         selection.rectangle ? 1 : 0,
@@ -3064,6 +3729,12 @@ class WasmBindings implements GhosttyBindings {
     _mem.writeU32(pointPtr + _layout.pointY, y);
   }
 
+  void _zero(int ptr, int len) {
+    for (var i = 0; i < len; i++) {
+      _mem.writeU8(ptr + i, 0);
+    }
+  }
+
   int _allocGridRef(RawGridRef ref) {
     final ptr = _exports.ghostty_wasm_alloc_u8_array(_layout.gridRefSize);
     _writeGridRef(ptr, ref);
@@ -3087,6 +3758,44 @@ class WasmBindings implements GhosttyBindings {
     _mem.writeU32(ptr + _layout.gridRefNode, ref.node);
     _mem.writeU16(ptr + _layout.gridRefX, ref.x);
     _mem.writeU16(ptr + _layout.gridRefY, ref.y);
+  }
+
+  int _allocSelection([RawSelection? selection]) {
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(_layout.selectionSize);
+    _zero(ptr, _layout.selectionSize);
+    _mem.writeU32(ptr, _layout.selectionSize);
+    if (selection != null) _writeSelection(ptr, selection);
+    return ptr;
+  }
+
+  RawSelection _readSelection(int ptr) {
+    return (
+      start: _readGridRef(ptr + _layout.selectionStart),
+      end: _readGridRef(ptr + _layout.selectionEnd),
+      rectangle: _mem.readU8(ptr + _layout.selectionRectangle) != 0,
+    );
+  }
+
+  void _writeSelection(int ptr, RawSelection selection) {
+    _mem.writeU32(ptr, _layout.selectionSize);
+    _writeGridRef(ptr + _layout.selectionStart, selection.start);
+    _writeGridRef(ptr + _layout.selectionEnd, selection.end);
+    _mem.writeU8(ptr + _layout.selectionRectangle, selection.rectangle ? 1 : 0);
+  }
+
+  ({int ptr, int bytes}) _allocCodepoints(List<int>? codepoints) {
+    if (codepoints == null) return (ptr: 0, bytes: 0);
+    final bytes = (codepoints.isEmpty ? 1 : codepoints.length) * 4;
+    final ptr = _exports.ghostty_wasm_alloc_u8_array(bytes);
+    for (var i = 0; i < codepoints.length; i++) {
+      _mem.writeU32(ptr + i * 4, codepoints[i]);
+    }
+    return (ptr: ptr, bytes: bytes);
+  }
+
+  void _freeCodepoints(({int ptr, int bytes}) codepoints) {
+    if (codepoints.ptr == 0) return;
+    _exports.ghostty_wasm_free_u8_array(codepoints.ptr, codepoints.bytes);
   }
 
   SgrAttribute _readSgrAttribute(int attrPtr) {

@@ -748,6 +748,186 @@ void main() {
       });
     });
 
+    group('Formatter', () {
+      test('plain format returns screen content', () {
+        terminal.write(Uint8List.fromList('Hello'.codeUnits));
+        final formatter = Formatter(
+          terminal: terminal,
+          format: .plain,
+          trim: true,
+        );
+        addTearDown(formatter.dispose);
+        expect(formatter.format(), contains('Hello'));
+      });
+
+      test('selection restricts output to the given range', () {
+        terminal.write(Uint8List.fromList('ABCDE\r\nFGHIJ'.codeUnits));
+        final formatter = Formatter(
+          terminal: terminal,
+          format: .plain,
+          selection: Selection.fromRefs(
+            start: GridRef.at(terminal, col: 0, row: 0),
+            end: GridRef.at(terminal, col: 2, row: 0),
+          ),
+        );
+        addTearDown(formatter.dispose);
+        final text = formatter.format();
+        expect(text, contains('ABC'));
+        expect(text, isNot(contains('FGHIJ')));
+      });
+    });
+
+    group('formatSelection', () {
+      test('returns null without an active selection', () {
+        final text = terminal.formatSelection();
+
+        expect(text, isNull);
+      });
+
+      test('formats an explicit selection', () {
+        terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
+        final selection = Selection.fromRefs(
+          start: GridRef.at(terminal, col: 1, row: 0),
+          end: GridRef.at(terminal, col: 3, row: 0),
+        );
+
+        final text = terminal.formatSelection(selection: selection);
+
+        expect(text, 'BCD');
+      });
+    });
+
+    group('selectAll', () {
+      test('selects all screen content', () {
+        terminal.write(Uint8List.fromList('ABC\r\nDEF'.codeUnits));
+
+        final selection = terminal.selectAll();
+
+        expect(
+          terminal.formatSelection(selection: selection, trim: true),
+          'ABC\nDEF',
+        );
+      });
+    });
+
+    group('selectLine', () {
+      test('selects the line under a ref', () {
+        terminal.write(Uint8List.fromList('ABC\r\nDEF'.codeUnits));
+        final ref = GridRef.at(terminal, col: 1, row: 1);
+
+        final selection = terminal.selectLine(ref);
+
+        expect(
+          terminal.formatSelection(selection: selection, trim: true),
+          'DEF',
+        );
+      });
+    });
+
+    group('selectOutput', () {
+      test('selects command output under a ref', () {
+        terminal.write(
+          Uint8List.fromList(
+            '\x1b]133;A\x07\$ \x1b]133;B\x07ls\r\n'
+                    '\x1b]133;C\x07ABC\r\nDEF\x1b]133;D\x07'
+                .codeUnits,
+          ),
+        );
+        final ref = GridRef.at(terminal, col: 1, row: 1);
+
+        final selection = terminal.selectOutput(ref);
+
+        expect(
+          terminal.formatSelection(selection: selection, trim: true),
+          'ABC\nDEF',
+        );
+      });
+    });
+
+    group('selectWord', () {
+      test('returns the selected word', () {
+        terminal.write(Uint8List.fromList('hello world'.codeUnits));
+        final ref = GridRef.at(terminal, col: 1, row: 0);
+
+        final selection = terminal.selectWord(ref);
+
+        expect(terminal.formatSelection(selection: selection), 'hello');
+      });
+
+      test('rejects refs from another terminal', () {
+        final other = Terminal(cols: 80, rows: 24);
+        addTearDown(other.dispose);
+        final ref = GridRef.at(other, col: 0, row: 0);
+
+        expect(() => terminal.selectWord(ref), throwsA(isA<ArgumentError>()));
+      });
+    });
+
+    group('selectWordBetween', () {
+      test('selects the word between two refs', () {
+        terminal.write(Uint8List.fromList('hello world'.codeUnits));
+        final start = GridRef.at(terminal, col: 1, row: 0);
+        final end = GridRef.at(terminal, col: 3, row: 0);
+
+        final selection = terminal.selectWordBetween(start, end);
+
+        expect(terminal.formatSelection(selection: selection), 'hello');
+      });
+    });
+
+    group('selection', () {
+      test('setter installs active selection', () {
+        terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
+        final selection = Selection.fromRefs(
+          start: GridRef.at(terminal, col: 0, row: 0),
+          end: GridRef.at(terminal, col: 2, row: 0),
+        );
+
+        terminal.selection = selection;
+
+        expect(terminal.formatSelection(), 'ABC');
+      });
+
+      test('getter returns active selection', () {
+        terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
+        final selection = Selection.fromRefs(
+          start: GridRef.at(terminal, col: 0, row: 0),
+          end: GridRef.at(terminal, col: 2, row: 0),
+        );
+        terminal.selection = selection;
+
+        final active = terminal.selection;
+
+        expect(active?.equal(selection), isTrue);
+      });
+
+      test('setter clears active selection', () {
+        terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
+        terminal.selection = Selection.fromRefs(
+          start: GridRef.at(terminal, col: 0, row: 0),
+          end: GridRef.at(terminal, col: 2, row: 0),
+        );
+
+        terminal.selection = null;
+
+        expect(terminal.selection, isNull);
+      });
+
+      test('setter rejects selections from another terminal', () {
+        final other = Terminal(cols: 80, rows: 24);
+        addTearDown(other.dispose);
+        final selection = Selection.fromRefs(
+          start: GridRef.at(other, col: 0, row: 0),
+          end: GridRef.at(other, col: 2, row: 0),
+        );
+
+        expect(
+          () => terminal.selection = selection,
+          throwsA(isA<ArgumentError>()),
+        );
+      });
+    });
+
     group('CellIterator.select', () {
       test('reads specific column content', () {
         terminal.write(Uint8List.fromList('ABCDE'.codeUnits));

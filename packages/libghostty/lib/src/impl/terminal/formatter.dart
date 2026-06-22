@@ -78,18 +78,13 @@ final class Formatter {
       );
     }
 
-    final start = GridRef.at(
-      terminal,
-      col: selection.startCol,
-      row: selection.startRow,
-      pointTag: selection.pointTag,
-    );
-    final end = GridRef.at(
-      terminal,
-      col: selection.endCol,
-      row: selection.endRow,
-      pointTag: selection.pointTag,
-    );
+    if (!identical(selection.start._terminal, terminal)) {
+      throw ArgumentError.value(
+        selection,
+        'selection',
+        'must belong to formatter terminal',
+      );
+    }
 
     return check(
       bindings.formatterTerminalNew(
@@ -98,11 +93,7 @@ final class Formatter {
         unwrap: unwrap,
         trim: trim,
         extra: extra,
-        selection: (
-          start: start._value,
-          end: end._value,
-          rectangle: selection.rectangle,
-        ),
+        selection: selection._raw,
       ),
     );
   }

@@ -21,6 +21,7 @@ part 'kitty_graphics.dart';
 part 'render_state.dart';
 part 'row_iterator.dart';
 part 'selection.dart';
+part 'selection_gesture.dart';
 part 'tracked_grid_ref.dart';
 
 /// Complete terminal emulator managing screen state, scrollback, cursor,
@@ -84,6 +85,7 @@ final class Terminal with Listenable {
   });
 
   final int _handle;
+  bool _disposed;
 
   /// Creates a terminal with the given grid dimensions and scrollback limit.
   ///
@@ -96,7 +98,8 @@ final class Terminal with Listenable {
   /// final terminal = Terminal(cols: 80, rows: 24, maxScrollback: 5000);
   /// ```
   Terminal({required int cols, required int rows, int maxScrollback = 10_000})
-    : _handle = check(bindings.terminalNew(cols, rows, maxScrollback)) {
+    : _handle = check(bindings.terminalNew(cols, rows, maxScrollback)),
+      _disposed = false {
     _finalizer.attach(this, _handle, detach: this);
   }
 
@@ -287,6 +290,14 @@ final class Terminal with Listenable {
     bindings.terminalSetOnEnquiry(_handle, value);
   }
 
+  /// Registers a callback for working-directory changes via OSC 7/9/1337.
+  ///
+  /// Query the new [pwd] after the callback returns. Fires synchronously
+  /// during [write].
+  set onPwdChanged(VoidCallback? value) {
+    bindings.terminalSetOnPwdChanged(_handle, value);
+  }
+
   /// Registers a callback for XTWINOPS size queries (CSI 14/16/18 t).
   ///
   /// Return a [TerminalSizeInfo] with the current geometry, or null to
@@ -301,14 +312,6 @@ final class Terminal with Listenable {
   /// during [write].
   set onTitleChanged(VoidCallback? value) {
     bindings.terminalSetOnTitleChanged(_handle, value);
-  }
-
-  /// Registers a callback for working-directory changes via OSC 7/9/1337.
-  ///
-  /// Query the new [pwd] after the callback returns. Fires synchronously
-  /// during [write].
-  set onPwdChanged(VoidCallback? value) {
-    bindings.terminalSetOnPwdChanged(_handle, value);
   }
 
   /// Registers a callback for PTY write-back data.
@@ -376,6 +379,27 @@ final class Terminal with Listenable {
   /// traversing the scrollback page list to compute the total size.
   Scrollbar get scrollbar => check(bindings.terminalGetScrollbar(_handle));
 
+  /// Active selection on the terminal screen, or null when none is active.
+  ///
+  /// Getting returns an untracked snapshot. Setting installs a copy as
+  /// terminal-owned tracked state. Set null to clear the active selection.
+  Selection? get selection {
+    final (code, raw) = bindings.terminalGetSelection(_handle);
+    if (code == .noValue) return null;
+    checkCode(code);
+    return Selection._fromRaw(this, raw!);
+  }
+
+  /// Sets the active selection on the terminal screen.
+  ///
+  /// Assigning a selection installs a terminal-owned copy of its endpoints.
+  /// Assign null to clear the active selection. Non-null selections must belong
+  /// to this terminal.
+  set selection(Selection? value) {
+    checkCode(bindings.terminalSetSelection(_handle, _checkedSelection(value)));
+    notifyListeners();
+  }
+
   /// Terminal title as set by OSC 0 or OSC 2 sequences.
   ///
   /// The returned value is borrowed from the terminal. Read it immediately
@@ -393,15 +417,41 @@ final class Terminal with Listenable {
   /// Total terminal width in pixels (cols * cell width).
   int get widthPx => check(bindings.terminalGetWidthPx(_handle));
 
+  int get _handleOrNull => _disposed ? 0 : _handle;
+
   /// Releases the native terminal handle and clears registered callbacks.
   ///
   /// Must be called to free resources; the terminal must not be used
   /// afterward.
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     clearListeners();
-    bindings.terminalDisposeCallbacks(_handle);
     _finalizer.detach(this);
+    bindings.terminalDisposeCallbacks(_handle);
     bindings.terminalFree(_handle);
+  }
+
+  /// Formats an explicit or active selection.
+  ///
+  /// When [selection] is null, the terminal's active selection is used. Returns
+  /// null if no active selection exists.
+  String? formatSelection({
+    FormatterFormat format = .plain,
+    bool unwrap = false,
+    bool trim = false,
+    Selection? selection,
+  }) {
+    final (code, text) = bindings.terminalSelectionFormat(
+      _handle,
+      format,
+      unwrap: unwrap,
+      trim: trim,
+      selection: _checkedSelection(selection),
+    );
+    if (code == .noValue) return null;
+    checkCode(code);
+    return text;
   }
 
   /// Queries whether the given terminal [mode] is currently enabled.
@@ -457,12 +507,97 @@ final class Terminal with Listenable {
     bindings.terminalScrollViewport(_handle, .delta, delta);
   }
 
+  /// Derives a selection snapshot covering all selectable terminal content.
+  ///
+  /// The returned selection is not installed as the terminal's active
+  /// selection. Assign it to [selection] to make it active.
+  Selection? selectAll() {
+    final (code, raw) = bindings.terminalSelectAll(_handle);
+    if (code == .noValue) return null;
+    checkCode(code);
+    return Selection._fromRaw(this, raw!);
+  }
+
+  /// Derives a line selection snapshot under [ref].
+  ///
+  /// The returned selection is not installed as the terminal's active
+  /// selection. Assign it to [selection] to make it active.
+  Selection? selectLine(
+    GridRef ref, {
+    List<int>? whitespace,
+    bool semanticPromptBoundary = false,
+  }) {
+    final (code, raw) = bindings.terminalSelectLine(
+      _handle,
+      _checkedRef(ref),
+      whitespace: whitespace,
+      semanticPromptBoundary: semanticPromptBoundary,
+    );
+    if (code == .noValue) return null;
+    checkCode(code);
+    return Selection._fromRaw(this, raw!);
+  }
+
+  /// Derives a semantic command-output selection snapshot under [ref].
+  ///
+  /// The returned selection is not installed as the terminal's active
+  /// selection. Assign it to [selection] to make it active.
+  Selection? selectOutput(GridRef ref) {
+    final (code, raw) = bindings.terminalSelectOutput(
+      _handle,
+      _checkedRef(ref),
+    );
+    if (code == .noValue) return null;
+    checkCode(code);
+    return Selection._fromRaw(this, raw!);
+  }
+
+  /// Derives a word selection snapshot under [ref].
+  ///
+  /// The returned selection is not installed as the terminal's active
+  /// selection. Assign it to [selection] to make it active.
+  Selection? selectWord(GridRef ref, {List<int>? boundaryCodepoints}) {
+    final (code, raw) = bindings.terminalSelectWord(
+      _handle,
+      _checkedRef(ref),
+      boundaryCodepoints: boundaryCodepoints,
+    );
+    if (code == .noValue) return null;
+    checkCode(code);
+    return Selection._fromRaw(this, raw!);
+  }
+
+  /// Derives the nearest word selection snapshot between two grid references.
+  ///
+  /// The returned selection is not installed as the terminal's active
+  /// selection. Assign it to [selection] to make it active.
+  Selection? selectWordBetween(
+    GridRef start,
+    GridRef end, {
+    List<int>? boundaryCodepoints,
+  }) {
+    final (code, raw) = bindings.terminalSelectWordBetween(
+      _handle,
+      _checkedRef(start, 'start'),
+      _checkedRef(end, 'end'),
+      boundaryCodepoints: boundaryCodepoints,
+    );
+    if (code == .noValue) return null;
+    checkCode(code);
+    return Selection._fromRaw(this, raw!);
+  }
+
   /// Sets the maximum bytes the APC handler will buffer for all protocols.
   ///
   /// This replaces protocol-specific overrides. Pass null to remove all
   /// overrides and use the built-in defaults.
   void setApcBufferLimit(int? bytes) {
     checkCode(bindings.terminalSetApcBufferLimit(_handle, bytes));
+  }
+
+  /// Enables or disables Glyph Protocol APC handling.
+  void setGlyphProtocol({required bool enabled}) {
+    checkCode(bindings.terminalSetGlyphProtocol(_handle, enabled: enabled));
   }
 
   /// Sets the maximum bytes the APC handler will buffer for Kitty graphics
@@ -480,11 +615,6 @@ final class Terminal with Listenable {
     checkCode(
       bindings.terminalSetKittyImageMediumFile(_handle, enabled: enabled),
     );
-  }
-
-  /// Enables or disables Glyph Protocol APC handling.
-  void setGlyphProtocol({required bool enabled}) {
-    checkCode(bindings.terminalSetGlyphProtocol(_handle, enabled: enabled));
   }
 
   /// Enables or disables the shared memory medium for Kitty image loading.
@@ -518,6 +648,29 @@ final class Terminal with Listenable {
   void write(Uint8List data) {
     bindings.terminalVtWrite(_handle, data);
     notifyListeners();
+  }
+
+  RawGridRef _checkedRef(GridRef ref, [String name = 'ref']) {
+    _checkRefTerminal(ref, name);
+    return ref._value;
+  }
+
+  RawSelection? _checkedSelection(Selection? selection) {
+    if (selection == null) return null;
+    if (!identical(selection.start._terminal, this)) {
+      throw ArgumentError.value(
+        selection,
+        'selection',
+        'must belong to this terminal',
+      );
+    }
+    return selection._raw;
+  }
+
+  void _checkRefTerminal(GridRef ref, String name) {
+    if (!identical(ref._terminal, this)) {
+      throw ArgumentError.value(ref, name, 'must belong to this terminal');
+    }
   }
 
   static RgbColor? _optionalColor(CResult<RgbColor> result) {

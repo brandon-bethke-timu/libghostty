@@ -52,6 +52,11 @@ export 'src/ffi/libghostty_enums.g.dart'
         OptionAsAlt,
         OscCommandType,
         PointTag,
+        SelectionAdjust,
+        SelectionGestureAutoscroll,
+        SelectionGestureBehavior,
+        SelectionGestureEventOption,
+        SelectionOrder,
         SgrAttributeTag,
         SizeReportStyle,
         SysLogLevel,
@@ -82,6 +87,11 @@ export 'src/impl/terminal/terminal.dart'
         RenderState,
         RowIterator,
         Selection,
+        SelectionGesture,
+        SelectionGestureBehaviors,
+        SelectionGestureEvent,
+        SelectionGestureGeometry,
+        SelectionGestureState,
         Terminal,
         TrackedGridRef;
 export 'src/impl/terminal/terminal_mode.dart' show TerminalMode;

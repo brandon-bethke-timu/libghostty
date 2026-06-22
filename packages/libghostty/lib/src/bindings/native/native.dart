@@ -47,6 +47,8 @@ const RawPlacementRenderInfo _emptyRenderInfo = (
   sourceHeight: 0,
 );
 
+const RawGridRef _emptyGridRef = (node: 0, x: 0, y: 0);
+
 class NativeBindings implements GhosttyBindings {
   final _utf8Ptrs = <int, Pointer<Char>>{};
   final _callables = <int, Map<TerminalOption, NativeCallable>>{};
@@ -1719,6 +1721,30 @@ class NativeBindings implements GhosttyBindings {
       ..y = ref.y;
   }
 
+  static RawSelection _readSelection(Selection selection) {
+    return (
+      start: _readGridRef(selection.start),
+      end: _readGridRef(selection.end),
+      rectangle: selection.rectangle,
+    );
+  }
+
+  static void _writeSelection(Selection target, RawSelection selection) {
+    target.size = sizeOf<Selection>();
+    _writeGridRef(target.start, selection.start);
+    _writeGridRef(target.end, selection.end);
+    target.rectangle = selection.rectangle;
+  }
+
+  static Pointer<Uint32> _writeCodepoints(Arena arena, List<int>? codepoints) {
+    if (codepoints == null) return nullptr;
+    final ptr = arena<Uint32>(codepoints.isEmpty ? 1 : codepoints.length);
+    for (var i = 0; i < codepoints.length; i++) {
+      ptr[i] = codepoints[i];
+    }
+    return ptr;
+  }
+
   static RawColor _cellColorToRaw(CellColor color) => switch (color) {
     DefaultColor() => defaultRawColor,
     PaletteColor(:final index) => (
@@ -1943,6 +1969,7 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  @override
   CResult<int> gridRefCell(RawGridRef ref) {
     return using((arena) {
       final gridRef = arena<GridRef>();
@@ -2094,6 +2121,612 @@ class NativeBindings implements GhosttyBindings {
         out,
       );
       return (result, (col: out.ref.x, row: out.ref.y));
+    });
+  }
+
+  @override
+  CResult<RawSelection?> terminalGetSelection(int handle) {
+    return using((arena) {
+      final selection = arena<Selection>();
+      selection.ref.size = sizeOf<Selection>();
+      final result = ghostty_terminal_get(
+        Pointer.fromAddress(handle),
+        .selection,
+        selection.cast(),
+      );
+      if (result != .success) return (result, null);
+      return (result, _readSelection(selection.ref));
+    });
+  }
+
+  @override
+  Result terminalSetSelection(int handle, RawSelection? selection) {
+    if (selection == null) {
+      return ghostty_terminal_set(
+        Pointer.fromAddress(handle),
+        .selection,
+        nullptr,
+      );
+    }
+    return using((arena) {
+      final sel = arena<Selection>();
+      _writeSelection(sel.ref, selection);
+      return ghostty_terminal_set(
+        Pointer.fromAddress(handle),
+        .selection,
+        sel.cast(),
+      );
+    });
+  }
+
+  @override
+  CResult<RawSelection?> terminalSelectAll(int terminal) {
+    return using((arena) {
+      final out = arena<Selection>();
+      out.ref.size = sizeOf<Selection>();
+      final result = ghostty_terminal_select_all(
+        Pointer.fromAddress(terminal),
+        out,
+      );
+      if (result != .success) return (result, null);
+      return (result, _readSelection(out.ref));
+    });
+  }
+
+  @override
+  CResult<RawSelection?> terminalSelectWord(
+    int terminal,
+    RawGridRef ref, {
+    List<int>? boundaryCodepoints,
+  }) {
+    return using((arena) {
+      final opts = arena<TerminalSelectWordOptions>();
+      final out = arena<Selection>();
+      final codepoints = _writeCodepoints(arena, boundaryCodepoints);
+      opts.ref
+        ..size = sizeOf<TerminalSelectWordOptions>()
+        ..boundary_codepoints = codepoints
+        ..boundary_codepoints_len = boundaryCodepoints?.length ?? 0;
+      _writeGridRef(opts.ref.ref, ref);
+      out.ref.size = sizeOf<Selection>();
+      final result = ghostty_terminal_select_word(
+        Pointer.fromAddress(terminal),
+        opts,
+        out,
+      );
+      if (result != .success) return (result, null);
+      return (result, _readSelection(out.ref));
+    });
+  }
+
+  @override
+  CResult<RawSelection?> terminalSelectWordBetween(
+    int terminal,
+    RawGridRef start,
+    RawGridRef end, {
+    List<int>? boundaryCodepoints,
+  }) {
+    return using((arena) {
+      final opts = arena<TerminalSelectWordBetweenOptions>();
+      final out = arena<Selection>();
+      final codepoints = _writeCodepoints(arena, boundaryCodepoints);
+      opts.ref
+        ..size = sizeOf<TerminalSelectWordBetweenOptions>()
+        ..boundary_codepoints = codepoints
+        ..boundary_codepoints_len = boundaryCodepoints?.length ?? 0;
+      _writeGridRef(opts.ref.start, start);
+      _writeGridRef(opts.ref.end, end);
+      out.ref.size = sizeOf<Selection>();
+      final result = ghostty_terminal_select_word_between(
+        Pointer.fromAddress(terminal),
+        opts,
+        out,
+      );
+      if (result != .success) return (result, null);
+      return (result, _readSelection(out.ref));
+    });
+  }
+
+  @override
+  CResult<RawSelection?> terminalSelectLine(
+    int terminal,
+    RawGridRef ref, {
+    List<int>? whitespace,
+    bool semanticPromptBoundary = false,
+  }) {
+    return using((arena) {
+      final opts = arena<TerminalSelectLineOptions>();
+      final out = arena<Selection>();
+      final codepoints = _writeCodepoints(arena, whitespace);
+      opts.ref
+        ..size = sizeOf<TerminalSelectLineOptions>()
+        ..whitespace = codepoints
+        ..whitespace_len = whitespace?.length ?? 0
+        ..semantic_prompt_boundary = semanticPromptBoundary;
+      _writeGridRef(opts.ref.ref, ref);
+      out.ref.size = sizeOf<Selection>();
+      final result = ghostty_terminal_select_line(
+        Pointer.fromAddress(terminal),
+        opts,
+        out,
+      );
+      if (result != .success) return (result, null);
+      return (result, _readSelection(out.ref));
+    });
+  }
+
+  @override
+  CResult<RawSelection?> terminalSelectOutput(int terminal, RawGridRef ref) {
+    return using((arena) {
+      final gridRef = arena<GridRef>();
+      final out = arena<Selection>();
+      _writeGridRef(gridRef.ref, ref);
+      out.ref.size = sizeOf<Selection>();
+      final result = ghostty_terminal_select_output(
+        Pointer.fromAddress(terminal),
+        gridRef.ref,
+        out,
+      );
+      if (result != .success) return (result, null);
+      return (result, _readSelection(out.ref));
+    });
+  }
+
+  @override
+  CResult<RawSelection?> terminalSelectionAdjust(
+    int terminal,
+    RawSelection selection,
+    SelectionAdjust adjustment,
+  ) {
+    return using((arena) {
+      final sel = arena<Selection>();
+      _writeSelection(sel.ref, selection);
+      final result = ghostty_terminal_selection_adjust(
+        Pointer.fromAddress(terminal),
+        sel,
+        adjustment,
+      );
+      if (result != .success) return (result, null);
+      return (result, _readSelection(sel.ref));
+    });
+  }
+
+  @override
+  CResult<SelectionOrder> terminalSelectionOrder(
+    int terminal,
+    RawSelection selection,
+  ) {
+    return using((arena) {
+      final sel = arena<Selection>();
+      final out = arena<UnsignedInt>();
+      _writeSelection(sel.ref, selection);
+      final result = ghostty_terminal_selection_order(
+        Pointer.fromAddress(terminal),
+        sel,
+        out.cast(),
+      );
+      if (result != .success) return (result, .forward);
+      return (result, SelectionOrder.fromValue(out.value));
+    });
+  }
+
+  @override
+  CResult<RawSelection?> terminalSelectionOrdered(
+    int terminal,
+    RawSelection selection,
+    SelectionOrder desired,
+  ) {
+    return using((arena) {
+      final sel = arena<Selection>();
+      final out = arena<Selection>();
+      _writeSelection(sel.ref, selection);
+      out.ref.size = sizeOf<Selection>();
+      final result = ghostty_terminal_selection_ordered(
+        Pointer.fromAddress(terminal),
+        sel,
+        desired,
+        out,
+      );
+      if (result != .success) return (result, null);
+      return (result, _readSelection(out.ref));
+    });
+  }
+
+  @override
+  CResult<bool> terminalSelectionContains(
+    int terminal,
+    RawSelection selection,
+    PointTag pointTag,
+    int col,
+    int row,
+  ) {
+    return using((arena) {
+      final sel = arena<Selection>();
+      final point = arena<Point>();
+      _writeSelection(sel.ref, selection);
+      _writePoint(point.ref, pointTag, col, row);
+      final result = ghostty_terminal_selection_contains(
+        Pointer.fromAddress(terminal),
+        sel,
+        point.ref,
+        _outBool,
+      );
+      return (result, _outBool.value);
+    });
+  }
+
+  @override
+  CResult<bool> terminalSelectionEqual(
+    int terminal,
+    RawSelection a,
+    RawSelection b,
+  ) {
+    return using((arena) {
+      final selA = arena<Selection>();
+      final selB = arena<Selection>();
+      _writeSelection(selA.ref, a);
+      _writeSelection(selB.ref, b);
+      final result = ghostty_terminal_selection_equal(
+        Pointer.fromAddress(terminal),
+        selA,
+        selB,
+        _outBool,
+      );
+      return (result, _outBool.value);
+    });
+  }
+
+  @override
+  CResult<String> terminalSelectionFormat(
+    int terminal,
+    FormatterFormat format, {
+    bool unwrap = false,
+    bool trim = false,
+    RawSelection? selection,
+  }) {
+    return using((arena) {
+      final opts = arena<TerminalSelectionFormatOptions>();
+      final outPtr = arena<Pointer<Uint8>>();
+      final outLen = arena<Size>();
+      opts.ref
+        ..size = sizeOf<TerminalSelectionFormatOptions>()
+        ..emitAsInt = format.value
+        ..unwrap = unwrap
+        ..trim = trim;
+      if (selection == null) {
+        opts.ref.selection = nullptr;
+      } else {
+        final sel = arena<Selection>();
+        _writeSelection(sel.ref, selection);
+        opts.ref.selection = sel;
+      }
+      final result = ghostty_terminal_selection_format_alloc(
+        Pointer.fromAddress(terminal),
+        nullptr,
+        opts.ref,
+        outPtr,
+        outLen,
+      );
+      final len = outLen.value;
+      final buf = outPtr.value;
+      if (result != .success || len == 0 || buf == nullptr) {
+        return (result, '');
+      }
+      final encoded = utf8.decode(buf.asTypedList(len));
+      ghostty_free(nullptr, buf, len);
+      return (result, encoded);
+    });
+  }
+
+  @override
+  CResult<int> selectionGestureNew() {
+    return using((arena) {
+      final out = arena<SelectionGesture>();
+      final result = ghostty_selection_gesture_new(nullptr, out);
+      return (result, out.value.address);
+    });
+  }
+
+  @override
+  void selectionGestureFree(int gesture, int terminal) {
+    ghostty_selection_gesture_free(
+      Pointer.fromAddress(gesture),
+      Pointer.fromAddress(terminal),
+    );
+  }
+
+  @override
+  void selectionGestureReset(int gesture, int terminal) {
+    ghostty_selection_gesture_reset(
+      Pointer.fromAddress(gesture),
+      Pointer.fromAddress(terminal),
+    );
+  }
+
+  @override
+  CResult<RawSelection?> selectionGestureEvent(
+    int gesture,
+    int terminal,
+    int event,
+  ) {
+    return using((arena) {
+      final out = arena<Selection>();
+      out.ref.size = sizeOf<Selection>();
+      final result = ghostty_selection_gesture_event(
+        Pointer.fromAddress(gesture),
+        Pointer.fromAddress(terminal),
+        Pointer.fromAddress(event),
+        out,
+      );
+      if (result != .success) return (result, null);
+      return (result, _readSelection(out.ref));
+    });
+  }
+
+  @override
+  CResult<int> selectionGestureEventNew(SelectionGestureEventType type) {
+    return using((arena) {
+      final out = arena<SelectionGestureEvent>();
+      final result = ghostty_selection_gesture_event_new(nullptr, out, type);
+      return (result, out.value.address);
+    });
+  }
+
+  @override
+  void selectionGestureEventFree(int event) {
+    ghostty_selection_gesture_event_free(Pointer.fromAddress(event));
+  }
+
+  @override
+  Result selectionGestureEventClear(
+    int event,
+    SelectionGestureEventOption option,
+  ) {
+    return ghostty_selection_gesture_event_set(
+      Pointer.fromAddress(event),
+      option,
+      nullptr,
+    );
+  }
+
+  @override
+  Result selectionGestureEventSetRef(int event, RawGridRef ref) {
+    return using((arena) {
+      final value = arena<GridRef>();
+      _writeGridRef(value.ref, ref);
+      return ghostty_selection_gesture_event_set(
+        Pointer.fromAddress(event),
+        .ref,
+        value.cast(),
+      );
+    });
+  }
+
+  @override
+  Result selectionGestureEventSetPosition(int event, double x, double y) {
+    return using((arena) {
+      final value = arena<SurfacePosition>();
+      value.ref
+        ..x = x
+        ..y = y;
+      return ghostty_selection_gesture_event_set(
+        Pointer.fromAddress(event),
+        .position,
+        value.cast(),
+      );
+    });
+  }
+
+  @override
+  Result selectionGestureEventSetRepeatDistance(int event, double value) {
+    return using((arena) {
+      final ptr = arena<Double>();
+      ptr.value = value;
+      return ghostty_selection_gesture_event_set(
+        Pointer.fromAddress(event),
+        .repeatDistance,
+        ptr.cast(),
+      );
+    });
+  }
+
+  @override
+  Result selectionGestureEventSetTimeNs(int event, int value) {
+    return using((arena) {
+      final ptr = arena<Uint64>();
+      ptr.value = value;
+      return ghostty_selection_gesture_event_set(
+        Pointer.fromAddress(event),
+        .timeNs,
+        ptr.cast(),
+      );
+    });
+  }
+
+  @override
+  Result selectionGestureEventSetRepeatIntervalNs(int event, int value) {
+    return using((arena) {
+      final ptr = arena<Uint64>();
+      ptr.value = value;
+      return ghostty_selection_gesture_event_set(
+        Pointer.fromAddress(event),
+        .repeatIntervalNs,
+        ptr.cast(),
+      );
+    });
+  }
+
+  @override
+  Result selectionGestureEventSetWordBoundaryCodepoints(
+    int event,
+    List<int> codepoints,
+  ) {
+    return using((arena) {
+      final ptr = arena<Codepoints>();
+      ptr.ref
+        ..ptr = _writeCodepoints(arena, codepoints)
+        ..len = codepoints.length;
+      return ghostty_selection_gesture_event_set(
+        Pointer.fromAddress(event),
+        .wordBoundaryCodepoints,
+        ptr.cast(),
+      );
+    });
+  }
+
+  @override
+  Result selectionGestureEventSetBehaviors(
+    int event,
+    SelectionGestureBehavior singleClick,
+    SelectionGestureBehavior doubleClick,
+    SelectionGestureBehavior tripleClick,
+  ) {
+    return using((arena) {
+      final ptr = arena<SelectionGestureBehaviors>();
+      ptr.ref
+        ..single_clickAsInt = singleClick.value
+        ..double_clickAsInt = doubleClick.value
+        ..triple_clickAsInt = tripleClick.value;
+      return ghostty_selection_gesture_event_set(
+        Pointer.fromAddress(event),
+        .behaviors,
+        ptr.cast(),
+      );
+    });
+  }
+
+  @override
+  Result selectionGestureEventSetRectangle(int event, {required bool value}) {
+    return using((arena) {
+      final ptr = arena<Bool>();
+      ptr.value = value;
+      return ghostty_selection_gesture_event_set(
+        Pointer.fromAddress(event),
+        .rectangle,
+        ptr.cast(),
+      );
+    });
+  }
+
+  @override
+  Result selectionGestureEventSetGeometry(
+    int event, {
+    required int columns,
+    required int cellWidth,
+    required int paddingLeft,
+    required int screenHeight,
+  }) {
+    return using((arena) {
+      final ptr = arena<SelectionGestureGeometry>();
+      ptr.ref
+        ..columns = columns
+        ..cell_width = cellWidth
+        ..padding_left = paddingLeft
+        ..screen_height = screenHeight;
+      return ghostty_selection_gesture_event_set(
+        Pointer.fromAddress(event),
+        .geometry,
+        ptr.cast(),
+      );
+    });
+  }
+
+  @override
+  Result selectionGestureEventSetViewport(
+    int event, {
+    required int col,
+    required int row,
+  }) {
+    return using((arena) {
+      final ptr = arena<PointCoordinate>();
+      ptr.ref
+        ..x = col
+        ..y = row;
+      return ghostty_selection_gesture_event_set(
+        Pointer.fromAddress(event),
+        .viewport,
+        ptr.cast(),
+      );
+    });
+  }
+
+  @override
+  CResult<int> selectionGestureGetClickCount(int gesture, int terminal) {
+    return using((arena) {
+      final out = arena<Uint8>();
+      final result = ghostty_selection_gesture_get(
+        Pointer.fromAddress(gesture),
+        Pointer.fromAddress(terminal),
+        .clickCount,
+        out.cast(),
+      );
+      return (result, out.value);
+    });
+  }
+
+  @override
+  CResult<bool> selectionGestureGetDragged(int gesture, int terminal) {
+    return using((arena) {
+      final out = arena<Bool>();
+      final result = ghostty_selection_gesture_get(
+        Pointer.fromAddress(gesture),
+        Pointer.fromAddress(terminal),
+        .dragged,
+        out.cast(),
+      );
+      return (result, out.value);
+    });
+  }
+
+  @override
+  CResult<SelectionGestureAutoscroll> selectionGestureGetAutoscroll(
+    int gesture,
+    int terminal,
+  ) {
+    return using((arena) {
+      final out = arena<UnsignedInt>();
+      final result = ghostty_selection_gesture_get(
+        Pointer.fromAddress(gesture),
+        Pointer.fromAddress(terminal),
+        .autoscroll,
+        out.cast(),
+      );
+      if (result != .success) return (result, .none);
+      return (result, SelectionGestureAutoscroll.fromValue(out.value));
+    });
+  }
+
+  @override
+  CResult<SelectionGestureBehavior> selectionGestureGetBehavior(
+    int gesture,
+    int terminal,
+  ) {
+    return using((arena) {
+      final out = arena<UnsignedInt>();
+      final result = ghostty_selection_gesture_get(
+        Pointer.fromAddress(gesture),
+        Pointer.fromAddress(terminal),
+        .behavior,
+        out.cast(),
+      );
+      if (result != .success) return (result, .cell);
+      return (result, SelectionGestureBehavior.fromValue(out.value));
+    });
+  }
+
+  @override
+  CResult<RawGridRef> selectionGestureGetAnchor(int gesture, int terminal) {
+    return using((arena) {
+      final out = arena<GridRef>();
+      out.ref.size = sizeOf<GridRef>();
+      final result = ghostty_selection_gesture_get(
+        Pointer.fromAddress(gesture),
+        Pointer.fromAddress(terminal),
+        .anchor,
+        out.cast(),
+      );
+      if (result != .success) return (result, _emptyGridRef);
+      return (result, _readGridRef(out.ref));
     });
   }
 

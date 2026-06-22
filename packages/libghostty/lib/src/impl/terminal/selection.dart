@@ -1,83 +1,157 @@
 part of 'terminal.dart';
 
-/// A range of terminal content between two cell positions.
+/// A snapshot selection range defined by two grid references.
 ///
-/// Endpoints are resolved against the terminal's current page state when
-/// a [Formatter] is constructed. Subsequent mutating operations on the
-/// terminal (write, reset, resize) may invalidate those endpoints;
-/// construct a fresh [Formatter] with a new [Selection] after such
-/// operations.
+/// Both endpoints are inclusive and preserve direction. [start] may be after
+/// [end] in terminal order. When [rectangle] is true, the endpoints are
+/// interpreted as opposite corners of a block selection.
 ///
-/// [pointTag] selects the coordinate space the row/column values refer
-/// to. Use [PointTag.active] for the active screen (default),
-/// [PointTag.viewport] for viewport-relative addressing, or
-/// [PointTag.screen] to address the full scrollback plus active screen
-/// by absolute row index.
+/// The endpoint refs are untracked snapshots and follow normal [GridRef]
+/// lifetime rules. A selection does not track terminal mutations. If the
+/// endpoints must survive mutations, keep [TrackedGridRef]s separately and
+/// create a fresh [Selection] from their snapshots immediately before use.
 ///
 /// ```dart
-/// final selection = Selection(
-///   startCol: 0, startRow: 0,
-///   endCol: 10, endRow: 0,
-/// );
-/// final formatter = Formatter(
-///   terminal: terminal,
-///   format: FormatterFormat.plain,
-///   selection: selection,
-/// );
+/// final start = GridRef.at(terminal, col: 0, row: 0);
+/// final end = GridRef.at(terminal, col: 4, row: 0);
+/// terminal.selection = Selection.fromRefs(start: start, end: end);
 /// ```
 @immutable
 final class Selection {
-  /// Zero-based column of the selection start (inclusive).
-  final int startCol;
+  /// Start of the selection range, inclusive.
+  final GridRef start;
 
-  /// Zero-based row of the selection start (inclusive).
-  final int startRow;
+  /// End of the selection range, inclusive.
+  final GridRef end;
 
-  /// Zero-based column of the selection end (inclusive).
-  final int endCol;
-
-  /// Zero-based row of the selection end (inclusive).
-  final int endRow;
-
-  /// Whether the selection covers a rectangular (block) region rather
-  /// than a linear text range.
+  /// Whether endpoints describe a rectangular block selection.
   final bool rectangle;
 
-  /// Coordinate space the row/column values address.
-  final PointTag pointTag;
+  /// Creates a selection from two grid-reference snapshots.
+  ///
+  /// Both refs must come from the same [Terminal]. The refs are values and are
+  /// not consumed by the selection. The created selection follows normal
+  /// [GridRef] lifetime rules and must not be reused after a mutating terminal
+  /// call invalidates its endpoint snapshots.
+  factory Selection.fromRefs({
+    required GridRef start,
+    required GridRef end,
+    bool rectangle = false,
+  }) {
+    if (!identical(start._terminal, end._terminal)) {
+      throw ArgumentError.value(end, 'end', 'must belong to start terminal');
+    }
+    return Selection._(start, end, rectangle);
+  }
 
-  const Selection({
-    required this.startCol,
-    required this.startRow,
-    required this.endCol,
-    required this.endRow,
-    this.rectangle = false,
-    this.pointTag = PointTag.active,
-  });
+  const Selection._(this.start, this.end, this.rectangle);
+
+  Selection._fromRaw(Terminal terminal, RawSelection selection)
+    : this._(
+        GridRef._fromValue(terminal, selection.start),
+        GridRef._fromValue(terminal, selection.end),
+        selection.rectangle,
+      );
 
   @override
-  int get hashCode => Object.hash(
-    Selection,
-    startCol,
-    startRow,
-    endCol,
-    endRow,
-    rectangle,
-    pointTag,
-  );
+  int get hashCode => Object.hash(Selection, start, end, rectangle);
+
+  /// The current endpoint order.
+  SelectionOrder get order {
+    final terminal = start._terminal;
+    return check(bindings.terminalSelectionOrder(terminal._handle, _raw));
+  }
+
+  RawSelection get _raw {
+    return (start: start._value, end: end._value, rectangle: rectangle);
+  }
 
   @override
   bool operator ==(Object other) =>
       other is Selection &&
-      other.startCol == startCol &&
-      other.startRow == startRow &&
-      other.endCol == endCol &&
-      other.endRow == endRow &&
-      other.rectangle == rectangle &&
-      other.pointTag == pointTag;
+      other.start == start &&
+      other.end == end &&
+      other.rectangle == rectangle;
+
+  /// Moves the logical end endpoint by [adjustment].
+  Selection adjust(SelectionAdjust adjustment) {
+    final terminal = start._terminal;
+    return Selection._fromRaw(
+      terminal,
+      check(
+        bindings.terminalSelectionAdjust(terminal._handle, _raw, adjustment),
+      )!,
+    );
+  }
+
+  /// Whether this selection includes the terminal point at [col], [row].
+  bool contains({
+    required int col,
+    required int row,
+    PointTag pointTag = .active,
+  }) {
+    final terminal = start._terminal;
+    return check(
+      bindings.terminalSelectionContains(
+        terminal._handle,
+        _raw,
+        pointTag,
+        col,
+        row,
+      ),
+    );
+  }
+
+  /// Whether this selection is equal to [other] according to libghostty.
+  bool equal(Selection other) {
+    final terminal = start._terminal;
+    _checkSameTerminal(other, terminal);
+    return check(
+      bindings.terminalSelectionEqual(terminal._handle, _raw, other._raw),
+    );
+  }
+
+  /// Formats this selection.
+  String format({
+    FormatterFormat format = .plain,
+    bool unwrap = false,
+    bool trim = false,
+  }) {
+    final terminal = start._terminal;
+    final (code, text) = bindings.terminalSelectionFormat(
+      terminal._handle,
+      format,
+      unwrap: unwrap,
+      trim: trim,
+      selection: _raw,
+    );
+    checkCode(code);
+    return text;
+  }
+
+  /// Returns this selection with endpoints ordered as [desired].
+  Selection ordered(SelectionOrder desired) {
+    final terminal = start._terminal;
+    return Selection._fromRaw(
+      terminal,
+      check(
+        bindings.terminalSelectionOrdered(terminal._handle, _raw, desired),
+      )!,
+    );
+  }
 
   @override
-  String toString() =>
-      'Selection($startCol,$startRow -> $endCol,$endRow'
-      '${rectangle ? ', rectangle' : ''}, $pointTag)';
+  String toString() {
+    return 'Selection($start -> $end${rectangle ? ', rectangle' : ''})';
+  }
+
+  void _checkSameTerminal(Selection other, Terminal terminal) {
+    if (!identical(other.start._terminal, terminal)) {
+      throw ArgumentError.value(
+        other,
+        'other',
+        'must belong to this selection terminal',
+      );
+    }
+  }
 }
