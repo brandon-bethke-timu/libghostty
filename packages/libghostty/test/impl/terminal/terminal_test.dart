@@ -14,17 +14,14 @@ void main() {
     late Terminal terminal;
     late RenderState renderState;
     late RowIterator rows;
-    late CellIterator cells;
 
     setUp(() {
       terminal = Terminal(cols: 80, rows: 24);
       renderState = RenderState();
       rows = RowIterator();
-      cells = CellIterator();
     });
 
     tearDown(() {
-      cells.dispose();
       rows.dispose();
       renderState.dispose();
       terminal.dispose();
@@ -644,101 +641,6 @@ void main() {
       });
     });
 
-    group('RowIterator', () {
-      group('properties', () {
-        test('empty row has no content flags', () {
-          renderState.update(terminal);
-          rows.reset(renderState);
-          rows.next();
-          expect(rows.hasGrapheme, isFalse);
-          expect(rows.hasStyled, isFalse);
-          expect(rows.hasHyperlink, isFalse);
-          expect(rows.hasKittyVirtualPlaceholder, isFalse);
-          expect(rows.semanticPrompt, SemanticPrompt.none);
-        });
-
-        test('styled row reports hasStyled', () {
-          terminal.write(Uint8List.fromList('\x1b[1mBold'.codeUnits));
-          renderState.update(terminal);
-          rows.reset(renderState);
-          rows.next();
-          expect(rows.hasStyled, isTrue);
-        });
-
-        test('index tracks row position', () {
-          renderState.update(terminal);
-          rows.reset(renderState);
-          rows.next();
-          expect(rows.index, 0);
-          rows.next();
-          expect(rows.index, 1);
-        });
-      });
-    });
-
-    group('CellIterator', () {
-      void advanceToFirstCell() {
-        renderState.update(terminal);
-        rows.reset(renderState);
-        rows.next();
-        cells.reset(rows);
-        cells.next();
-      }
-
-      group('properties', () {
-        test('default cell has no styling, protection, or special content', () {
-          terminal.write(Uint8List.fromList('A'.codeUnits));
-          advanceToFirstCell();
-          expect(cells.style.bold, isFalse);
-          expect(cells.isProtected, isFalse);
-          expect(cells.semanticContent, SemanticContent.output);
-          expect(cells.backgroundArgb, isNull);
-          expect(cells.foregroundArgb, isNull);
-        });
-
-        test('styled cell reports hasStyling', () {
-          terminal.write(Uint8List.fromList('\x1b[1mB'.codeUnits));
-          advanceToFirstCell();
-          expect(cells.hasStyling, isTrue);
-        });
-
-        test('codepoint returns value for text and 0 for empty cell', () {
-          terminal.write(Uint8List.fromList('Z'.codeUnits));
-          advanceToFirstCell();
-          expect(cells.codepoint, 0x5A);
-
-          cells.next();
-          expect(cells.codepoint, 0);
-        });
-
-        test('col tracks column position', () {
-          terminal.write(Uint8List.fromList('ABC'.codeUnits));
-          advanceToFirstCell();
-          expect(cells.col, 0);
-          cells.next();
-          expect(cells.col, 1);
-        });
-
-        test('graphemeLength is 1 for single codepoint and 0 for empty', () {
-          terminal.write(Uint8List.fromList('A'.codeUnits));
-          advanceToFirstCell();
-          expect(cells.graphemeLength, 1);
-
-          cells.next();
-          expect(cells.graphemeLength, 0);
-        });
-
-        test('color ARGB returns packed values for RGB colors', () {
-          terminal.write(
-            .fromList('\x1b[48;2;255;128;0m\x1b[38;2;0;255;64mY'.codeUnits),
-          );
-          advanceToFirstCell();
-          expect(cells.backgroundArgb, 0xFFFF8000);
-          expect(cells.foregroundArgb, 0xFF00FF40);
-        });
-      });
-    });
-
     group('Cursor properties', () {
       test('cursor wideTail is false on normal position', () {
         renderState.update(terminal);
@@ -924,25 +826,6 @@ void main() {
           () => terminal.selection = selection,
           throwsA(isA<ArgumentError>()),
         );
-      });
-    });
-
-    group('CellIterator.select', () {
-      test('reads specific column content', () {
-        terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
-        renderState.update(terminal);
-        rows.reset(renderState);
-        rows.next();
-        cells.reset(rows);
-
-        cells.select(2);
-        expect(cells.content, 'C');
-
-        cells.select(0);
-        expect(cells.content, 'A');
-
-        cells.select(4);
-        expect(cells.content, 'E');
       });
     });
   });

@@ -109,6 +109,13 @@ final class CellIterator {
   /// Whether the current cell is protected (DECSCA).
   bool get isProtected => check(bindings.cellGetProtected(_rawCell));
 
+  /// Whether the current cell is contained withing the current selection.
+  ///
+  /// Returns true when the cell's column is within the current row's
+  /// row-local selection range, and false otherwise. Rendering colors,
+  /// inversion, etc are caller policy.
+  bool get isSelected => check(bindings.rowCellsGetSelected(_handle));
+
   /// Semantic content type of the current cell.
   SemanticContent get semanticContent {
     return check(bindings.cellGetSemanticContent(_rawCell));

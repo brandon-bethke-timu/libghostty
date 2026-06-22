@@ -1911,6 +1911,27 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<({int startCol, int endCol})> rowIteratorGetSelection(int iterator) {
+    final size = _layout.renderRowSelectionSize;
+    final outPtr = _exports.ghostty_wasm_alloc_u8_array(size);
+    _zero(outPtr, size);
+    _mem.writeU32(outPtr, size);
+    final result = Result.fromValue(
+      _exports.ghostty_render_state_row_get(
+        iterator,
+        RenderStateRowData.selection.value,
+        outPtr,
+      ),
+    );
+    final value = (
+      startCol: _mem.readU16(outPtr + _layout.renderRowSelectionStartX),
+      endCol: _mem.readU16(outPtr + _layout.renderRowSelectionEndX),
+    );
+    _exports.ghostty_wasm_free_u8_array(outPtr, size);
+    return (result, value);
+  }
+
+  @override
   CResult<int> rowCellsNew() {
     final outPtr = _exports.ghostty_wasm_alloc_opaque();
     final result = Result.fromValue(
@@ -2068,6 +2089,21 @@ class WasmBindings implements GhosttyBindings {
       _exports.ghostty_render_state_row_cells_get(
         cells,
         RenderStateRowCellsData.hasStyling.value,
+        outPtr,
+      ),
+    );
+    final value = _mem.readU8(outPtr) != 0;
+    _exports.ghostty_wasm_free_u8(outPtr);
+    return (result, value);
+  }
+
+  @override
+  CResult<bool> rowCellsGetSelected(int cells) {
+    final outPtr = _exports.ghostty_wasm_alloc_u8();
+    final result = Result.fromValue(
+      _exports.ghostty_render_state_row_cells_get(
+        cells,
+        RenderStateRowCellsData.selected.value,
         outPtr,
       ),
     );

@@ -86,6 +86,7 @@ export 'src/impl/terminal/terminal.dart'
         RenderInfo,
         RenderState,
         RowIterator,
+        RowSelectionRange,
         Selection,
         SelectionGesture,
         SelectionGestureBehaviors,

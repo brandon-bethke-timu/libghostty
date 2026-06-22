@@ -1159,6 +1159,26 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<({int startCol, int endCol})> rowIteratorGetSelection(int iterator) {
+    return using((arena) {
+      final selection = arena<RenderStateRowSelection>();
+      selection.ref
+        ..size = sizeOf<RenderStateRowSelection>()
+        ..start_x = 0
+        ..end_x = 0;
+      final result = ghostty_render_state_row_get(
+        Pointer.fromAddress(iterator),
+        RenderStateRowData.selection,
+        selection.cast(),
+      );
+      return (
+        result,
+        (startCol: selection.ref.start_x, endCol: selection.ref.end_x),
+      );
+    });
+  }
+
+  @override
   CResult<int> rowCellsNew() {
     return using((arena) {
       final ptr = arena<Pointer<RenderStateRowCellsImpl>>();
@@ -1280,6 +1300,16 @@ class NativeBindings implements GhosttyBindings {
     final result = ghostty_render_state_row_cells_get(
       Pointer.fromAddress(cells),
       RenderStateRowCellsData.hasStyling,
+      _outBool.cast(),
+    );
+    return (result, _outBool.value);
+  }
+
+  @override
+  CResult<bool> rowCellsGetSelected(int cells) {
+    final result = ghostty_render_state_row_cells_get(
+      Pointer.fromAddress(cells),
+      RenderStateRowCellsData.selected,
       _outBool.cast(),
     );
     return (result, _outBool.value);
