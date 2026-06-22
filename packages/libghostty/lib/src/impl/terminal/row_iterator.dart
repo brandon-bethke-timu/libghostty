@@ -1,5 +1,11 @@
 part of 'terminal.dart';
 
+/// Row-local selected column range in a [RenderState] snapshot.
+///
+/// Both columns are inclusive. [RowIterator.selection] returns null when the
+/// current row does not intersect the selection captured by the render state.
+typedef RowSelectionRange = ({int startCol, int endCol});
+
 /// Reusable iterator over the rows of a [RenderState] snapshot.
 ///
 /// Allocate once and reuse across frames. Advance with [next] and read the
@@ -61,6 +67,16 @@ final class RowIterator {
   ///
   /// Undefined before the first successful [next] call.
   int get index => _index;
+
+  /// Selected column range for the current row, or null when the row does
+  /// not intersect the selection captured by the render state.
+  ///
+  /// The returned columns are row-local and inclusive.
+  RowSelectionRange? get selection {
+    final (code, selection) = bindings.rowIteratorGetSelection(_handle);
+    if (code == .noValue) return null;
+    return check((code, selection));
+  }
 
   /// Semantic prompt state of the current row.
   SemanticPrompt get semanticPrompt {

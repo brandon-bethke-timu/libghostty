@@ -159,6 +159,11 @@ class Layouts {
   late final int colorsCursorHasValue;
   late final int colorsPalette;
 
+  // GhosttyRenderStateRowSelection
+  late final int renderRowSelectionSize;
+  late final int renderRowSelectionStartX;
+  late final int renderRowSelectionEndX;
+
   // GhosttySizeReportSize
   late final int sizeReportSize;
   late final int sizeReportColumns;
@@ -376,6 +381,18 @@ class Layouts {
     colorsCursor = struct['cursor'];
     colorsCursorHasValue = struct['cursor_has_value'];
     colorsPalette = struct['palette'];
+
+    final renderRowSelection = types['GhosttyRenderStateRowSelection'];
+    if (renderRowSelection == null) {
+      renderRowSelectionSize = 8;
+      renderRowSelectionStartX = 4;
+      renderRowSelectionEndX = 6;
+    } else {
+      struct = _Struct(types, 'GhosttyRenderStateRowSelection');
+      renderRowSelectionSize = struct.size;
+      renderRowSelectionStartX = struct['start_x'];
+      renderRowSelectionEndX = struct['end_x'];
+    }
 
     struct = _Struct(types, 'GhosttySizeReportSize');
     sizeReportSize = struct.size;

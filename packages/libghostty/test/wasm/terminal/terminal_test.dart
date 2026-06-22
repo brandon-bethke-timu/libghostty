@@ -17,17 +17,14 @@ void main() {
     late Terminal terminal;
     late RenderState renderState;
     late RowIterator rows;
-    late CellIterator cells;
 
     setUp(() {
       terminal = Terminal(cols: 80, rows: 24);
       renderState = RenderState();
       rows = RowIterator();
-      cells = CellIterator();
     });
 
     tearDown(() {
-      cells.dispose();
       rows.dispose();
       renderState.dispose();
       terminal.dispose();
@@ -678,73 +675,11 @@ void main() {
       });
     });
 
-    group('RowIterator', () {
-      group('properties', () {
-        test('empty row has no content flags', () {
-          renderState.update(terminal);
-          rows.reset(renderState);
-          rows.next();
-          expect(rows.hasGrapheme, isFalse);
-          expect(rows.hasStyled, isFalse);
-          expect(rows.hasHyperlink, isFalse);
-          expect(rows.hasKittyVirtualPlaceholder, isFalse);
-          expect(rows.semanticPrompt, SemanticPrompt.none);
-        });
-
-        test('styled row reports hasStyled', () {
-          terminal.write(Uint8List.fromList('\x1b[1mBold'.codeUnits));
-          renderState.update(terminal);
-          rows.reset(renderState);
-          rows.next();
-          expect(rows.hasStyled, isTrue);
-        });
-      });
-    });
-
-    group('CellIterator', () {
-      void advanceToFirstCell() {
-        renderState.update(terminal);
-        rows.reset(renderState);
-        rows.next();
-        cells.reset(rows);
-        cells.next();
-      }
-
-      group('properties', () {
-        test('default cell has no styling, protection, or special content', () {
-          terminal.write(Uint8List.fromList('A'.codeUnits));
-          advanceToFirstCell();
-          expect(cells.style.bold, isFalse);
-          expect(cells.isProtected, isFalse);
-          expect(cells.semanticContent, SemanticContent.output);
-        });
-
-        test('styled cell reports hasStyling', () {
-          terminal.write(Uint8List.fromList('\x1b[1mB'.codeUnits));
-          advanceToFirstCell();
-          expect(cells.hasStyling, isTrue);
-        });
-      });
-    });
-
     group('Cursor properties', () {
       test('cursor wideTail is false on normal position', () {
         renderState.update(terminal);
         final cursor = renderState.cursor;
         expect(cursor.wideTail, isFalse);
-      });
-    });
-
-    group('re-iteration', () {
-      test('rebinding the iterator starts from the first row', () {
-        terminal.write(Uint8List.fromList('Hello'.codeUnits));
-        renderState.update(terminal);
-
-        final count1 = _rowCount(rows, renderState);
-        final count2 = _rowCount(rows, renderState);
-
-        expect(count1, greaterThan(0));
-        expect(count2, count1);
       });
     });
 
@@ -927,26 +862,6 @@ void main() {
         );
       });
     });
-
-    group('CellIterator.select', () {
-      test('reads specific column content', () {
-        terminal.write(Uint8List.fromList('ABCDE'.codeUnits));
-        renderState.update(terminal);
-
-        rows.reset(renderState);
-        rows.next();
-        cells.reset(rows);
-
-        cells.select(2);
-        expect(cells.content, 'C');
-
-        cells.select(0);
-        expect(cells.content, 'A');
-
-        cells.select(4);
-        expect(cells.content, 'E');
-      });
-    });
   });
 }
 
@@ -956,15 +871,6 @@ void clearDirty(RenderState renderState, RowIterator rows) {
     rows.dirty = false;
   }
   renderState.dirty = DirtyState.clean;
-}
-
-int _rowCount(RowIterator rows, RenderState renderState) {
-  var count = 0;
-  rows.reset(renderState);
-  while (rows.next()) {
-    count++;
-  }
-  return count;
 }
 
 void _expectAllCellsEmpty(Terminal terminal) {

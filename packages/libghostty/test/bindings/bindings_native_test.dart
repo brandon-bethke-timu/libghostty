@@ -608,7 +608,57 @@ void main() {
     });
   });
 
+  group('row iterator data', () {
+    group('rowIteratorGetSelection', () {
+      test('returns noValue for an unselected row', () {
+        final iterator = _selectedRowIterator(0);
+
+        final (code, _) = bindings.rowIteratorGetSelection(iterator);
+
+        expect(code, Result.noValue);
+      });
+
+      test('returns selected columns for a selected row', () {
+        final iterator = _selectedRowIterator(1);
+
+        final (code, selection) = bindings.rowIteratorGetSelection(iterator);
+
+        expect(code, Result.success);
+        expect(selection, (startCol: 1, endCol: 3));
+      });
+    });
+  });
+
   group('row cells data', () {
+    group('rowCellsGetSelected', () {
+      test('returns true for a selected cell', () {
+        final cells = _selectedRowCells(2);
+
+        final (code, selected) = bindings.rowCellsGetSelected(cells);
+
+        expect(code, Result.success);
+        expect(selected, isTrue);
+      });
+
+      test('returns true for the selected end column', () {
+        final cells = _selectedRowCells(3);
+
+        final (code, selected) = bindings.rowCellsGetSelected(cells);
+
+        expect(code, Result.success);
+        expect(selected, isTrue);
+      });
+
+      test('returns false for an unselected cell', () {
+        final cells = _selectedRowCells(4);
+
+        final (code, selected) = bindings.rowCellsGetSelected(cells);
+
+        expect(code, Result.success);
+        expect(selected, isFalse);
+      });
+    });
+
     group('rowCellsGetGraphemesUtf8', () {
       test('returns current cell content', () {
         final cells = _firstCellCells('\u00E9');
@@ -860,5 +910,64 @@ int _firstCellCells(String text) {
   expect(bindings.rowIteratorNext(rowIter), isTrue);
   checkCode(bindings.rowCellsInit(rowCells, rowIter));
   expect(bindings.rowCellsNext(rowCells), isTrue);
+  return rowCells;
+}
+
+int _selectedRowIterator(int row) {
+  final (_, terminal) = bindings.terminalNew(10, 3, 0);
+  final (_, renderState) = bindings.renderStateNew();
+  final (_, rowIter) = bindings.rowIteratorNew();
+  addTearDown(() => bindings.rowIteratorFree(rowIter));
+  addTearDown(() => bindings.renderStateFree(renderState));
+  addTearDown(() => bindings.terminalFree(terminal));
+  bindings.terminalVtWrite(
+    terminal,
+    Uint8List.fromList('ABCDE\r\nFGHIJ'.codeUnits),
+  );
+  final (_, start) = bindings.terminalGridRef(terminal, .active, 1, 1);
+  final (_, end) = bindings.terminalGridRef(terminal, .active, 3, 1);
+  checkCode(
+    bindings.terminalSetSelection(terminal, (
+      start: start,
+      end: end,
+      rectangle: false,
+    )),
+  );
+  checkCode(bindings.renderStateUpdate(renderState, terminal));
+  checkCode(bindings.rowIteratorInit(rowIter, renderState));
+  for (var i = 0; i <= row; i++) {
+    expect(bindings.rowIteratorNext(rowIter), isTrue);
+  }
+  return rowIter;
+}
+
+int _selectedRowCells(int col) {
+  final (_, terminal) = bindings.terminalNew(10, 3, 0);
+  final (_, renderState) = bindings.renderStateNew();
+  final (_, rowIter) = bindings.rowIteratorNew();
+  final (_, rowCells) = bindings.rowCellsNew();
+  addTearDown(() => bindings.rowCellsFree(rowCells));
+  addTearDown(() => bindings.rowIteratorFree(rowIter));
+  addTearDown(() => bindings.renderStateFree(renderState));
+  addTearDown(() => bindings.terminalFree(terminal));
+  bindings.terminalVtWrite(
+    terminal,
+    Uint8List.fromList('ABCDE\r\nFGHIJ'.codeUnits),
+  );
+  final (_, start) = bindings.terminalGridRef(terminal, .active, 1, 1);
+  final (_, end) = bindings.terminalGridRef(terminal, .active, 3, 1);
+  checkCode(
+    bindings.terminalSetSelection(terminal, (
+      start: start,
+      end: end,
+      rectangle: false,
+    )),
+  );
+  checkCode(bindings.renderStateUpdate(renderState, terminal));
+  checkCode(bindings.rowIteratorInit(rowIter, renderState));
+  expect(bindings.rowIteratorNext(rowIter), isTrue);
+  expect(bindings.rowIteratorNext(rowIter), isTrue);
+  checkCode(bindings.rowCellsInit(rowCells, rowIter));
+  checkCode(bindings.rowCellsSelect(rowCells, col));
   return rowCells;
 }

@@ -257,6 +257,7 @@ abstract interface class GhosttyBindings {
   CResult<bool> rowIteratorGetDirty(int iterator);
   Result rowIteratorSetDirty(int iterator, {required bool dirty});
   CResult<int> rowIteratorGetRawRow(int iterator);
+  CResult<({int startCol, int endCol})> rowIteratorGetSelection(int iterator);
 
   CResult<int> rowCellsNew();
   void rowCellsFree(int handle);
@@ -271,6 +272,7 @@ abstract interface class GhosttyBindings {
   CResult<List<int>> rowCellsGetGraphemes(int cells, int len);
   CResult<String> rowCellsGetGraphemesUtf8(int cells);
   CResult<bool> rowCellsGetHasStyling(int cells);
+  CResult<bool> rowCellsGetSelected(int cells);
   CResult<RgbColor> rowCellsGetBgColor(int cells);
   CResult<RgbColor> rowCellsGetFgColor(int cells);
   CResult<int> rowCellsGetBgColorArgb(int cells);
