@@ -59,7 +59,7 @@ BuildInput createTestBuildInput({
     'user_defines': <String, String>{},
     'config': <String, dynamic>{
       'build_code_assets': true,
-      'build_asset_types': <String>[],
+      'build_asset_types': <String>['code_assets/code'],
       'extensions': <String, dynamic>{
         'code_assets': <String, dynamic>{
           'target_os': os.name,
