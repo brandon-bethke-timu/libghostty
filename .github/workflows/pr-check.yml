@@ -15,6 +15,7 @@ on:
       - '.github/workflows/build.yml'
       - '.github/workflows/release.yml'
       - '.github/workflows/release-flterm.yml'
+      - '.github/dependabot.yml'
       - '.github/FUNDING.yml'
 
 permissions:
