@@ -4,8 +4,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation.dart';
+import '../links/link_settings.dart';
 import '../rendering.dart';
 import '../rendering/terminal_render_cache.dart';
+import 'link_interaction.dart';
 import 'terminal_controller.dart';
 import 'terminal_gesture_detector.dart';
 import 'terminal_scope.dart';
@@ -66,6 +68,9 @@ class TerminalView extends StatefulWidget {
   /// Controls which selection gestures are enabled and how they behave.
   final TerminalGestureSettings gestureSettings;
 
+  /// Controls terminal link detection, styling, and activation callbacks.
+  final LinkSettings linkSettings;
+
   /// Padding around the terminal grid.
   ///
   /// Filled with the theme background color. The grid is sized from
@@ -107,14 +112,15 @@ class TerminalView extends StatefulWidget {
     this.theme,
     this.fontData,
     this.focusNode,
-    this.autofocus = false,
-    this.showKeyboard = true,
-    this.mouseAutoHide = .onInput,
-    this.gestureSettings = const TerminalGestureSettings(),
-    this.padding = const EdgeInsets.all(8),
+    this.shortcuts,
     this.scrollPhysics,
     this.scrollController,
-    this.shortcuts,
+    this.autofocus = false,
+    this.showKeyboard = true,
+    this.padding = const .all(8),
+    this.mouseAutoHide = .onInput,
+    this.linkSettings = const LinkSettings(),
+    this.gestureSettings = const TerminalGestureSettings(),
   });
 
   @override
@@ -127,6 +133,7 @@ class _TerminalViewState extends State<TerminalView> {
   late CellMetrics _metrics;
   late TerminalViewBinding _binding;
   late TerminalScrollController _scrollController;
+  final _links = LinkInteraction();
   final _rendererKey = GlobalKey();
 
   Uint8List? _resolvedFontData;
@@ -134,6 +141,7 @@ class _TerminalViewState extends State<TerminalView> {
   var _ownsScrollController = false;
   var _mouseCursorHidden = false;
   var _lastAlternatePixels = 0.0;
+  var _visibleCols = 0;
   var _visibleRows = 0;
   var _devicePixelRatio = 1.0;
   Timer? _blinkTimer;
@@ -166,6 +174,8 @@ class _TerminalViewState extends State<TerminalView> {
 
     _devicePixelRatio = devicePixelRatio;
     _metrics = _measureMetrics();
+    _links.cancel();
+    _syncLinkInteraction();
   }
 
   @override
@@ -179,6 +189,7 @@ class _TerminalViewState extends State<TerminalView> {
       _binding.brightness = _themeBrightness;
       _binding.attach(_focusNode, _scrollController);
       _controller.addListener(_onControllerChanged);
+      _links.invalidateContent();
     }
 
     if (widget.focusNode != oldWidget.focusNode) {
@@ -210,6 +221,7 @@ class _TerminalViewState extends State<TerminalView> {
           _theme.fontFamily != oldTheme.fontFamily ||
           _theme.fontFamilyFallback != oldTheme.fontFamilyFallback) {
         _metrics = _measureMetrics();
+        _links.cancel();
       }
 
       _binding.brightness = _themeBrightness;
@@ -221,6 +233,8 @@ class _TerminalViewState extends State<TerminalView> {
         unawaited(_resolveFontData(_theme.fontFamily));
       }
     }
+
+    _syncLinkInteraction();
   }
 
   @override
@@ -259,6 +273,7 @@ class _TerminalViewState extends State<TerminalView> {
     _binding.brightness = _themeBrightness;
     _binding.attach(_focusNode, _scrollController);
     _controller.addListener(_onControllerChanged);
+    _syncLinkInteraction();
   }
 
   Widget _build(BuildContext context, TerminalRenderCache cache) {
@@ -283,17 +298,20 @@ class _TerminalViewState extends State<TerminalView> {
               enableSelectAll: widget.gestureSettings.selectAllShortcut,
               child: MouseRegion(
                 onHover: _handleMouseHover,
+                onExit: _handleMouseExit,
                 cursor: _effectiveMouseCursor(),
                 child: Focus(
                   focusNode: _focusNode,
                   autofocus: widget.autofocus,
                   onFocusChange: _handleFocusChange,
                   child: TerminalGestureDetector(
+                    links: _links,
                     metrics: _metrics,
                     binding: _binding,
                     visibleRows: _visibleRows,
                     settings: widget.gestureSettings,
                     scrollController: _scrollController,
+                    onLinkActivate: widget.linkSettings.onActivate,
                     child: Scrollable(
                       controller: _scrollController,
                       physics: widget.scrollPhysics,
@@ -307,6 +325,7 @@ class _TerminalViewState extends State<TerminalView> {
                         renderCache: cache,
                         preeditText: _binding.preeditText,
                         blinkVisible: _blinkVisible,
+                        linkSnapshot: _links.snapshot(),
                         onResize: _handleResize,
                       ),
                     ),
@@ -322,6 +341,7 @@ class _TerminalViewState extends State<TerminalView> {
 
   MouseCursor _effectiveMouseCursor() {
     if (_mouseCursorHidden) return SystemMouseCursors.none;
+    if (_links.highlighted != null) return SystemMouseCursors.click;
     if (_controller.mouseTracking != .none) return SystemMouseCursors.basic;
     return SystemMouseCursors.text;
   }
@@ -347,11 +367,33 @@ class _TerminalViewState extends State<TerminalView> {
       }
     }
 
+    _syncHoveredLink();
     return result;
   }
 
+  void _handleMouseExit(PointerExitEvent event) {
+    final previous = _links.highlighted;
+    _links.cancelHover();
+    if (previous != null) setState(() {});
+  }
+
   void _handleMouseHover(PointerHoverEvent event) {
-    if (_mouseCursorHidden) setState(() => _mouseCursorHidden = false);
+    final previous = _links.highlighted;
+    _links.handleHover(
+      localPosition: event.localPosition,
+      metrics: _metrics,
+      virtualMods: _binding.virtualMods,
+    );
+    if (_mouseCursorHidden || _links.highlighted != previous) {
+      setState(() => _mouseCursorHidden = false);
+    }
+  }
+
+  void _syncHoveredLink() {
+    final previous = _links.highlighted;
+    _links.refreshHover(metrics: _metrics, virtualMods: _binding.virtualMods);
+    if (_links.highlighted == previous) return;
+    setState(() {});
   }
 
   Future<void> _handlePaste() async {
@@ -361,6 +403,7 @@ class _TerminalViewState extends State<TerminalView> {
   }
 
   void _handleResize(int cols, int rows) {
+    _visibleCols = cols;
     _visibleRows = rows;
     _binding.handleResize(
       cols: cols,
@@ -369,6 +412,7 @@ class _TerminalViewState extends State<TerminalView> {
       padding: .zero,
       devicePixelRatio: _devicePixelRatio,
     );
+    _syncLinkInteraction();
   }
 
   CellMetrics _measureMetrics({Uint8List? fontData}) {
@@ -383,9 +427,27 @@ class _TerminalViewState extends State<TerminalView> {
   }
 
   void _onControllerChanged() {
+    _links.invalidateContent();
+    _syncLinkInteraction();
     _scrollController.activeScreen = _controller.activeScreen;
     _updateTextInputGeometry();
     setState(_syncBlink);
+  }
+
+  void _syncLinkInteraction() {
+    final cwd = _controller.pwd;
+    final context = LinkContext(
+      terminal: _binding.terminal,
+      rows: _visibleRows,
+      cols: _visibleCols,
+      cwd: cwd.isEmpty ? null : cwd,
+    );
+
+    _links.update(
+      context: context,
+      settings: widget.linkSettings,
+      idleStyle: _theme.hyperlink.idle,
+    );
   }
 
   void _onScrollChanged() {
@@ -399,6 +461,8 @@ class _TerminalViewState extends State<TerminalView> {
     if (lines == 0) return;
     _lastAlternatePixels += lines * cellHeight;
     _binding.handleScroll(lines);
+    _links.invalidateContent();
+    _syncLinkInteraction();
     _updateTextInputGeometry();
   }
 
@@ -425,10 +489,9 @@ class _TerminalViewState extends State<TerminalView> {
     if (data == null) return;
 
     _resolvedFontData = data;
-
-    setState(() {
-      _metrics = _measureMetrics(fontData: data);
-    });
+    _metrics = _measureMetrics(fontData: data);
+    _links.cancel();
+    setState(() {});
   }
 
   void _syncBlink() {

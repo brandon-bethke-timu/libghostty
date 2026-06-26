@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:libghostty/libghostty.dart';
 
+import '../links/link_snapshot.dart';
 import 'atlas/atlas.dart';
 import 'atlas/sprite_buffer.dart';
 import 'paint_state.dart';
@@ -58,6 +59,10 @@ final class TerminalRenderPipeline {
 
   void markAllRowsDirty() => _frameBuilder.markAllRowsDirty();
 
+  void markRowsDirty(int from, int toExclusive) {
+    _frameBuilder.markRowsDirty(from, toExclusive);
+  }
+
   void paint(Canvas canvas) => _painters.paint(canvas);
 
   void refreshCursorGlyph() => _frameBuilder.refreshCursorGlyph();
@@ -70,6 +75,7 @@ final class TerminalRenderPipeline {
     Terminal terminal, {
     required bool terminalDirty,
     String preeditText = '',
+    LinkSnapshot linkSnapshot = .empty,
   }) {
     final syncTerminal = terminalDirty || _needsTerminalSync;
     _needsTerminalSync = false;
@@ -77,6 +83,7 @@ final class TerminalRenderPipeline {
       terminal,
       terminalDirty: syncTerminal,
       preeditText: preeditText,
+      linkSnapshot: linkSnapshot,
     );
     _painters.sync(terminal);
   }

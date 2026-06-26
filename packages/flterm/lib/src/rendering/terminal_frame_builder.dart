@@ -6,6 +6,7 @@ import 'package:libghostty/libghostty.dart';
 
 import '../foundation/dynamic_color.dart';
 import '../foundation/terminal_theme.dart';
+import '../links/link_snapshot.dart';
 import 'atlas/atlas.dart';
 import 'atlas/sprite_buffer.dart';
 import 'cell_content_resolver.dart';
@@ -233,8 +234,11 @@ class TerminalFrameBuilder {
     Terminal terminal, {
     required bool terminalDirty,
     String preeditText = '',
+    LinkSnapshot linkSnapshot = .empty,
   }) {
     var dirty = DirtyState.clean;
+
+    _rowBuilder.linkSnapshot = linkSnapshot;
 
     if (terminalDirty) {
       dirty = _renderState.update(terminal);
@@ -878,6 +882,7 @@ final class _RowBuildState {
   var prevStyleId = -1;
   int? prevBackgroundArgb;
   var prevSelected = false;
+  HyperlinkStyle? prevLinkStyle;
 
   var baseForeground = 0xFFFFFFFF;
   var baseBackground = 0;
@@ -910,6 +915,7 @@ final class _RowBuildState {
     prevStyleId = -1;
     prevBackgroundArgb = null;
     prevSelected = false;
+    prevLinkStyle = null;
     baseForeground = 0xFFFFFFFF;
     baseBackground = frame.defaultBackgroundArgb;
     baseBackgroundExplicit = false;
@@ -961,10 +967,12 @@ final class _StyleResolver {
     CellIterator cell, {
     required int? backgroundArgb,
     required bool selected,
+    required HyperlinkStyle? linkStyle,
     required _RowBuildState row,
   }) {
     if (cell.styleId != row.prevStyleId ||
-        backgroundArgb != row.prevBackgroundArgb) {
+        backgroundArgb != row.prevBackgroundArgb ||
+        linkStyle != row.prevLinkStyle) {
       final (fg, bg, style, explicitBg) = _resolveBase(
         cell,
         backgroundArgb: backgroundArgb,
@@ -1000,7 +1008,31 @@ final class _StyleResolver {
       row.backgroundExplicit = row.baseBackgroundExplicit;
     }
 
+    if (linkStyle != null) {
+      final textColor = linkStyle.textColor;
+      if (textColor != null) row.foreground = textColor.toARGB32();
+      if (linkStyle.underline != .none) {
+        final style = row.style;
+        row.style = Style(
+          bold: style.bold,
+          italic: style.italic,
+          faint: style.faint,
+          blink: style.blink,
+          inverse: style.inverse,
+          invisible: style.invisible,
+          overline: style.overline,
+          strikethrough: style.strikethrough,
+          foreground: style.foreground,
+          background: style.background,
+          underline: style.underline == .none ? linkStyle.underline : .double,
+          underlineColor: _rgbColor(linkStyle.underlineColor),
+        );
+        row.hasDecoration = true;
+      }
+    }
+
     row.prevSelected = selected;
+    row.prevLinkStyle = linkStyle;
   }
 
   (int foreground, int background, Style style, bool explicitBg) _resolveBase(
@@ -1076,6 +1108,15 @@ final class _StyleResolver {
   }
 }
 
+RgbColor? _rgbColor(Color? color) {
+  if (color == null) return null;
+  return RgbColor(
+    (color.r * 255.0).round().clamp(0, 255),
+    (color.g * 255.0).round().clamp(0, 255),
+    (color.b * 255.0).round().clamp(0, 255),
+  );
+}
+
 /// Rebuilds dirty rows into background, foreground, and decoration channels.
 final class _TerminalRowBuilder {
   final Atlas _atlas;
@@ -1087,6 +1128,8 @@ final class _TerminalRowBuilder {
   late final _ForegroundEmitter _foreground;
   var _preeditText = '';
   _PreeditRange? _preeditRange;
+  LinkSnapshot linkSnapshot = .empty;
+  var _hasLinks = false;
 
   _TerminalRowBuilder({
     required this._atlas,
@@ -1104,6 +1147,7 @@ final class _TerminalRowBuilder {
   void beginFrame() {
     _frame.update(_state, atlas: _atlas);
     _styles.beginFrame();
+    _hasLinks = !linkSnapshot.isEmpty;
   }
 
   void rebuildRow(int rowIndex, RowIterator rows, CellIterator cells) {
@@ -1283,15 +1327,28 @@ final class _TerminalRowBuilder {
     }
 
     final selected = cell.isSelected;
+    final HyperlinkStyle? linkStyle;
+    if (!_hasLinks) {
+      linkStyle = null;
+    } else {
+      final position = Position(row: row.row, col: row.col);
+      linkStyle = linkSnapshot.isHighlighted(position)
+          ? _state.theme.hyperlink.highlighted
+          : linkSnapshot.contains(position)
+          ? _state.theme.hyperlink.idle
+          : null;
+    }
     final backgroundArgb = cell.hasText ? null : cell.backgroundArgb;
     if (cell.styleId != row.prevStyleId ||
         backgroundArgb != row.prevBackgroundArgb ||
-        selected != row.prevSelected) {
+        selected != row.prevSelected ||
+        linkStyle != row.prevLinkStyle) {
       _foreground.flush(row);
       _styles.update(
         cell,
         backgroundArgb: backgroundArgb,
         selected: selected,
+        linkStyle: linkStyle,
         row: row,
       );
     }

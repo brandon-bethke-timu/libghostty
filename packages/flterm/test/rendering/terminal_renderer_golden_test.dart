@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flterm/src/foundation.dart';
+import 'package:flterm/src/links/link_snapshot.dart';
 import 'package:flterm/src/rendering.dart';
 import 'package:flterm/src/rendering/terminal_render_cache.dart';
 import 'package:flutter/rendering.dart';
@@ -78,6 +79,7 @@ void main() {
       bool focused = true,
       bool blinkVisible = true,
       String preeditText = '',
+      LinkSnapshot linkSnapshot = LinkSnapshot.empty,
       OnResize? onResize,
     }) {
       selection?.applyTo(terminal);
@@ -89,20 +91,23 @@ void main() {
           alignment: Alignment.topLeft,
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: width, maxHeight: height),
-            child: TerminalRenderer(
-              terminal: terminal,
-              theme:
-                  theme ??
-                  TerminalTheme.dark().copyWith(
-                    fontFamilyFallback: bundledFontFamilyFallback,
-                  ),
-              metrics: metrics,
-              offset: ViewportOffset.zero(),
-              renderCache: renderCache(),
-              renderObserver: _TestRenderObserver(hasFocus: focused),
-              blinkVisible: blinkVisible,
-              preeditText: preeditText,
-              onResize: onResize,
+            child: RepaintBoundary(
+              child: TerminalRenderer(
+                terminal: terminal,
+                theme:
+                    theme ??
+                    TerminalTheme.dark().copyWith(
+                      fontFamilyFallback: bundledFontFamilyFallback,
+                    ),
+                metrics: metrics,
+                offset: ViewportOffset.zero(),
+                renderCache: renderCache(),
+                renderObserver: _TestRenderObserver(hasFocus: focused),
+                blinkVisible: blinkVisible,
+                preeditText: preeditText,
+                linkSnapshot: linkSnapshot,
+                onResize: onResize,
+              ),
             ),
           ),
         ),
@@ -131,6 +136,7 @@ void main() {
       WidgetTester tester, {
       TerminalTheme? overrideTheme,
       TestSelection? selection,
+      LinkSnapshot linkSnapshot = LinkSnapshot.empty,
     }) async {
       tester.view.devicePixelRatio = 1.0;
       await tester.pumpWidget(
@@ -139,6 +145,7 @@ void main() {
           theme: overrideTheme ?? theme,
           selection: selection,
           metrics: goldenMetrics,
+          linkSnapshot: linkSnapshot,
         ),
       );
     }
@@ -211,6 +218,54 @@ void main() {
           matchesGoldenFile('goldens/text_decorations.png'),
         );
         terminal.dispose();
+      });
+    });
+
+    group('link styling', () {
+      testWidgets('OSC 8 link is plain when idle', (tester) async {
+        writeUtf8(
+          terminal,
+          '\x1b]8;;https://example.test\x07OSC 8\x1b]8;;\x07 tail',
+        );
+
+        await pump(tester);
+
+        await expectLater(
+          find.byType(TerminalRenderer),
+          matchesGoldenFile('goldens/link_osc8_idle_plain.png'),
+        );
+      });
+
+      testWidgets('text link is plain when idle', (tester) async {
+        writeUtf8(terminal, 'https://a.test tail');
+
+        await pump(tester);
+
+        await expectLater(
+          find.byType(TerminalRenderer),
+          matchesGoldenFile('goldens/link_text_idle_plain.png'),
+        );
+      });
+
+      testWidgets('hovered text link underlines exact link cells', (
+        tester,
+      ) async {
+        writeUtf8(terminal, 'https://a.test tail');
+
+        await pump(
+          tester,
+          linkSnapshot: LinkSnapshot.highlighted(
+            const CellRange(
+              start: Position(row: 0, col: 0),
+              end: Position(row: 0, col: 13),
+            ),
+          ),
+        );
+
+        await expectLater(
+          find.byType(TerminalRenderer),
+          matchesGoldenFile('goldens/link_text_hover_exact_range.png'),
+        );
       });
     });
 

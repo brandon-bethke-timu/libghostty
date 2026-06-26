@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flterm/src/foundation.dart';
+import 'package:flterm/src/links/link_settings.dart';
 import 'package:flterm/src/rendering.dart';
 import 'package:flterm/src/widgets.dart';
 import 'package:flutter/foundation.dart'
@@ -119,6 +120,11 @@ void main() {
       }
     }
 
+    Future<void> releaseControlIfPressed(WidgetTester tester) async {
+      if (!HardwareKeyboard.instance.isControlPressed) return;
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+    }
+
     Widget wrapInApp({
       required TerminalController controller,
       TerminalTheme? theme,
@@ -127,6 +133,7 @@ void main() {
       bool showKeyboard = true,
       MouseAutoHide mouseAutoHide = .onInput,
       TerminalGestureSettings gestureSettings = const TerminalGestureSettings(),
+      LinkSettings linkSettings = const LinkSettings(),
       EdgeInsets padding = EdgeInsets.zero,
       double width = 800,
       double height = 480,
@@ -144,6 +151,7 @@ void main() {
               showKeyboard: showKeyboard,
               mouseAutoHide: mouseAutoHide,
               gestureSettings: gestureSettings,
+              linkSettings: linkSettings,
               padding: padding,
             ),
           ),
@@ -1048,6 +1056,144 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(controller.hasSelection, isFalse);
+    });
+
+    group('link interaction', () {
+      testWidgets('mouse tap ignores link without modifier', (tester) async {
+        final links = <ActivatedLink>[];
+        writeUtf8(controller, 'https://example.test');
+
+        await tester.pumpWidget(
+          wrapInApp(
+            controller: controller,
+            linkSettings: LinkSettings(
+              modifier: .control,
+              types: const {LinkType.text},
+              onActivate: links.add,
+            ),
+            width: 400,
+            height: 80,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final topLeft = tester.getTopLeft(find.byType(TerminalView));
+        final gesture = await tester.startGesture(
+          topLeft + const Offset(4, 8),
+          kind: PointerDeviceKind.mouse,
+        );
+        await gesture.up();
+        await tester.pump();
+
+        expect(links, isEmpty);
+      });
+
+      testWidgets('mouse tap activates link with modifier', (tester) async {
+        final links = <ActivatedLink>[];
+        writeUtf8(controller, 'https://example.test');
+
+        await tester.pumpWidget(
+          wrapInApp(
+            controller: controller,
+            autofocus: true,
+            linkSettings: LinkSettings(
+              modifier: .control,
+              types: const {LinkType.text},
+              onActivate: links.add,
+            ),
+            width: 400,
+            height: 80,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final topLeft = tester.getTopLeft(find.byType(TerminalView));
+        addTearDown(() => releaseControlIfPressed(tester));
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+        final gesture = await tester.startGesture(
+          topLeft + const Offset(4, 8),
+          kind: PointerDeviceKind.mouse,
+        );
+        await gesture.up();
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+        await tester.pump();
+
+        expect(links, [
+          isA<ActivatedLink>().having(
+            (link) => link.text,
+            'text',
+            'https://example.test',
+          ),
+        ]);
+      });
+
+      testWidgets('modifier hover highlights link', (tester) async {
+        writeUtf8(controller, 'https://example.test');
+
+        await tester.pumpWidget(
+          wrapInApp(
+            controller: controller,
+            autofocus: true,
+            linkSettings: LinkSettings(
+              modifier: .control,
+              types: const {LinkType.text},
+              onActivate: (_) {},
+            ),
+            width: 400,
+            height: 80,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final topLeft = tester.getTopLeft(find.byType(TerminalView));
+        addTearDown(() => releaseControlIfPressed(tester));
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        addTearDown(gesture.removePointer);
+        await gesture.addPointer(location: topLeft + const Offset(4, 8));
+        await gesture.moveTo(topLeft + const Offset(4, 8));
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+        await tester.pump();
+
+        expect(
+          renderer(tester).linkSnapshot.highlighted,
+          const CellRange(
+            start: Position(row: 0, col: 0),
+            end: Position(row: 0, col: 19),
+          ),
+        );
+      });
+
+      testWidgets('touch tap activates link without modifier', (tester) async {
+        final links = <ActivatedLink>[];
+        writeUtf8(controller, 'https://example.test');
+
+        await tester.pumpWidget(
+          wrapInApp(
+            controller: controller,
+            linkSettings: LinkSettings(
+              types: const {LinkType.text},
+              onActivate: links.add,
+            ),
+            width: 400,
+            height: 80,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final topLeft = tester.getTopLeft(find.byType(TerminalView));
+        await tester.tapAt(topLeft + const Offset(4, 8));
+        await tester.pump();
+
+        expect(links, [
+          isA<ActivatedLink>().having(
+            (link) => link.text,
+            'text',
+            'https://example.test',
+          ),
+        ]);
+      });
     });
 
     testWidgets('long press starts normal selection by default', (

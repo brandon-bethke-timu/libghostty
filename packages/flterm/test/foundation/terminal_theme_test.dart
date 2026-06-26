@@ -230,18 +230,18 @@ void main() {
   });
 
   group('HyperlinkTheme', () {
-    test('defaults: idle single underline, highlighted double underline', () {
+    test('defaults: idle plain, highlighted single underline', () {
       const theme = HyperlinkTheme();
-      expect(theme.idle.underline, UnderlineStyle.single);
+      expect(theme.idle.underline, UnderlineStyle.none);
       expect(theme.idle.textColor, isNull);
-      expect(theme.highlighted.underline, UnderlineStyle.double);
+      expect(theme.highlighted.underline, UnderlineStyle.single);
       expect(theme.highlighted.textColor, isNull);
     });
 
     test('equality and hashCode', () {
       const a = HyperlinkTheme();
       const b = HyperlinkTheme();
-      const c = HyperlinkTheme(idle: HyperlinkStyle());
+      const c = HyperlinkTheme(highlighted: HyperlinkStyle());
       expect(a, equals(b));
       expect(a.hashCode, b.hashCode);
       expect(a, isNot(equals(c)));

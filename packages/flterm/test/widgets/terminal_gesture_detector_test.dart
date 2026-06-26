@@ -5,7 +5,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flterm/src/foundation.dart';
+import 'package:flterm/src/links/link_settings.dart';
 import 'package:flterm/src/widgets.dart';
+import 'package:flterm/src/widgets/link_interaction.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -70,6 +72,8 @@ void main() {
       required TerminalController controller,
       CellMetrics metrics = defaultMetrics,
       TerminalGestureSettings gestureSettings = const TerminalGestureSettings(),
+      LinkInteraction? links,
+      ValueChanged<ActivatedLink>? onLinkActivate,
       ScrollController? scrollController,
       int visibleRows = 24,
     }) {
@@ -80,6 +84,8 @@ void main() {
           child: TerminalGestureDetector(
             binding: controller as TerminalViewBinding,
             metrics: metrics,
+            links: links ?? LinkInteraction(),
+            onLinkActivate: onLinkActivate,
             settings: gestureSettings,
             scrollController: scrollController,
             visibleRows: visibleRows,
@@ -87,6 +93,21 @@ void main() {
           ),
         ),
       );
+    }
+
+    LinkInteraction linkInteractionFor(TerminalController controller) {
+      final links = LinkInteraction();
+      links.update(
+        context: LinkContext(
+          terminal: terminalFor(controller),
+          rows: 24,
+          cols: 80,
+          cwd: null,
+        ),
+        settings: LinkSettings(modifier: .none, onActivate: (_) {}),
+        idleStyle: const HyperlinkStyle(),
+      );
+      return links;
     }
 
     void enableMouseTracking(
@@ -140,6 +161,92 @@ void main() {
       await tapMouse(tester, const Offset(40, 16));
 
       expect(terminalFor(controller).selection, isNull);
+    });
+
+    testWidgets('tap activates a link without starting selection', (
+      tester,
+    ) async {
+      final links = <ActivatedLink>[];
+      writeToTerminal(controller, 'https://example.test');
+      final linkInteraction = linkInteractionFor(controller);
+
+      await tester.pumpWidget(
+        buildHandler(
+          controller: controller,
+          links: linkInteraction,
+          onLinkActivate: links.add,
+        ),
+      );
+
+      await tapMouse(tester, const Offset(8, 0));
+
+      expect(links, hasLength(1));
+      expect(links.single.text, 'https://example.test');
+      expect(terminalFor(controller).selection, isNull);
+    });
+
+    testWidgets('tap up activates the press candidate after invalidation', (
+      tester,
+    ) async {
+      final links = <ActivatedLink>[];
+      writeToTerminal(controller, 'https://example.test');
+      final linkInteraction = linkInteractionFor(controller);
+
+      await tester.pumpWidget(
+        buildHandler(
+          controller: controller,
+          links: linkInteraction,
+          onLinkActivate: links.add,
+        ),
+      );
+
+      final gesture = await mouseDown(tester, const Offset(8, 0));
+      linkInteraction.invalidateContent();
+      await gesture.up();
+
+      expect(links.single.text, 'https://example.test');
+    });
+
+    testWidgets('drag cancels claimed link tap', (tester) async {
+      final links = <ActivatedLink>[];
+      writeToTerminal(controller, 'https://example.test');
+      final linkInteraction = linkInteractionFor(controller);
+
+      await tester.pumpWidget(
+        buildHandler(
+          controller: controller,
+          links: linkInteraction,
+          onLinkActivate: links.add,
+        ),
+      );
+
+      final gesture = await mouseDown(tester, const Offset(8, 0));
+      await tester.pump(kPressTimeout);
+      await gesture.moveTo(const Offset(80, 32));
+      await gesture.up();
+
+      expect(links, isEmpty);
+    });
+
+    testWidgets('mouse tracking takes priority over link activation', (
+      tester,
+    ) async {
+      final links = <ActivatedLink>[];
+      writeToTerminal(controller, 'https://example.test');
+      final linkInteraction = linkInteractionFor(controller);
+      enableMouseTracking(controller);
+
+      await tester.pumpWidget(
+        buildHandler(
+          controller: controller,
+          links: linkInteraction,
+          onLinkActivate: links.add,
+        ),
+      );
+
+      await tapMouse(tester, const Offset(8, 0));
+
+      expect(links, isEmpty);
     });
 
     testWidgets('drag creates selection with correct cells', (tester) async {

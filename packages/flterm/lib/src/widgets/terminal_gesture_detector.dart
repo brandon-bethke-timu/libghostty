@@ -8,6 +8,8 @@ import 'package:libghostty/libghostty.dart'
 import 'package:meta/meta.dart';
 
 import '../foundation.dart';
+import '../links/link_settings.dart';
+import 'link_interaction.dart';
 import 'terminal_raw_gesture_detector.dart';
 import 'terminal_view_binding.dart';
 
@@ -23,6 +25,8 @@ class TerminalGestureDetector extends StatefulWidget {
   final CellMetrics metrics;
   final TerminalViewBinding binding;
   final TerminalGestureSettings settings;
+  final LinkInteraction links;
+  final ValueChanged<ActivatedLink>? onLinkActivate;
   final ScrollController? scrollController;
 
   const TerminalGestureDetector({
@@ -31,6 +35,8 @@ class TerminalGestureDetector extends StatefulWidget {
     this.visibleRows = 0,
     required this.metrics,
     required this.binding,
+    required this.links,
+    this.onLinkActivate,
     this.scrollController,
     this.settings = const TerminalGestureSettings(),
   });
@@ -43,6 +49,7 @@ class TerminalGestureDetector extends StatefulWidget {
 class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
   _DragState? _drag;
   Position? _pressCell;
+  var _linkPressActive = false;
   Timer? _autoScrollTimer;
 
   TerminalViewBinding get _binding => widget.binding;
@@ -79,6 +86,7 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
       _stopAutoScroll();
       _drag = null;
       _pressCell = null;
+      _cancelLinkPress();
     }
   }
 
@@ -105,6 +113,12 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
     );
   }
 
+  void _cancelLinkPress() {
+    if (!_linkPressActive) return;
+    _linkPressActive = false;
+    widget.links.cancel();
+  }
+
   void _cancelSelectionPress() {
     if (_pressCell == null) return;
     _binding.cancelSelectionGesture();
@@ -126,12 +140,14 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
     }
     _stopAutoScroll();
     _drag = null;
+    _cancelLinkPress();
   }
 
   void _handleDragEnd() => _endDrag();
 
   void _handleDragStart(DragStartDetails details) {
     _binding.requestFocus();
+    _cancelLinkPress();
     if (_isMouseTracked(HardwareKeyboard.instance.isShiftPressed)) return;
     if (!widget.settings.dragSelection) {
       _cancelSelectionPress();
@@ -178,10 +194,29 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
   void _handleTapDown(TapDownDetails details) {
     _binding.requestFocus();
     if (_isMouseTracked(HardwareKeyboard.instance.isShiftPressed)) return;
+    if (widget.links.handlePress(
+      localPosition: details.localPosition,
+      metrics: widget.metrics,
+      pointerKind: details.kind ?? .mouse,
+      virtualMods: _binding.virtualMods,
+    )) {
+      _linkPressActive = true;
+      _cancelSelectionPress();
+      return;
+    }
     _handleSelectionPress(details.localPosition);
   }
 
   void _handleTapUp(TapUpDetails details) {
+    if (_linkPressActive) {
+      _linkPressActive = false;
+      final link = widget.links.handleRelease(
+        localPosition: details.localPosition,
+        metrics: widget.metrics,
+      );
+      if (link != null) widget.onLinkActivate?.call(link);
+      return;
+    }
     if (_pressCell == null &&
         _isMouseTracked(HardwareKeyboard.instance.isShiftPressed)) {
       return;

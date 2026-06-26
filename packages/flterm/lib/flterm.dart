@@ -26,6 +26,7 @@ export 'package:libghostty/libghostty.dart'
         initializeForWeb;
 
 export 'src/foundation/callbacks.dart' show OnResize;
+export 'src/foundation/cell_range.dart' show CellRange;
 export 'src/foundation/color_palette.dart' show ColorPalette;
 export 'src/foundation/dynamic_color.dart' show DynamicColor;
 export 'src/foundation/input_types.dart' show KeyboardState, MouseAutoHide;
@@ -44,6 +45,15 @@ export 'src/foundation/terminal_theme.dart'
         HyperlinkTheme,
         SelectionTheme,
         TerminalTheme;
+export 'src/links/activation_modifier.dart' show ActivationModifier;
+export 'src/links/link_settings.dart'
+    show
+        ActivatedLink,
+        LinkHighlightMode,
+        LinkRule,
+        LinkSettings,
+        LinkType,
+        LinkedFile;
 export 'src/widgets/terminal_controller.dart' show TerminalController;
 export 'src/widgets/terminal_scope.dart' show TerminalScope;
 export 'src/widgets/terminal_scroll_controller.dart'

@@ -1,8 +1,10 @@
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:libghostty/libghostty.dart';
+import 'package:meta/meta.dart';
 
 import '../foundation.dart';
+import '../links/link_snapshot.dart';
 import 'atlas/atlas_config.dart';
 import 'paint_state.dart';
 import 'terminal_render_cache.dart';
@@ -29,6 +31,7 @@ import 'terminal_render_pipeline.dart';
 ///   renderObserver: controller,
 /// )
 /// ```
+@internal
 class TerminalRenderer extends LeafRenderObjectWidget {
   /// The terminal whose screen is rendered.
   final Terminal terminal;
@@ -67,6 +70,9 @@ class TerminalRenderer extends LeafRenderObjectWidget {
   /// IME preedit text to draw at the cursor before it is committed.
   final String preeditText;
 
+  /// Visible link styling state prepared by the view layer.
+  final LinkSnapshot linkSnapshot;
+
   /// Called when the terminal grid dimensions change during layout.
   ///
   /// Fires after the terminal has been resized. Use this to notify the
@@ -86,6 +92,7 @@ class TerminalRenderer extends LeafRenderObjectWidget {
     required this.renderCache,
     this.blinkVisible = true,
     this.preeditText = '',
+    this.linkSnapshot = .empty,
     this.onResize,
   });
 
@@ -100,6 +107,7 @@ class TerminalRenderer extends LeafRenderObjectWidget {
       onResize: onResize,
       blinkVisible: blinkVisible,
       preeditText: preeditText,
+      linkSnapshot: linkSnapshot,
       renderObserver: renderObserver,
     );
   }
@@ -136,7 +144,8 @@ class TerminalRenderer extends LeafRenderObjectWidget {
       ..onResize = onResize
       ..renderObserver = renderObserver
       ..blinkVisible = blinkVisible
-      ..preeditText = preeditText;
+      ..preeditText = preeditText
+      ..linkSnapshot = linkSnapshot;
   }
 }
 
@@ -157,6 +166,7 @@ class TerminalRenderer extends LeafRenderObjectWidget {
 ///    Kitty image snapshots, and z-order.
 ///
 /// Created and managed by [TerminalRenderer]. Not intended for direct use.
+@internal
 class TerminalRenderBox extends RenderBox {
   Terminal _terminal;
   ViewportOffset _offset;
@@ -169,6 +179,7 @@ class TerminalRenderBox extends RenderBox {
   var _stickToBottom = true;
   var _lastScrollbackRows = 0;
   var _preeditText = '';
+  LinkSnapshot _linkSnapshot;
 
   final TerminalPaintState _paintState;
   late final TerminalRenderPipeline _pipeline;
@@ -181,6 +192,7 @@ class TerminalRenderBox extends RenderBox {
     required this._renderObserver,
     required this._renderCache,
     bool blinkVisible = true,
+    this._linkSnapshot = .empty,
     this._preeditText = '',
     this._onResize,
   }) : _paintState = TerminalPaintState(theme, metrics)
@@ -219,6 +231,20 @@ class TerminalRenderBox extends RenderBox {
     markNeedsPaint();
   }
 
+  set linkSnapshot(LinkSnapshot value) {
+    if (_linkSnapshot == value) return;
+    final previous = _linkSnapshot;
+    _linkSnapshot = value;
+    if (identical(previous.matches, value.matches)) {
+      _markLinkRowsDirty(previous.highlighted);
+      _markLinkRowsDirty(value.highlighted);
+    } else {
+      _markLinkSnapshotRowsDirty(previous);
+      _markLinkSnapshotRowsDirty(value);
+    }
+    markNeedsPaint();
+  }
+
   @override
   bool get isRepaintBoundary => true;
 
@@ -242,6 +268,27 @@ class TerminalRenderBox extends RenderBox {
 
   /// Current terminal composing rect in this render box's local coordinates.
   Rect get textInputComposingRect => textInputCaretRect;
+
+  void _markLinkRowsDirty(CellRange? range) {
+    if (range == null) return;
+    final rows = _paintState.rows;
+    if (rows <= 0) return;
+
+    var start = range.start.row;
+    var end = range.end.row + 1;
+    if (start < 0) start = 0;
+    if (end > rows) end = rows;
+    if (start >= end) return;
+
+    _pipeline.markRowsDirty(start, end);
+  }
+
+  void _markLinkSnapshotRowsDirty(LinkSnapshot snapshot) {
+    _markLinkRowsDirty(snapshot.highlighted);
+    for (final match in snapshot.matches) {
+      _markLinkRowsDirty(match.link.range);
+    }
+  }
 
   set metrics(CellMetrics value) {
     if (_paintState.metrics == value) return;
@@ -575,6 +622,7 @@ class TerminalRenderBox extends RenderBox {
       _terminal,
       terminalDirty: terminalDirty,
       preeditText: _preeditText,
+      linkSnapshot: _linkSnapshot,
     );
   }
 }

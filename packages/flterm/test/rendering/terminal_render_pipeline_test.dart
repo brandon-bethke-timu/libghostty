@@ -6,7 +6,9 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flterm/src/foundation/cell_metrics.dart';
+import 'package:flterm/src/foundation/cell_range.dart';
 import 'package:flterm/src/foundation/terminal_theme.dart';
+import 'package:flterm/src/links/link_snapshot.dart';
 import 'package:flterm/src/rendering/atlas/atlas.dart';
 import 'package:flterm/src/rendering/paint_state.dart';
 import 'package:flterm/src/rendering/terminal_render_pipeline.dart';
@@ -97,6 +99,23 @@ void main() {
       );
 
       pipeline.sync(terminal, terminalDirty: true);
+
+      paint(pipeline);
+    });
+
+    test('sync accepts prepared link snapshots', () {
+      writeUtf8(terminal, 'https://a.test');
+
+      pipeline.sync(
+        terminal,
+        terminalDirty: true,
+        linkSnapshot: LinkSnapshot.highlighted(
+          const CellRange(
+            start: Position(row: 0, col: 0),
+            end: Position(row: 0, col: 13),
+          ),
+        ),
+      );
 
       paint(pipeline);
     });

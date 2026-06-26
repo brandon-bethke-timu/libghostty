@@ -190,14 +190,19 @@ final class HyperlinkStyle {
 @immutable
 final class HyperlinkTheme {
   /// Appearance when the hyperlink is not highlighted.
+  ///
+  /// Non-empty idle styling keeps visible links styled outside hover. This can
+  /// be expensive for high-throughput terminals because visible text must be
+  /// scanned after content changes. Leave this as `HyperlinkStyle()` for best
+  /// throughput.
   final HyperlinkStyle idle;
 
-  /// Appearance when the user Cmd+hovers over the hyperlink.
+  /// Appearance when the hyperlink is highlighted.
   final HyperlinkStyle highlighted;
 
   const HyperlinkTheme({
-    this.idle = const HyperlinkStyle(underline: .single),
-    this.highlighted = const HyperlinkStyle(underline: .double),
+    this.idle = const HyperlinkStyle(),
+    this.highlighted = const HyperlinkStyle(underline: .single),
   });
 
   @override
@@ -291,7 +296,7 @@ final class TerminalTheme {
   /// Cursor appearance settings.
   final CursorTheme cursor;
 
-  /// Hyperlink appearance for idle and Cmd+hover states.
+  /// Hyperlink appearance for idle and highlighted states.
   final HyperlinkTheme hyperlink;
 
   /// Font family name for rendering terminal text.
