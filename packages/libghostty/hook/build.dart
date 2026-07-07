@@ -12,6 +12,8 @@ void main(List<String> args) async {
 Future<void> _build(BuildInput input, BuildOutputBuilder output) async {
   if (!input.config.buildCodeAssets) return;
 
+  output.dependencies.add(input.packageRoot.resolve('ghostty.version'));
+
   final targetOS = input.config.code.targetOS;
   final libFileName = targetOS.dylibFileName('ghostty');
   final installDir = input.outputDirectory;
