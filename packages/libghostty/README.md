@@ -2,6 +2,7 @@
 
 [![pub package](https://img.shields.io/pub/v/libghostty)](https://pub.dev/packages/libghostty)
 [![GitHub Actions](https://github.com/elias8/libghostty/actions/workflows/build.yml/badge.svg)](https://github.com/elias8/libghostty/actions)
+[![Sponsor](https://img.shields.io/github/sponsors/elias8?logo=githubsponsors&label=sponsor)](https://github.com/sponsors/elias8)
 
 Dart bindings to [libghostty-vt](https://github.com/ghostty-org/ghostty),
 the terminal emulator library from [Ghostty](https://ghostty.org).
@@ -15,7 +16,7 @@ the terminal emulator library from [Ghostty](https://ghostty.org).
 ```yaml
 # pubspec.yaml
 dependencies:
-  libghostty: ^0.0.10
+  libghostty: ^0.0.11
 ```
 
 On web, initialize the WASM module once before using any bindings:

@@ -5,6 +5,7 @@
 <p align="center">
   <a href="https://pub.dev/packages/flterm"><img alt="pub package" src="https://img.shields.io/pub/v/flterm"></a>
   <a href="https://github.com/elias8/libghostty/actions"><img alt="ci" src="https://github.com/elias8/libghostty/actions/workflows/build.yml/badge.svg"></a>
+  <a href="https://github.com/sponsors/elias8"><img alt="sponsor" src="https://img.shields.io/github/sponsors/elias8?logo=githubsponsors&label=sponsor"></a>
 </p>
 
 Flutter terminal widget on top of [Ghostty](https://ghostty.org)'s

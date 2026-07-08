@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.0.11
+
+### Added
+
+- **Color utilities**: `parseColor`, `parsePaletteEntry`,
+  `parseX11ColorName`, `x11ColorNames`, palette generation, and luminance
+  helpers expose Ghostty's runtime color behavior.
+- **Unicode width utilities**: `unicodeCodepointWidth` and
+  `unicodeGraphemeWidth` expose Ghostty's terminal cell-width rules.
+- **Color-scheme reports**: `ColorScheme.encode()` encodes terminal
+  color-scheme reporting responses.
+- **Kitty graphics cache stamps**: `KittyGraphics.generation` and
+  `KittyImage.generation` let renderers detect placement and image cache
+  invalidation without comparing image bytes.
+- **Absolute viewport scrolling**: `Terminal.scrollToRow()` restores viewport
+  positions using the same row space as `Scrollbar.offset`.
+
+### Changed
+
+- **Kitty graphics pixel data**: stored image payloads are exposed as decoded,
+  decompressed pixels, including PNG and zlib-compressed transmissions.
+- **Scrollbar metadata**: scrollbar reads use Ghostty's cached offset and
+  incrementally maintained total, reducing repeated scrollback traversal.
+
 ## 0.0.10
 
 ### Breaking

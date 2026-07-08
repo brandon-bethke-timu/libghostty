@@ -7,6 +7,7 @@
   <a href="https://pub.dev/packages/flterm"><img alt="flterm" src="https://img.shields.io/pub/v/flterm?label=flterm"></a>
   <a href="https://github.com/elias8/libghostty/actions"><img alt="ci" src="https://github.com/elias8/libghostty/actions/workflows/build.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-blue"></a>
+  <a href="https://github.com/sponsors/elias8"><img alt="sponsor" src="https://img.shields.io/github/sponsors/elias8?logo=githubsponsors&label=sponsor"></a>
 </p>
 
 [Ghostty](https://ghostty.org)'s libghostty-vt engine for Dart, with
