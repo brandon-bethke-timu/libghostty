@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:libghostty/libghostty.dart'
+    show RgbColor, colorPerceivedLuminance;
 
 import '../foundation.dart';
 import '../links/link_settings.dart';
@@ -150,7 +152,15 @@ class _TerminalViewState extends State<TerminalView> {
   TerminalController get _controller => widget.controller;
 
   Brightness get _themeBrightness {
-    return _theme.background.computeLuminance() > 0.5 ? .light : .dark;
+    final background = _theme.background;
+    final luminance = colorPerceivedLuminance(
+      RgbColor(
+        (background.r * 255.0).round(),
+        (background.g * 255.0).round(),
+        (background.b * 255.0).round(),
+      ),
+    );
+    return luminance > 0.5 ? .light : .dark;
   }
 
   @override

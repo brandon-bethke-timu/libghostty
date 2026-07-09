@@ -1,6 +1,8 @@
 import 'package:flterm/src/foundation/color_palette.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:libghostty/libghostty.dart'
+    show RgbColor, defaultColorPalette, generateColorPalette;
 
 void main() {
   group('ColorPalette', () {
@@ -25,6 +27,44 @@ void main() {
       Color(0xFF64C8C8),
       Color(0xFFDCDCDC),
     ];
+
+    RgbColor toRgbColor(Color color) {
+      return RgbColor(
+        (color.r * 255.0).round(),
+        (color.g * 255.0).round(),
+        (color.b * 255.0).round(),
+      );
+    }
+
+    Color toColor(RgbColor color) {
+      return Color(color.toArgb32);
+    }
+
+    List<RgbColor> libghosttyBase() {
+      final base = defaultColorPalette();
+      for (var i = 0; i < ansiColors.length; i++) {
+        base[i] = toRgbColor(ansiColors[i]);
+      }
+      return base;
+    }
+
+    void expectMatchesLibghosttyGenerated(
+      ColorPalette palette, {
+      required Color background,
+      required Color foreground,
+      required bool harmonious,
+    }) {
+      final expected = generateColorPalette(
+        base: libghosttyBase(),
+        background: toRgbColor(background),
+        foreground: toRgbColor(foreground),
+        harmonious: harmonious,
+      ).map(toColor).toList();
+
+      for (var i = 0; i < expected.length; i++) {
+        expect(palette[i], expected[i], reason: 'index $i');
+      }
+    }
 
     void expectAnsiColors(ColorPalette palette) {
       for (var i = 0; i < 16; i++) {
@@ -130,29 +170,58 @@ void main() {
         expectAnsiColors(palette);
       });
 
-      test('returns generated cube corners', () {
-        expect(palette[16], bg);
-        expect(palette[231], fg);
+      test('matches libghostty generation for dark themes', () {
+        expectMatchesLibghosttyGenerated(
+          palette,
+          background: bg,
+          foreground: fg,
+          harmonious: false,
+        );
       });
 
-      double luma(Color color) {
-        return 0.299 * color.r * 255 +
-            0.587 * color.g * 255 +
-            0.114 * color.b * 255;
-      }
+      test('matches libghostty generation for harmonious light themes', () {
+        const lightBg = Color(0xFFF0F0F0);
+        const lightFg = Color(0xFF1E1E1E);
+        final lightPalette = ColorPalette.generated(
+          ansiColors: ansiColors,
+          background: lightBg,
+          foreground: lightFg,
+          harmonious: true,
+        );
 
-      void expectGeneratedGrayscaleRamp(ColorPalette palette) {
-        for (var i = 233; i < 256; i++) {
-          expect(
-            luma(palette[i]),
-            greaterThanOrEqualTo(luma(palette[i - 1])),
-            reason: 'index $i should not be darker than ${i - 1}',
-          );
-        }
-      }
+        expectMatchesLibghosttyGenerated(
+          lightPalette,
+          background: lightBg,
+          foreground: lightFg,
+          harmonious: true,
+        );
+      });
 
-      test('keeps grayscale ramp monotonically non-darkening', () {
-        expectGeneratedGrayscaleRamp(palette);
+      test('matches libghostty generation for non-harmonious light themes', () {
+        const lightBg = Color(0xFFF0F0F0);
+        const lightFg = Color(0xFF1E1E1E);
+        final lightPalette = ColorPalette.generated(
+          ansiColors: ansiColors,
+          background: lightBg,
+          foreground: lightFg,
+        );
+
+        expectMatchesLibghosttyGenerated(
+          lightPalette,
+          background: lightBg,
+          foreground: lightFg,
+          harmonious: false,
+        );
+      });
+
+      test('preserves ANSI colors skipped by generation', () {
+        expectMatchesLibghosttyGenerated(
+          palette,
+          background: bg,
+          foreground: fg,
+          harmonious: false,
+        );
+        expectAnsiColors(palette);
       });
 
       test('copyWith preserves the generated mode', () {

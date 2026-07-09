@@ -1,9 +1,27 @@
 import 'dart:collection';
 
 import 'package:flutter/painting.dart';
+import 'package:libghostty/libghostty.dart'
+    show RgbColor, defaultColorPalette, generateColorPalette;
 import 'package:meta/meta.dart';
 
-import 'generate_256_color.dart';
+List<RgbColor> _basePalette(List<Color> ansiColors) {
+  final palette = defaultColorPalette();
+  for (var i = 0; i < ansiColors.length; i++) {
+    palette[i] = _toRgbColor(ansiColors[i]);
+  }
+  return palette;
+}
+
+Color _toColor(RgbColor color) => Color(color.toArgb32);
+
+RgbColor _toRgbColor(Color color) {
+  return RgbColor(
+    (color.r * 255.0).round(),
+    (color.g * 255.0).round(),
+    (color.b * 255.0).round(),
+  );
+}
 
 void _validateAnsi(List<Color> ansiColors) {
   if (ansiColors.length != 16) {
@@ -15,33 +33,6 @@ void _validateAnsi(List<Color> ansiColors) {
   }
 }
 
-/// Standard xterm extended palette: 6×6×6 RGB cube (16–231) + 24-step
-/// grayscale ramp (232–255). Indices 0–15 pass through from [ansiColors].
-List<Color> _xtermCube(List<Color> ansiColors) {
-  final colors = List<Color>.filled(256, const Color(0xFF000000));
-  for (var i = 0; i < 16; i++) {
-    colors[i] = ansiColors[i];
-  }
-  var idx = 16;
-  for (var r = 0; r < 6; r++) {
-    for (var g = 0; g < 6; g++) {
-      for (var b = 0; b < 6; b++) {
-        colors[idx++] = Color.fromARGB(
-          255,
-          r == 0 ? 0 : r * 40 + 55,
-          g == 0 ? 0 : g * 40 + 55,
-          b == 0 ? 0 : b * 40 + 55,
-        );
-      }
-    }
-  }
-  for (var i = 0; i < 24; i++) {
-    final v = i * 10 + 8;
-    colors[idx++] = Color.fromARGB(255, v, v, v);
-  }
-  return colors;
-}
-
 /// The default background, foreground, and 256-color palette for a terminal.
 ///
 /// Indices 0–15 hold the 16 ANSI base colors. Indices 16–255 hold the
@@ -51,8 +42,8 @@ List<Color> _xtermCube(List<Color> ansiColors) {
 ///   a 24-step grayscale ramp (232–255), matching mainstream terminal
 ///   defaults.
 /// - [ColorPalette.generated]: indices 16–255 are derived from
-///   [background], [foreground], and the 16 base colors via CIELAB
-///   interpolation so the extended palette adapts to the theme.
+///   [background], [foreground], and the 16 base colors using libghostty's
+///   terminal palette generation.
 ///
 /// ```dart
 /// final palette = ColorPalette(
@@ -86,19 +77,19 @@ final class ColorPalette {
     return ColorPalette._(
       background: background,
       foreground: foreground,
-      colors: List<Color>.unmodifiable(_xtermCube(ansiColors)),
+      colors: List<Color>.unmodifiable(_basePalette(ansiColors).map(_toColor)),
       generated: false,
       harmonious: false,
     );
   }
 
-  /// Builds a palette whose indices 16–255 are CIELAB-interpolated from
-  /// [ansiColors], [background], and [foreground] so they blend with the
-  /// theme rather than clash with the fixed xterm cube.
+  /// Builds a palette whose indices 16–255 are generated from [ansiColors],
+  /// [background], and [foreground] using libghostty's terminal palette rules.
   ///
-  /// When [harmonious] is true, the cube orientation follows the theme's
-  /// own dark→light direction instead of being forced dark→light; useful
-  /// for light themes.
+  /// Indices 0–15 are always preserved from [ansiColors]. For light themes,
+  /// [harmonious] controls whether generated entries keep the theme's
+  /// background-to-foreground orientation; when false, the generated cube and
+  /// grayscale ramp run dark-to-light.
   ///
   /// [ansiColors] must contain exactly 16 entries.
   factory ColorPalette.generated({
@@ -112,12 +103,12 @@ final class ColorPalette {
       background: background,
       foreground: foreground,
       colors: List<Color>.unmodifiable(
-        generate256Color(
-          base: ansiColors,
-          background: background,
-          foreground: foreground,
+        generateColorPalette(
+          base: _basePalette(ansiColors),
+          background: _toRgbColor(background),
+          foreground: _toRgbColor(foreground),
           harmonious: harmonious,
-        ),
+        ).map(_toColor),
       ),
       generated: true,
       harmonious: harmonious,
