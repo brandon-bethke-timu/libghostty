@@ -13,7 +13,10 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:libghostty/libghostty.dart' hide KeyEvent;
+import 'package:libghostty/libghostty.dart' hide ColorScheme, KeyEvent;
+import 'package:libghostty/libghostty.dart'
+    as vt
+    show ColorScheme, ColorSchemeReportEncode;
 
 extension _SelectionEdges on Selection {
   Position get _startPoint => start.positionIn(.viewport)!;
@@ -932,6 +935,25 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(TerminalView), findsOneWidget);
+    });
+
+    testWidgets('reports light color scheme for perceived-light backgrounds', (
+      tester,
+    ) async {
+      final output = <Uint8List>[];
+      controller.onOutput = output.add;
+      final theme = TerminalTheme(
+        palette: ColorPalette(
+          ansiColors: List.filled(16, const Color(0xFF888888)),
+          background: const Color(0xFFFF8000),
+          foreground: const Color(0xFF000000),
+        ),
+      );
+
+      await tester.pumpWidget(wrapInApp(controller: controller, theme: theme));
+      writeUtf8(controller, '\x1b[?996n');
+
+      expect(decodeOutput(output), vt.ColorScheme.light.encode());
     });
 
     testWidgets('sendText via controller produces onOutput', (tester) async {
