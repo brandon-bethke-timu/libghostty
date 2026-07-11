@@ -1,10 +1,11 @@
-import 'dart:ui';
+import 'dart:ui' show Canvas;
 
 import 'package:libghostty/libghostty.dart';
 
 import 'atlas/atlas.dart';
 import 'atlas/sprite_buffer.dart';
 import 'kitty_image_cache.dart';
+import 'kitty_placement_cache.dart';
 import 'paint_state.dart';
 import 'painters/background_painter.dart';
 import 'painters/cursor_painter.dart';
@@ -18,20 +19,22 @@ import 'painters/underline_painter.dart';
 
 /// Owns paint helpers, paint order, and paint-only terminal resources.
 final class TerminalPainterStack {
+  // The protocol splits negative z values in half at INT32_MIN / 2.
+  static const int _kittyBelowBackgroundThreshold = -1 << 30;
+
   final SpriteBuffer _sprites;
   final TerminalPaintState _state;
-  final _liveKittyImageIds = <int>{};
   final KittyImageCache _kittyImageCache;
-  final ShapedRunPainter _shapedRunPainter;
-  final List<KittyPlacementSnapshot> _kittyBelowBg = [];
+  final List<KittyPlacementSnapshot> _kittyBelowBackground = [];
   final List<KittyPlacementSnapshot> _kittyBelowText = [];
   final List<KittyPlacementSnapshot> _kittyAboveText = [];
-
+  final ShapedRunPainter _shapedRunPainter;
   final BackgroundPainter _backgroundPainter;
   final DecorationPainter _decorationPainter;
-  late final KittyGraphicsPainter _kittyBelowBgPainter;
+  late final KittyGraphicsPainter _kittyBelowBackgroundPainter;
   late final KittyGraphicsPainter _kittyBelowTextPainter;
   late final KittyGraphicsPainter _kittyAboveTextPainter;
+  late final KittyPlacementCache _kittyPlacementCache;
 
   late EmojiPainter _emojiPainter;
   late SpritePainter _spritePainter;
@@ -48,10 +51,14 @@ final class TerminalPainterStack {
        _shapedRunPainter = ShapedRunPainter(_sprites.shaped),
        _backgroundPainter = BackgroundPainter(_state, _sprites),
        _decorationPainter = DecorationPainter(_sprites) {
-    _kittyBelowBgPainter = KittyGraphicsPainter(
+    _kittyPlacementCache = KittyPlacementCache(
+      state: _state,
+      images: _kittyImageCache,
+    );
+    _kittyBelowBackgroundPainter = KittyGraphicsPainter(
       state: _state,
       cache: _kittyImageCache,
-      snapshots: _kittyBelowBg,
+      snapshots: _kittyBelowBackground,
     );
     _kittyBelowTextPainter = KittyGraphicsPainter(
       state: _state,
@@ -74,12 +81,10 @@ final class TerminalPainterStack {
     _underlinePainter = UnderlinePainter(atlas, _sprites);
   }
 
-  void dispose() {
-    _kittyImageCache.dispose();
-  }
+  void dispose() => _kittyImageCache.dispose();
 
   void paint(Canvas canvas) {
-    _kittyBelowBgPainter.paint(canvas);
+    _kittyBelowBackgroundPainter.paint(canvas);
     _backgroundPainter.paint(canvas);
     _kittyBelowTextPainter.paint(canvas);
     _underlinePainter.paint(canvas);
@@ -92,72 +97,25 @@ final class TerminalPainterStack {
     _kittyAboveTextPainter.paint(canvas);
   }
 
-  void sync(Terminal terminal) {
-    _kittyBelowBg.clear();
-    _kittyBelowText.clear();
-    _kittyAboveText.clear();
-    _liveKittyImageIds.clear();
-
-    final graphics = KittyGraphics.of(terminal);
-    if (graphics == null) {
-      _kittyImageCache.evict(_liveKittyImageIds);
+  void sync(Terminal terminal, {required bool geometryDirty}) {
+    if (!_kittyPlacementCache.sync(terminal, geometryDirty: geometryDirty)) {
       return;
     }
-
-    final cellWidth = _state.metrics.cellWidth;
-    final cellHeight = _state.metrics.cellHeight;
-    final dpr = _state.devicePixelRatio;
-
-    for (final placement in graphics.placements()) {
-      final info = placement.renderInfo;
-      if (!info.viewportVisible) continue;
-      if (info.pixelWidth == 0 || info.pixelHeight == 0) continue;
-
-      final image = graphics.image(placement.imageId);
-      if (image == null) continue;
-
-      _liveKittyImageIds.add(placement.imageId);
-      _kittyImageCache.lookup(image);
-
-      _placementsFor(placement.z).add(
-        KittyPlacementSnapshot(
-          imageId: placement.imageId,
-          dst: Rect.fromLTWH(
-            info.viewportCol * cellWidth + placement.xOffset / dpr,
-            info.viewportRow * cellHeight + placement.yOffset / dpr,
-            info.pixelWidth / dpr,
-            info.pixelHeight / dpr,
-          ),
-          src: Rect.fromLTWH(
-            info.sourceX.toDouble(),
-            info.sourceY.toDouble(),
-            info.sourceWidth.toDouble(),
-            info.sourceHeight.toDouble(),
-          ),
-          z: placement.z,
-        ),
-      );
-    }
-
-    _sort(_kittyBelowBg);
-    _sort(_kittyBelowText);
-    _sort(_kittyAboveText);
-    _kittyImageCache.evict(_liveKittyImageIds);
+    _rebuildKittyLayers();
   }
 
-  List<KittyPlacementSnapshot> _placementsFor(int z) {
-    switch (KittyPaintLayer.forZ(z)) {
-      case .belowBg:
-        return _kittyBelowBg;
-      case .belowText:
-        return _kittyBelowText;
-      case .aboveText:
-        return _kittyAboveText;
+  void _rebuildKittyLayers() {
+    _kittyBelowBackground.clear();
+    _kittyBelowText.clear();
+    _kittyAboveText.clear();
+    for (final snapshot in _kittyPlacementCache.snapshots) {
+      if (snapshot.z >= 0) {
+        _kittyAboveText.add(snapshot);
+      } else if (snapshot.z < _kittyBelowBackgroundThreshold) {
+        _kittyBelowBackground.add(snapshot);
+      } else {
+        _kittyBelowText.add(snapshot);
+      }
     }
-  }
-
-  void _sort(List<KittyPlacementSnapshot> snapshots) {
-    if (snapshots.length < 2) return;
-    snapshots.sort((a, b) => a.z.compareTo(b.z));
   }
 }

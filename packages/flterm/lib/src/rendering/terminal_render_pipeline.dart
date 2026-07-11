@@ -71,6 +71,8 @@ final class TerminalRenderPipeline {
   ///
   /// [preeditText] does not enter libghostty state. The frame builder overlays
   /// it on terminal-cell boundaries at the current cursor position.
+  /// Terminal-dirty frames also refresh Kitty placement geometry because screen
+  /// mutations can move placements without changing Kitty storage generation.
   void sync(
     Terminal terminal, {
     required bool terminalDirty,
@@ -85,6 +87,6 @@ final class TerminalRenderPipeline {
       preeditText: preeditText,
       linkSnapshot: linkSnapshot,
     );
-    _painters.sync(terminal);
+    _painters.sync(terminal, geometryDirty: syncTerminal);
   }
 }

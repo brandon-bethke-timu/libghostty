@@ -4,6 +4,16 @@ import 'dart:ui';
 import 'package:libghostty/libghostty.dart';
 import 'package:meta/meta.dart';
 
+/// Converts raw RGBA image bytes into a Flutter [Image].
+typedef KittyImageDecoder =
+    void Function(
+      Uint8List pixels,
+      int width,
+      int height,
+      PixelFormat format,
+      ImageDecoderCallback callback,
+    );
+
 /// Async decoder cache that maps Kitty image ids to drawable [Image]s.
 ///
 /// PNG payloads are already decoded to RGBA by libghostty via the
@@ -11,18 +21,22 @@ import 'package:meta/meta.dart';
 /// RGBA formats reach this cache; anything else is stored as
 /// [KittyImageUnsupported] so subsequent paints do not retry.
 ///
-/// Re-transmissions under the same id are detected by a
-/// `(width, height)` fingerprint, which catches resize-style
-/// replacements. Byte-level overwrites that keep the same dimensions
-/// continue to serve the previously decoded image.
+/// Re-transmissions under the same id are detected by
+/// [KittyImage.generation], so same-sized replacements cannot reuse stale
+/// decoded images.
 class KittyImageCache {
   final VoidCallback _onImageReady;
+  final KittyImageDecoder _decodeImage;
+
   final Map<int, KittyImageCacheEntry> _entries = {};
-  final Map<int, ({int width, int height})> _fingerprints = {};
+  final Map<int, int> _generations = {};
 
   /// [onImageReady] fires when a pending decode completes; typically
   /// wired to a render box's `markNeedsPaint`.
-  KittyImageCache({required this._onImageReady});
+  KittyImageCache({
+    required this._onImageReady,
+    this._decodeImage = decodeImageFromPixels,
+  });
 
   /// Releases every cached entry. Call before discarding the cache.
   void dispose() {
@@ -30,7 +44,7 @@ class KittyImageCache {
       if (entry is KittyImageReady) entry.image.dispose();
     }
     _entries.clear();
-    _fingerprints.clear();
+    _generations.clear();
   }
 
   /// Releases any cached entries whose id is not in [live].
@@ -38,22 +52,22 @@ class KittyImageCache {
     _entries.removeWhere((id, entry) {
       if (live.contains(id)) return false;
       if (entry is KittyImageReady) entry.image.dispose();
-      _fingerprints.remove(id);
+      _generations.remove(id);
       return true;
     });
   }
 
   /// Returns the entry for [image], starting a decode on first lookup
-  /// or when the image's dimensions have changed. Never blocks.
+  /// or when the image's generation has changed. Never blocks.
   KittyImageCacheEntry lookup(KittyImage image) {
-    final fingerprint = (width: image.width, height: image.height);
+    final generation = image.generation;
     final existing = _entries[image.id];
-    if (existing != null && _fingerprints[image.id] == fingerprint) {
+    if (existing != null && _generations[image.id] == generation) {
       return existing;
     }
     if (existing is KittyImageReady) existing.image.dispose();
     _entries[image.id] = KittyImagePending();
-    _fingerprints[image.id] = fingerprint;
+    _generations[image.id] = generation;
     _beginDecode(image);
     return _entries[image.id]!;
   }
@@ -68,32 +82,26 @@ class KittyImageCache {
     final existing = _entries[imageId];
     if (existing is KittyImageReady) existing.image.dispose();
     _entries[imageId] = KittyImageReady(image);
-    _fingerprints[imageId] = (width: image.width, height: image.height);
+    _generations[imageId] = 0;
   }
 
   void _beginDecode(KittyImage image) {
     final imageId = image.id;
-    final fingerprint = _fingerprints[imageId];
+    final generation = _generations[imageId];
     final rgba = _ensureRgba(image);
     if (rgba == null) {
       _entries[imageId] = KittyImageUnsupported();
       return;
     }
-    decodeImageFromPixels(
-      rgba,
-      image.width,
-      image.height,
-      PixelFormat.rgba8888,
-      (decoded) {
-        if (_fingerprints[imageId] != fingerprint ||
-            _entries[imageId] is! KittyImagePending) {
-          decoded.dispose();
-          return;
-        }
+    _decodeImage(rgba, image.width, image.height, .rgba8888, (decoded) {
+      if (_generations[imageId] == generation &&
+          _entries[imageId] is KittyImagePending) {
         _entries[imageId] = KittyImageReady(decoded);
         _onImageReady();
-      },
-    );
+      } else {
+        decoded.dispose();
+      }
+    });
   }
 
   Uint8List? _ensureRgba(KittyImage image) {

@@ -9,6 +9,7 @@ import 'dart:ui' as ui;
 
 import 'package:flterm/src/foundation.dart';
 import 'package:flterm/src/rendering/kitty_image_cache.dart';
+import 'package:flterm/src/rendering/kitty_placement_cache.dart';
 import 'package:flterm/src/rendering/paint_state.dart';
 import 'package:flterm/src/rendering/painters/kitty_graphics_painter.dart';
 import 'package:flutter/painting.dart';
