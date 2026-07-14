@@ -27,8 +27,8 @@ final class RowIterator {
 
   final int _handle;
 
-  var _cachedRawRow = 0;
-  var _rawRowValid = false;
+  late RawRowSummary _rowSummary;
+  var _rowSummaryValid = false;
   var _index = -1;
 
   /// Creates an unbound row iterator.
@@ -50,18 +50,28 @@ final class RowIterator {
 
   /// Whether any cell in the current row contains a grapheme cluster
   /// (multi-codepoint character).
-  bool get hasGrapheme => check(bindings.rowGetGrapheme(_rawRow));
+  bool get hasGrapheme {
+    _ensureMetadata();
+    return _rowSummary.grapheme;
+  }
 
   /// Whether any cell in the current row has a hyperlink (OSC 8).
-  bool get hasHyperlink => check(bindings.rowGetHyperlink(_rawRow));
+  bool get hasHyperlink {
+    _ensureMetadata();
+    return _rowSummary.hyperlink;
+  }
 
   /// Whether any cell in the current row has a Kitty virtual placeholder.
   bool get hasKittyVirtualPlaceholder {
-    return check(bindings.rowGetKittyVirtualPlaceholder(_rawRow));
+    _ensureMetadata();
+    return _rowSummary.kittyVirtualPlaceholder;
   }
 
   /// Whether any cell in the current row has non-default styling.
-  bool get hasStyled => check(bindings.rowGetStyled(_rawRow));
+  bool get hasStyled {
+    _ensureMetadata();
+    return _rowSummary.styled;
+  }
 
   /// Viewport-relative row index of the current row (zero-based).
   ///
@@ -80,22 +90,21 @@ final class RowIterator {
 
   /// Semantic prompt state of the current row.
   SemanticPrompt get semanticPrompt {
-    return check(bindings.rowGetSemanticPrompt(_rawRow));
+    _ensureMetadata();
+    return _rowSummary.semanticPrompt;
   }
 
   /// Whether the current row is soft-wrapped into the next row.
-  bool get wrap => check(bindings.rowGetWrap(_rawRow));
+  bool get wrap {
+    _ensureMetadata();
+    return _rowSummary.wrap;
+  }
 
   /// Whether the current row is a continuation of a soft-wrap from the
   /// previous row.
-  bool get wrapContinuation => check(bindings.rowGetWrapContinuation(_rawRow));
-
-  int get _rawRow {
-    if (!_rawRowValid) {
-      _cachedRawRow = check(bindings.rowIteratorGetRawRow(_handle));
-      _rawRowValid = true;
-    }
-    return _cachedRawRow;
+  bool get wrapContinuation {
+    _ensureMetadata();
+    return _rowSummary.wrapContinuation;
   }
 
   /// Releases the native iterator handle.
@@ -113,7 +122,7 @@ final class RowIterator {
   bool next() {
     final hasNext = bindings.rowIteratorNext(_handle);
     if (hasNext) {
-      _rawRowValid = false;
+      _rowSummaryValid = false;
       _index++;
     }
     return hasNext;
@@ -126,7 +135,17 @@ final class RowIterator {
   /// via [CellIterator.reset] before further use.
   void reset(RenderState renderState) {
     checkCode(bindings.rowIteratorInit(_handle, renderState._handle));
-    _rawRowValid = false;
+    _rowSummaryValid = false;
     _index = -1;
+  }
+
+  void _ensureMetadata() {
+    if (!_rowSummaryValid) _refreshMetadata();
+  }
+
+  void _refreshMetadata() {
+    final rawRow = check(bindings.rowIteratorGetRawRow(_handle));
+    _rowSummary = check(bindings.rowGetSummary(rawRow));
+    _rowSummaryValid = true;
   }
 }

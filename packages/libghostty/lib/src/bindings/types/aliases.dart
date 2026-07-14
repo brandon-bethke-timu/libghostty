@@ -46,6 +46,60 @@ typedef RawGridRef = ({int node, int x, int y});
 /// text range.
 typedef RawSelection = ({RawGridRef start, RawGridRef end, bool rectangle});
 
+/// Terminal dimensions in cells and pixels.
+///
+/// `cols` and `rows` describe the active grid. `widthPx` and `heightPx`
+/// describe its total pixel extent and are zero when no pixel size has been
+/// configured.
+typedef TerminalGeometry = ({int cols, int rows, int widthPx, int heightPx});
+
+/// Render-state dimensions and dirty state returned by one batched query.
+typedef RawRenderStateSummary = ({int cols, int rows, RenderStateDirty dirty});
+
+/// Complete cursor data from one render-state snapshot query.
+///
+/// The viewport coordinates and wide-tail flag are meaningful only when
+/// `inViewport` is true.
+typedef RawRenderStateCursor = ({
+  RenderStateCursorVisualStyle visualStyle,
+  bool visible,
+  bool blinking,
+  bool passwordInput,
+  bool inViewport,
+  int viewportX,
+  int viewportY,
+  bool viewportWideTail,
+});
+
+/// Current render row data captured in one boundary query.
+typedef RawRowIteratorSummary = ({bool dirty, int rawRow});
+
+/// Scalar row metadata captured in one boundary query.
+typedef RawRowSummary = ({
+  bool wrap,
+  bool wrapContinuation,
+  bool grapheme,
+  bool styled,
+  bool hyperlink,
+  RowSemanticPrompt semanticPrompt,
+  bool kittyVirtualPlaceholder,
+});
+
+/// Current render cell data captured in one boundary query.
+typedef RawRowCellsSummary = ({int rawCell, int graphemeLen, bool selected});
+
+/// Scalar cell metadata captured in one boundary query.
+typedef RawCellSummary = ({int codepoint, int styleId, CellWide wide});
+
+/// Readable selection gesture state captured in one boundary query.
+typedef RawSelectionGestureState = ({
+  int clickCount,
+  bool dragged,
+  SelectionGestureAutoscroll autoscroll,
+  SelectionGestureBehavior behavior,
+  RawGridRef? anchor,
+});
+
 /// Callback invoked for each internal libghostty log message, after the
 /// scope and message byte slices have been decoded to Dart strings.
 typedef SysLogCallback =

@@ -35,6 +35,10 @@ final class CellIterator {
   var _cachedStyle = const Style();
   var _wide = CellWidth.narrow;
   var _col = -1;
+  var _isSelected = false;
+  var _textValid = false;
+  var _metadataValid = false;
+  var _selectedValid = false;
 
   /// Creates an unbound cell iterator.
   ///
@@ -60,7 +64,10 @@ final class CellIterator {
   }
 
   /// Primary codepoint of the current cell, or 0 if the cell has no text.
-  int get codepoint => _codepoint;
+  int get codepoint {
+    _ensureText();
+    return _codepoint;
+  }
 
   /// Column index of the current cell within the row (zero-based).
   ///
@@ -70,6 +77,7 @@ final class CellIterator {
   /// Full grapheme cluster of the current cell as a string, or empty if
   /// the cell has no text.
   String get content {
+    _ensureText();
     if (_graphemeLen == 0) return '';
     if (_graphemeLen == 1) return String.fromCharCode(_codepoint);
     return String.fromCharCodes(
@@ -95,35 +103,55 @@ final class CellIterator {
 
   /// Number of codepoints in the current cell's grapheme cluster (0 =
   /// empty).
-  int get graphemeLength => _graphemeLen;
+  int get graphemeLength {
+    _ensureText();
+    return _graphemeLen;
+  }
 
   /// Whether the current cell has a hyperlink (OSC 8).
-  bool get hasHyperlink => bindings.cellGetHasHyperlink(_rawCell).$2;
+  bool get hasHyperlink {
+    _ensureText();
+    return check(bindings.cellGetHasHyperlink(_rawCell));
+  }
 
   /// Whether the current cell has non-default styling attributes.
   bool get hasStyling => check(bindings.rowCellsGetHasStyling(_handle));
 
   /// Whether the current cell contains any text.
-  bool get hasText => _graphemeLen > 0;
+  bool get hasText {
+    _ensureText();
+    return _graphemeLen > 0;
+  }
 
   /// Whether the current cell is protected (DECSCA).
-  bool get isProtected => check(bindings.cellGetProtected(_rawCell));
+  bool get isProtected {
+    _ensureText();
+    return check(bindings.cellGetProtected(_rawCell));
+  }
 
-  /// Whether the current cell is contained withing the current selection.
+  /// Whether the current cell is contained within the current selection.
   ///
   /// Returns true when the cell's column is within the current row's
   /// row-local selection range, and false otherwise. Rendering colors,
   /// inversion, etc are caller policy.
-  bool get isSelected => check(bindings.rowCellsGetSelected(_handle));
+  bool get isSelected {
+    if (!_selectedValid) {
+      _isSelected = check(bindings.rowCellsGetSelected(_handle));
+      _selectedValid = true;
+    }
+    return _isSelected;
+  }
 
   /// Semantic content type of the current cell.
   SemanticContent get semanticContent {
+    _ensureText();
     return check(bindings.cellGetSemanticContent(_rawCell));
   }
 
   /// Style of the current cell. Cached per style id to avoid redundant
   /// lookups across cells sharing the same style.
   Style get style {
+    _ensureMetadata();
     if (_styleId != _prevStyleId) {
       _prevStyleId = _styleId;
       _cachedStyle = check(bindings.rowCellsGetStyle(_handle));
@@ -133,11 +161,17 @@ final class CellIterator {
 
   /// Internal style identifier for the current cell. Cells with the same
   /// style id share identical styling attributes.
-  int get styleId => _styleId;
+  int get styleId {
+    _ensureMetadata();
+    return _styleId;
+  }
 
   /// Cell width: [CellWidth.narrow], [CellWidth.wide], or
   /// [CellWidth.spacerTail] (the second cell of a wide character).
-  CellWidth get wide => _wide;
+  CellWidth get wide {
+    _ensureMetadata();
+    return _wide;
+  }
 
   /// Releases the native iterator handle.
   ///
@@ -154,7 +188,7 @@ final class CellIterator {
   bool next() {
     if (!bindings.rowCellsNext(_handle)) return false;
     _col++;
-    _refresh();
+    _invalidate();
     return true;
   }
 
@@ -168,6 +202,7 @@ final class CellIterator {
     checkCode(bindings.rowCellsInit(_handle, rowIterator._handle));
     _col = -1;
     _prevStyleId = -1;
+    _invalidate();
   }
 
   /// Positions the iterator at column [col] within the current row so
@@ -180,26 +215,35 @@ final class CellIterator {
   void select(int col) {
     checkCode(bindings.rowCellsSelect(_handle, col));
     _col = col;
-    _refresh();
+    _invalidate();
   }
 
-  void _refresh() {
-    _rawCell = check(bindings.rowCellsGetRawCell(_handle));
-    _graphemeLen = check(bindings.rowCellsGetGraphemeLen(_handle));
-    _styleId = check(bindings.cellGetStyleId(_rawCell));
-    _codepoint = _graphemeLen > 0
-        ? check(bindings.cellGetCodepoint(_rawCell))
-        : 0;
-    // Fast path: single-codepoint cells in narrow Unicode ranges are always
-    // narrow. All others need FFI: empty cells can be spacer tails, and
-    // multi-codepoint graphemes can be widened by VS16 (mode 2027).
-    _wide = _graphemeLen == 1 && !_couldBeWide(_codepoint)
-        ? .narrow
-        : bindings.cellGetWide(_rawCell).$2;
+  void _ensureMetadata() {
+    if (!_metadataValid) _refreshMetadata();
   }
 
-  // Codepoints below U+1100 are always narrow. Multi-codepoint cells still
-  // need the FFI check because emoji-base codepoints in that range (digits,
-  // `#`, `*`) can be widened by VS16 in a grapheme cluster.
-  static bool _couldBeWide(int codepoint) => codepoint >= 0x1100;
+  void _ensureText() {
+    if (!_textValid) _refreshMetadata();
+  }
+
+  void _invalidate() {
+    _textValid = false;
+    _metadataValid = false;
+    _selectedValid = false;
+  }
+
+  void _refreshMetadata() {
+    final rowCell = check(bindings.rowCellsGetSummary(_handle));
+    _rawCell = rowCell.rawCell;
+    _graphemeLen = rowCell.graphemeLen;
+    _isSelected = rowCell.selected;
+    _selectedValid = true;
+
+    final cell = check(bindings.cellGetSummary(_rawCell));
+    _styleId = cell.styleId;
+    _codepoint = _graphemeLen > 0 ? cell.codepoint : 0;
+    _wide = cell.wide;
+    _textValid = true;
+    _metadataValid = true;
+  }
 }

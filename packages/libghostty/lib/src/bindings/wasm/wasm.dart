@@ -52,6 +52,15 @@ JSObject _buildImports() {
 @JS('WebAssembly.instantiate')
 external JSPromise _wasmInstantiate(JSArrayBuffer bytes, JSObject imports);
 
+const _wasmEnumSize = 4;
+const _wasmPointerSize = 4;
+const _wasmSizeSize = 4;
+const _wasmOutputSlotSize = 8;
+const _maxMultiQueryCount = 12;
+
+final JSString _cellGetMultiMethod = 'ghostty_cell_get_multi'.toJS;
+final JSString _rowGetMultiMethod = 'ghostty_row_get_multi'.toJS;
+
 const RawPlacement _emptyPlacement = (
   imageId: 0,
   placementId: 0,
@@ -82,6 +91,84 @@ const RawPlacementRenderInfo _emptyRenderInfo = (
 );
 
 const RawGridRef _emptyGridRef = (node: 0, x: 0, y: 0);
+const TerminalGeometry _emptyTerminalGeometry = (
+  cols: 0,
+  rows: 0,
+  widthPx: 0,
+  heightPx: 0,
+);
+const RawRenderStateSummary _emptyRenderStateSummary = (
+  cols: 0,
+  rows: 0,
+  dirty: .false$,
+);
+const RawRenderStateCursor _emptyRenderStateCursor = (
+  visualStyle: .block,
+  visible: false,
+  blinking: false,
+  passwordInput: false,
+  inViewport: false,
+  viewportX: 0,
+  viewportY: 0,
+  viewportWideTail: false,
+);
+const RawSelectionGestureState _emptySelectionGestureState = (
+  clickCount: 0,
+  dragged: false,
+  autoscroll: .none,
+  behavior: .cell,
+  anchor: null,
+);
+
+const _rowIteratorSummaryKeys = <RenderStateRowData>[.dirty, .raw];
+const _rowCellsSummaryKeys = <RenderStateRowCellsData>[
+  .raw,
+  .graphemesLen,
+  .selected,
+];
+const _cellSummaryKeys = <CellData>[.codepoint, .styleId, .wide];
+const _rowSummaryKeys = <RowData>[
+  .wrap,
+  .wrapContinuation,
+  .grapheme,
+  .styled,
+  .hyperlink,
+  .semanticPrompt,
+  .kittyVirtualPlaceholder,
+];
+const _selectionGestureStateKeys = <SelectionGestureData>[
+  .clickCount,
+  .dragged,
+  .autoscroll,
+  .behavior,
+  .anchor,
+];
+const _kittyImagePixelDataKeys = <KittyGraphicsImageData>[.dataPtr, .dataLen];
+const _kittyPlacementKeys = <KittyGraphicsPlacementData>[
+  .imageId,
+  .placementId,
+  .isVirtual,
+  .xOffset,
+  .yOffset,
+  .sourceX,
+  .sourceY,
+  .sourceWidth,
+  .sourceHeight,
+  .columns,
+  .rows,
+  .z,
+];
+const _cursorStateKeys = <RenderStateData>[
+  .cursorVisualStyle,
+  .cursorVisible,
+  .cursorBlinking,
+  .cursorPasswordInput,
+  .cursorViewportHasValue,
+  .cursorViewportX,
+  .cursorViewportY,
+  .cursorViewportWideTail,
+];
+const _renderStateSummaryKeys = <RenderStateData>[.cols, .rows, .dirty];
 
 class WasmBindings implements GhosttyBindings {
   final Mem _mem;
@@ -91,6 +178,27 @@ class WasmBindings implements GhosttyBindings {
   final _utf8Ptrs = <int, (int ptr, int len)>{};
   final _callbacks = <int, Map<TerminalOption, (int index, Function fn)>>{};
   final _stringBufs = <int, Map<TerminalOption, (int ptr, int len)>>{};
+  final _cellGetMultiArguments = List<JSAny?>.filled(5, null);
+  final _rowGetMultiArguments = List<JSAny?>.filled(5, null);
+  late final int _multiKeys;
+  late final int _multiValues;
+  late final int _multiOut;
+  late final int _multiWritten;
+  late final int _multiGridRef;
+  late final int _renderStateSummaryMultiKeys;
+  late final int _renderStateSummaryMultiValues;
+  late final int _renderStateSummaryMultiOut;
+  late final int _cursorMultiKeys;
+  late final int _cursorMultiValues;
+  late final int _cursorMultiOut;
+  late final int _rowCellsMultiKeys;
+  late final int _rowCellsMultiValues;
+  late final int _rowCellsMultiOut;
+  late final int _cellMultiKeys;
+  late final int _cellMultiValues;
+  late final int _cellMultiOut;
+  late int _formatBuffer;
+  late int _formatBufferCapacity;
 
   WasmBindings._(JSObject exports)
     : _exports = GhosttyExports(exports),
@@ -102,6 +210,133 @@ class WasmBindings implements GhosttyBindings {
           )) {
     final json = jsonDecode(_mem.readCString(_exports.ghostty_type_json()));
     _layout = Layouts(json as Map<String, dynamic>);
+    _multiKeys = _allocateBytes(
+      _maxMultiQueryCount * _wasmEnumSize,
+      alignment: _wasmEnumSize,
+    );
+    _multiValues = _allocateBytes(
+      _maxMultiQueryCount * _wasmPointerSize,
+      alignment: _wasmPointerSize,
+    );
+    _multiOut = _allocateBytes(
+      _maxMultiQueryCount * _wasmOutputSlotSize,
+      alignment: _wasmOutputSlotSize,
+    );
+    _multiWritten = _allocateSize();
+    _multiGridRef = _allocateBytes(
+      _layout.gridRefSize,
+      alignment: _wasmPointerSize,
+    );
+    _renderStateSummaryMultiKeys = _allocateBytes(
+      _renderStateSummaryKeys.length * _wasmEnumSize,
+      alignment: _wasmEnumSize,
+    );
+    _renderStateSummaryMultiValues = _allocateBytes(
+      _renderStateSummaryKeys.length * _wasmPointerSize,
+      alignment: _wasmPointerSize,
+    );
+    _renderStateSummaryMultiOut = _allocateBytes(
+      _renderStateSummaryKeys.length * _wasmOutputSlotSize,
+      alignment: _wasmOutputSlotSize,
+    );
+    for (var i = 0; i < _renderStateSummaryKeys.length; i++) {
+      _mem.writeU32(
+        _renderStateSummaryMultiKeys + i * _wasmEnumSize,
+        _renderStateSummaryKeys[i].value,
+      );
+      _mem.writeU32(
+        _renderStateSummaryMultiValues + i * _wasmPointerSize,
+        _renderStateSummaryMultiOut + i * _wasmOutputSlotSize,
+      );
+    }
+    _cursorMultiKeys = _allocateBytes(
+      _cursorStateKeys.length * _wasmEnumSize,
+      alignment: _wasmEnumSize,
+    );
+    _cursorMultiValues = _allocateBytes(
+      _cursorStateKeys.length * _wasmPointerSize,
+      alignment: _wasmPointerSize,
+    );
+    _cursorMultiOut = _allocateBytes(
+      _cursorStateKeys.length * _wasmOutputSlotSize,
+      alignment: _wasmOutputSlotSize,
+    );
+    for (var i = 0; i < _cursorStateKeys.length; i++) {
+      _mem.writeU32(
+        _cursorMultiKeys + i * _wasmEnumSize,
+        _cursorStateKeys[i].value,
+      );
+      _mem.writeU32(
+        _cursorMultiValues + i * _wasmPointerSize,
+        _cursorMultiOut + i * _wasmOutputSlotSize,
+      );
+    }
+    _rowCellsMultiKeys = _allocateBytes(
+      _rowCellsSummaryKeys.length * _wasmEnumSize,
+      alignment: _wasmEnumSize,
+    );
+    _rowCellsMultiValues = _allocateBytes(
+      _rowCellsSummaryKeys.length * _wasmPointerSize,
+      alignment: _wasmPointerSize,
+    );
+    _rowCellsMultiOut = _allocateBytes(
+      _rowCellsSummaryKeys.length * _wasmOutputSlotSize,
+      alignment: _wasmOutputSlotSize,
+    );
+    for (var i = 0; i < _rowCellsSummaryKeys.length; i++) {
+      _mem.writeU32(
+        _rowCellsMultiKeys + i * _wasmEnumSize,
+        _rowCellsSummaryKeys[i].value,
+      );
+      _mem.writeU32(
+        _rowCellsMultiValues + i * _wasmPointerSize,
+        _rowCellsMultiOut + i * _wasmOutputSlotSize,
+      );
+    }
+    _cellMultiKeys = _allocateBytes(
+      _cellSummaryKeys.length * _wasmEnumSize,
+      alignment: _wasmEnumSize,
+    );
+    _cellMultiValues = _allocateBytes(
+      _cellSummaryKeys.length * _wasmPointerSize,
+      alignment: _wasmPointerSize,
+    );
+    _cellMultiOut = _allocateBytes(
+      _cellSummaryKeys.length * _wasmOutputSlotSize,
+      alignment: _wasmOutputSlotSize,
+    );
+    for (var i = 0; i < _cellSummaryKeys.length; i++) {
+      _mem.writeU32(
+        _cellMultiKeys + i * _wasmEnumSize,
+        _cellSummaryKeys[i].value,
+      );
+      _mem.writeU32(
+        _cellMultiValues + i * _wasmPointerSize,
+        _cellMultiOut + i * _wasmOutputSlotSize,
+      );
+    }
+    _formatBufferCapacity = 4096;
+    _formatBuffer = _allocateBytes(_formatBufferCapacity);
+  }
+
+  int _allocateBytes(int size, {int alignment = 1}) {
+    final pointer = _exports.ghostty_wasm_alloc_u8_array(size);
+    if (pointer == 0) throw const OutOfMemoryException();
+    if (pointer % alignment != 0) {
+      _exports.ghostty_wasm_free_u8_array(pointer, size);
+      throw StateError('libghostty WASM allocator returned misaligned memory.');
+    }
+    return pointer;
+  }
+
+  int _allocateSize() {
+    final pointer = _exports.ghostty_wasm_alloc_usize();
+    if (pointer == 0) throw const OutOfMemoryException();
+    if (pointer % _wasmSizeSize != 0) {
+      _exports.ghostty_wasm_free_usize(pointer);
+      throw StateError('libghostty WASM allocator returned misaligned memory.');
+    }
+    return pointer;
   }
 
   int _registerCallback(
@@ -1013,6 +1248,22 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<TerminalGeometry> terminalGetGeometry(int handle) {
+    const keys = <TerminalData>[.cols, .rows, .widthPx, .heightPx];
+    final result = _terminalGetMulti(handle, keys);
+    if (result != .success) return (result, _emptyTerminalGeometry);
+    return (
+      result,
+      (
+        cols: _mem.readU16(_multiOut),
+        rows: _mem.readU16(_multiOut + _wasmOutputSlotSize),
+        widthPx: _mem.readU32(_multiOut + 2 * _wasmOutputSlotSize),
+        heightPx: _mem.readU32(_multiOut + 3 * _wasmOutputSlotSize),
+      ),
+    );
+  }
+
+  @override
   CResult<bool> terminalGetViewportActive(int handle) {
     return _terminalGetBool(handle, .viewportActive);
   }
@@ -1717,38 +1968,30 @@ class WasmBindings implements GhosttyBindings {
   @override
   CResult<Uint8List> kittyGraphicsImageGetPixelData(int image) {
     if (image == 0) return (Result.invalidValue, Uint8List(0));
-    final ptrOut = _exports.ghostty_wasm_alloc_opaque();
-    final lenOut = _exports.ghostty_wasm_alloc_usize();
-    try {
-      final ptrCode = _exports.ghostty_kitty_graphics_image_get(
-        image,
-        KittyGraphicsImageData.dataPtr.value,
-        ptrOut,
-      );
-      if (ptrCode != Result.success.value) {
-        return (Result.fromValue(ptrCode), Uint8List(0));
-      }
-      final lenCode = _exports.ghostty_kitty_graphics_image_get(
-        image,
-        KittyGraphicsImageData.dataLen.value,
-        lenOut,
-      );
-      if (lenCode != Result.success.value) {
-        return (Result.fromValue(lenCode), Uint8List(0));
-      }
-      final dataPtr = _mem.readPtr(ptrOut);
-      final dataLen = _mem.readU32(lenOut);
-      if (dataPtr == 0 || dataLen == 0) {
-        return (Result.success, Uint8List(0));
-      }
-      return (
-        Result.success,
-        Uint8List.fromList(_mem.readBytes(dataPtr, dataLen)),
-      );
-    } finally {
-      _exports.ghostty_wasm_free_opaque(ptrOut);
-      _exports.ghostty_wasm_free_usize(lenOut);
+    const keys = _kittyImagePixelDataKeys;
+    for (var i = 0; i < keys.length; i++) {
+      _mem.writeU32(_multiKeys + i * 4, keys[i].value);
+      _mem.writeU32(_multiValues + i * 4, _multiOut + i * 8);
     }
+    final result = Result.fromValue(
+      _exports.ghostty_kitty_graphics_image_get_multi(
+        image,
+        keys.length,
+        _multiKeys,
+        _multiValues,
+        _multiWritten,
+      ),
+    );
+    if (result != .success) return (result, Uint8List(0));
+    final dataPtr = _mem.readPtr(_multiOut);
+    final dataLen = _mem.readU32(_multiOut + 8);
+    if (dataPtr == 0 || dataLen == 0) {
+      return (Result.success, Uint8List(0));
+    }
+    return (
+      Result.success,
+      Uint8List.fromList(_mem.readBytes(dataPtr, dataLen)),
+    );
   }
 
   CResult<int> _kittyImageGetU32(int image, KittyGraphicsImageData data) {
@@ -1832,38 +2075,36 @@ class WasmBindings implements GhosttyBindings {
   @override
   CResult<RawPlacement> kittyGraphicsPlacementGet(int iterator) {
     if (iterator == 0) return (Result.invalidValue, _emptyPlacement);
-    final out = _exports.ghostty_wasm_alloc_usize();
-    int readU32(KittyGraphicsPlacementData tag) {
-      _exports.ghostty_kitty_graphics_placement_get(iterator, tag.value, out);
-      return _mem.readU32(out);
+    const keys = _kittyPlacementKeys;
+    for (var i = 0; i < keys.length; i++) {
+      _mem.writeU32(_multiKeys + i * 4, keys[i].value);
+      _mem.writeU32(_multiValues + i * 4, _multiOut + i * 8);
     }
-
-    int readI32(KittyGraphicsPlacementData tag) {
-      _exports.ghostty_kitty_graphics_placement_get(iterator, tag.value, out);
-      return _mem.readI32(out);
-    }
-
-    bool readBool(KittyGraphicsPlacementData tag) {
-      _exports.ghostty_kitty_graphics_placement_get(iterator, tag.value, out);
-      return _mem.readU8(out) != 0;
-    }
-
-    final placement = (
-      imageId: readU32(KittyGraphicsPlacementData.imageId),
-      placementId: readU32(KittyGraphicsPlacementData.placementId),
-      isVirtual: readBool(KittyGraphicsPlacementData.isVirtual),
-      xOffset: readU32(KittyGraphicsPlacementData.xOffset),
-      yOffset: readU32(KittyGraphicsPlacementData.yOffset),
-      sourceX: readU32(KittyGraphicsPlacementData.sourceX),
-      sourceY: readU32(KittyGraphicsPlacementData.sourceY),
-      sourceWidth: readU32(KittyGraphicsPlacementData.sourceWidth),
-      sourceHeight: readU32(KittyGraphicsPlacementData.sourceHeight),
-      columns: readU32(KittyGraphicsPlacementData.columns),
-      rows: readU32(KittyGraphicsPlacementData.rows),
-      z: readI32(KittyGraphicsPlacementData.z),
+    final result = Result.fromValue(
+      _exports.ghostty_kitty_graphics_placement_get_multi(
+        iterator,
+        keys.length,
+        _multiKeys,
+        _multiValues,
+        _multiWritten,
+      ),
     );
-    _exports.ghostty_wasm_free_usize(out);
-    return (Result.success, placement);
+    if (result != .success) return (result, _emptyPlacement);
+    final placement = (
+      imageId: _mem.readU32(_multiOut),
+      placementId: _mem.readU32(_multiOut + 8),
+      isVirtual: _mem.readU8(_multiOut + 16) != 0,
+      xOffset: _mem.readU32(_multiOut + 24),
+      yOffset: _mem.readU32(_multiOut + 32),
+      sourceX: _mem.readU32(_multiOut + 40),
+      sourceY: _mem.readU32(_multiOut + 48),
+      sourceWidth: _mem.readU32(_multiOut + 56),
+      sourceHeight: _mem.readU32(_multiOut + 64),
+      columns: _mem.readU32(_multiOut + 72),
+      rows: _mem.readU32(_multiOut + 80),
+      z: _mem.readI32(_multiOut + 88),
+    );
+    return (result, placement);
   }
 
   @override
@@ -1993,6 +2234,30 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<RawRenderStateSummary> renderStateGetSummary(int state) {
+    final result = Result.fromValue(
+      _exports.ghostty_render_state_get_multi(
+        state,
+        _renderStateSummaryKeys.length,
+        _renderStateSummaryMultiKeys,
+        _renderStateSummaryMultiValues,
+        _multiWritten,
+      ),
+    );
+    if (result != .success) return (result, _emptyRenderStateSummary);
+    return (
+      result,
+      (
+        cols: _mem.readU16(_renderStateSummaryMultiOut),
+        rows: _mem.readU16(_renderStateSummaryMultiOut + _wasmOutputSlotSize),
+        dirty: .fromValue(
+          _mem.readI32(_renderStateSummaryMultiOut + 2 * _wasmOutputSlotSize),
+        ),
+      ),
+    );
+  }
+
+  @override
   Result renderStateSetDirty(int state, RenderStateDirty dirty) {
     final valPtr = _exports.ghostty_wasm_alloc_usize();
     _mem.writeI32(valPtr, dirty.value);
@@ -2086,6 +2351,64 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<RawRenderStateCursor> renderStateGetCursor(int state) {
+    final result = Result.fromValue(
+      _exports.ghostty_render_state_get_multi(
+        state,
+        _cursorStateKeys.length,
+        _cursorMultiKeys,
+        _cursorMultiValues,
+        _multiWritten,
+      ),
+    );
+    final written = _mem.readU32(_multiWritten);
+    final cursorOffscreen = result == .invalidValue && written == 5;
+    if (result != .success && !cursorOffscreen) {
+      return (result, _emptyRenderStateCursor);
+    }
+    final visualStyle = RenderStateCursorVisualStyle.fromValue(
+      _mem.readI32(_cursorMultiOut),
+    );
+    final visible = _mem.readU8(_cursorMultiOut + _wasmOutputSlotSize) != 0;
+    final blinking =
+        _mem.readU8(_cursorMultiOut + 2 * _wasmOutputSlotSize) != 0;
+    final passwordInput =
+        _mem.readU8(_cursorMultiOut + 3 * _wasmOutputSlotSize) != 0;
+    final inViewport =
+        _mem.readU8(_cursorMultiOut + 4 * _wasmOutputSlotSize) != 0;
+    if (!inViewport) {
+      return (
+        .success,
+        (
+          visualStyle: visualStyle,
+          visible: visible,
+          blinking: blinking,
+          passwordInput: passwordInput,
+          inViewport: false,
+          viewportX: 0,
+          viewportY: 0,
+          viewportWideTail: false,
+        ),
+      );
+    }
+
+    return (
+      result,
+      (
+        visualStyle: visualStyle,
+        visible: visible,
+        blinking: blinking,
+        passwordInput: passwordInput,
+        inViewport: true,
+        viewportX: _mem.readU16(_cursorMultiOut + 5 * _wasmOutputSlotSize),
+        viewportY: _mem.readU16(_cursorMultiOut + 6 * _wasmOutputSlotSize),
+        viewportWideTail:
+            _mem.readU8(_cursorMultiOut + 7 * _wasmOutputSlotSize) != 0,
+      ),
+    );
+  }
+
+  @override
   CResult<int> rowIteratorNew() {
     final outPtr = _exports.ghostty_wasm_alloc_opaque();
     final result = Result.fromValue(
@@ -2132,6 +2455,34 @@ class WasmBindings implements GhosttyBindings {
     final value = _mem.readU8(outPtr) != 0;
     _exports.ghostty_wasm_free_u8(outPtr);
     return (result, value);
+  }
+
+  @override
+  CResult<RawRowIteratorSummary> rowIteratorGetSummary(int iterator) {
+    const keys = _rowIteratorSummaryKeys;
+    for (var i = 0; i < keys.length; i++) {
+      _mem.writeU32(_multiKeys + i * _wasmEnumSize, keys[i].value);
+      _mem.writeU32(
+        _multiValues + i * _wasmPointerSize,
+        _multiOut + i * _wasmOutputSlotSize,
+      );
+    }
+    final result = Result.fromValue(
+      _exports.ghostty_render_state_row_get_multi(
+        iterator,
+        keys.length,
+        _multiKeys,
+        _multiValues,
+        _multiWritten,
+      ),
+    );
+    return (
+      result,
+      (
+        dirty: _mem.readU8(_multiOut) != 0,
+        rawRow: _mem.readU64(_multiOut + _wasmOutputSlotSize),
+      ),
+    );
   }
 
   @override
@@ -2238,6 +2589,27 @@ class WasmBindings implements GhosttyBindings {
     final value = _mem.readU64(outPtr);
     _exports.ghostty_wasm_free_u8_array(outPtr, u64Size);
     return (result, value);
+  }
+
+  @override
+  CResult<RawRowCellsSummary> rowCellsGetSummary(int cells) {
+    final result = Result.fromValue(
+      _exports.ghostty_render_state_row_cells_get_multi(
+        cells,
+        _rowCellsSummaryKeys.length,
+        _rowCellsMultiKeys,
+        _rowCellsMultiValues,
+        _multiWritten,
+      ),
+    );
+    return (
+      result,
+      (
+        rawCell: _mem.readU64(_rowCellsMultiOut),
+        graphemeLen: _mem.readU32(_rowCellsMultiOut + _wasmOutputSlotSize),
+        selected: _mem.readU8(_rowCellsMultiOut + 2 * _wasmOutputSlotSize) != 0,
+      ),
+    );
   }
 
   @override
@@ -2445,6 +2817,27 @@ class WasmBindings implements GhosttyBindings {
   CResult<int> cellGetCodepoint(int cell) => _cellGetU32(cell, .codepoint);
 
   @override
+  CResult<RawCellSummary> cellGetSummary(int cell) {
+    final result = Result.fromValue(
+      _callCellGetMulti(
+        cell,
+        _cellSummaryKeys.length,
+        _cellMultiKeys,
+        _cellMultiValues,
+        _multiWritten,
+      ),
+    );
+    return (
+      result,
+      (
+        codepoint: _mem.readU32(_cellMultiOut),
+        styleId: _mem.readU16(_cellMultiOut + _wasmOutputSlotSize),
+        wide: .fromValue(_mem.readI32(_cellMultiOut + 2 * _wasmOutputSlotSize)),
+      ),
+    );
+  }
+
+  @override
   CResult<CellContentTag> cellGetContentTag(int cell) {
     final raw = _cellGetI32(cell, .contentTag);
     return (raw.$1, CellContentTag.fromValue(raw.$2));
@@ -2534,6 +2927,42 @@ class WasmBindings implements GhosttyBindings {
 
   @override
   CResult<bool> rowGetDirty(int row) => _rowGetBool(row, .dirty);
+
+  @override
+  CResult<RawRowSummary> rowGetSummary(int row) {
+    const keys = _rowSummaryKeys;
+    for (var i = 0; i < keys.length; i++) {
+      _mem.writeU32(_multiKeys + i * _wasmEnumSize, keys[i].value);
+      _mem.writeU32(
+        _multiValues + i * _wasmPointerSize,
+        _multiOut + i * _wasmOutputSlotSize,
+      );
+    }
+    final result = Result.fromValue(
+      _callRowGetMulti(
+        row,
+        keys.length,
+        _multiKeys,
+        _multiValues,
+        _multiWritten,
+      ),
+    );
+    return (
+      result,
+      (
+        wrap: _mem.readU8(_multiOut) != 0,
+        wrapContinuation: _mem.readU8(_multiOut + _wasmOutputSlotSize) != 0,
+        grapheme: _mem.readU8(_multiOut + 2 * _wasmOutputSlotSize) != 0,
+        styled: _mem.readU8(_multiOut + 3 * _wasmOutputSlotSize) != 0,
+        hyperlink: _mem.readU8(_multiOut + 4 * _wasmOutputSlotSize) != 0,
+        semanticPrompt: .fromValue(
+          _mem.readI32(_multiOut + 5 * _wasmOutputSlotSize),
+        ),
+        kittyVirtualPlaceholder:
+            _mem.readU8(_multiOut + 6 * _wasmOutputSlotSize) != 0,
+      ),
+    );
+  }
 
   @override
   CResult<String> focusEncode(FocusEvent event) {
@@ -3155,8 +3584,6 @@ class WasmBindings implements GhosttyBindings {
     final optsPtr = _exports.ghostty_wasm_alloc_u8_array(
       _layout.selectionFormatSize,
     );
-    final outPtr = _exports.ghostty_wasm_alloc_opaque();
-    final outLen = _exports.ghostty_wasm_alloc_usize();
     _zero(optsPtr, _layout.selectionFormatSize);
     _mem.writeU32(optsPtr, _layout.selectionFormatSize);
     _mem.writeU32(optsPtr + _layout.selectionFormatEmit, format.value);
@@ -3167,29 +3594,35 @@ class WasmBindings implements GhosttyBindings {
       selPtr = _allocSelection(selection);
     }
     _mem.writeU32(optsPtr + _layout.selectionFormatSelection, selPtr);
-    final result = Result.fromValue(
-      _exports.ghostty_terminal_selection_format_alloc(
+    var result = Result.fromValue(
+      _exports.ghostty_terminal_selection_format_buf(
         terminal,
-        0,
         optsPtr,
-        outPtr,
-        outLen,
+        _formatBuffer,
+        _formatBufferCapacity,
+        _multiWritten,
       ),
     );
-    final dataPtr = _mem.readPtr(outPtr);
-    final len = _mem.readU32(outLen);
-    final value = result == .success && dataPtr != 0 && len > 0
-        ? utf8.decode(_mem.readBytes(dataPtr, len))
-        : '';
-    if (dataPtr != 0 && len > 0) {
-      _exports.ghostty_free(0, dataPtr, len);
+    if (result == .outOfSpace) {
+      _growFormatBuffer(_mem.readU32(_multiWritten));
+      result = Result.fromValue(
+        _exports.ghostty_terminal_selection_format_buf(
+          terminal,
+          optsPtr,
+          _formatBuffer,
+          _formatBufferCapacity,
+          _multiWritten,
+        ),
+      );
     }
+    final len = _mem.readU32(_multiWritten);
+    final value = result == .success && len > 0
+        ? utf8.decode(_mem.readBytes(_formatBuffer, len))
+        : '';
     if (selPtr != 0) {
       _exports.ghostty_wasm_free_u8_array(selPtr, _layout.selectionSize);
     }
     _exports.ghostty_wasm_free_u8_array(optsPtr, _layout.selectionFormatSize);
-    _exports.ghostty_wasm_free_opaque(outPtr);
-    _exports.ghostty_wasm_free_usize(outLen);
     return (result, value);
   }
 
@@ -3541,6 +3974,49 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<RawSelectionGestureState> selectionGestureGetState(
+    int gesture,
+    int terminal,
+  ) {
+    const keys = _selectionGestureStateKeys;
+    for (var i = 0; i < keys.length; i++) {
+      _mem.writeU32(_multiKeys + i * _wasmEnumSize, keys[i].value);
+      _mem.writeU32(
+        _multiValues + i * _wasmPointerSize,
+        _multiOut + i * _wasmOutputSlotSize,
+      );
+    }
+    _writeGridRef(_multiGridRef, _emptyGridRef);
+    _mem.writeU32(_multiValues + 4 * _wasmPointerSize, _multiGridRef);
+    final result = Result.fromValue(
+      _exports.ghostty_selection_gesture_get_multi(
+        gesture,
+        terminal,
+        keys.length,
+        _multiKeys,
+        _multiValues,
+        _multiWritten,
+      ),
+    );
+    final anchorAbsent = result == .noValue && _mem.readU32(_multiWritten) == 4;
+    if (result != .success && !anchorAbsent) {
+      return (result, _emptySelectionGestureState);
+    }
+    return (
+      anchorAbsent ? .success : result,
+      (
+        clickCount: _mem.readU8(_multiOut),
+        dragged: _mem.readU8(_multiOut + _wasmOutputSlotSize) != 0,
+        autoscroll: .fromValue(
+          _mem.readI32(_multiOut + 2 * _wasmOutputSlotSize),
+        ),
+        behavior: .fromValue(_mem.readI32(_multiOut + 3 * _wasmOutputSlotSize)),
+        anchor: anchorAbsent ? null : _readGridRef(_multiGridRef),
+      ),
+    );
+  }
+
+  @override
   CResult<int> formatterTerminalNew(
     int terminal,
     FormatterFormat format, {
@@ -3651,22 +4127,28 @@ class WasmBindings implements GhosttyBindings {
 
   @override
   CResult<String> formatterFormat(int formatter) {
-    final outPtr = _exports.ghostty_wasm_alloc_opaque();
-    final outLen = _exports.ghostty_wasm_alloc_usize();
-    final result = _exports.ghostty_formatter_format_alloc(
-      formatter,
-      0,
-      outPtr,
-      outLen,
+    var result = Result.fromValue(
+      _exports.ghostty_formatter_format_buf(
+        formatter,
+        _formatBuffer,
+        _formatBufferCapacity,
+        _multiWritten,
+      ),
     );
-    final len = _mem.readU32(outLen);
-    final buf = _mem.readPtr(outPtr);
-    _exports.ghostty_wasm_free_opaque(outPtr);
-    _exports.ghostty_wasm_free_usize(outLen);
-    if (len == 0 || buf == 0) return (.fromValue(result), '');
-    final encoded = utf8.decode(_mem.readBytes(buf, len));
-    _exports.ghostty_free(0, buf, len);
-    return (.fromValue(result), encoded);
+    if (result == .outOfSpace) {
+      _growFormatBuffer(_mem.readU32(_multiWritten));
+      result = Result.fromValue(
+        _exports.ghostty_formatter_format_buf(
+          formatter,
+          _formatBuffer,
+          _formatBufferCapacity,
+          _multiWritten,
+        ),
+      );
+    }
+    final len = _mem.readU32(_multiWritten);
+    if (result != .success || len == 0) return (result, '');
+    return (result, utf8.decode(_mem.readBytes(_formatBuffer, len)));
   }
 
   CResult<int> _terminalGetU16(int handle, TerminalData data) {
@@ -3860,6 +4342,33 @@ class WasmBindings implements GhosttyBindings {
     return (.fromValue(result), value);
   }
 
+  Result _terminalGetMulti(int handle, List<TerminalData> keys) {
+    for (var i = 0; i < keys.length; i++) {
+      _mem.writeU32(_multiKeys + i * _wasmEnumSize, keys[i].value);
+      _mem.writeU32(
+        _multiValues + i * _wasmPointerSize,
+        _multiOut + i * _wasmOutputSlotSize,
+      );
+    }
+    return .fromValue(
+      _exports.ghostty_terminal_get_multi(
+        handle,
+        keys.length,
+        _multiKeys,
+        _multiValues,
+        _multiWritten,
+      ),
+    );
+  }
+
+  void _growFormatBuffer(int capacity) {
+    if (capacity <= _formatBufferCapacity) return;
+    final replacement = _allocateBytes(capacity);
+    _exports.ghostty_wasm_free_u8_array(_formatBuffer, _formatBufferCapacity);
+    _formatBuffer = replacement;
+    _formatBufferCapacity = capacity;
+  }
+
   CResult<int> _renderStateGetI32(int state, RenderStateData data) {
     final outPtr = _exports.ghostty_wasm_alloc_usize();
     final result = _exports.ghostty_render_state_get(state, data.value, outPtr);
@@ -3920,6 +4429,29 @@ class WasmBindings implements GhosttyBindings {
         .toDartInt;
   }
 
+  int _callCellGetMulti(
+    int cell,
+    int count,
+    int keys,
+    int values,
+    int outWritten,
+  ) {
+    // WebAssembly exposes i64 parameters as JavaScript BigInt values, while
+    // Dart's typed callAsFunction overload accepts only four arguments. These
+    // C functions take five, so callMethodVarArgs is the supported bridge. The
+    // argument lists are reused because this path runs for every cell and row.
+    // https://api.dart.dev/dart-js_interop_unsafe/JSObjectUnsafeUtilExtension/callMethodVarArgs.html
+    final arguments = _cellGetMultiArguments;
+    arguments[0] = _toBigInt(cell);
+    arguments[1] = count.toJS;
+    arguments[2] = keys.toJS;
+    arguments[3] = values.toJS;
+    arguments[4] = outWritten.toJS;
+    return (_exports as JSObject)
+        .callMethodVarArgs<JSNumber>(_cellGetMultiMethod, arguments)
+        .toDartInt;
+  }
+
   int _callRowGet(int row, RowData data, int outPtr) {
     final fn = (_exports as JSObject)['ghostty_row_get']! as JSFunction;
     return (fn.callAsFunction(
@@ -3929,6 +4461,24 @@ class WasmBindings implements GhosttyBindings {
               outPtr.toJS,
             )!
             as JSNumber)
+        .toDartInt;
+  }
+
+  int _callRowGetMulti(
+    int row,
+    int count,
+    int keys,
+    int values,
+    int outWritten,
+  ) {
+    final arguments = _rowGetMultiArguments;
+    arguments[0] = _toBigInt(row);
+    arguments[1] = count.toJS;
+    arguments[2] = keys.toJS;
+    arguments[3] = values.toJS;
+    arguments[4] = outWritten.toJS;
+    return (_exports as JSObject)
+        .callMethodVarArgs<JSNumber>(_rowGetMultiMethod, arguments)
         .toDartInt;
   }
 

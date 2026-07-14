@@ -28,24 +28,15 @@ final class SelectionGesture {
 
   /// Current readable gesture state.
   SelectionGestureState get state {
-    final terminal = _terminal._handle;
-    final anchorResult = bindings.selectionGestureGetAnchor(_handle, terminal);
-    if (anchorResult.$1 != .success && anchorResult.$1 != .noValue) {
-      checkCode(anchorResult.$1);
-    }
-
+    final raw = check(
+      bindings.selectionGestureGetState(_handle, _terminal._handle),
+    );
     return SelectionGestureState(
-      clickCount: check(
-        bindings.selectionGestureGetClickCount(_handle, terminal),
-      ),
-      dragged: check(bindings.selectionGestureGetDragged(_handle, terminal)),
-      autoscroll: check(
-        bindings.selectionGestureGetAutoscroll(_handle, terminal),
-      ),
-      behavior: check(bindings.selectionGestureGetBehavior(_handle, terminal)),
-      anchor: anchorResult.$1 == .success
-          ? GridRef._fromValue(_terminal, anchorResult.$2)
-          : null,
+      clickCount: raw.clickCount,
+      dragged: raw.dragged,
+      autoscroll: raw.autoscroll,
+      behavior: raw.behavior,
+      anchor: raw.anchor == null ? null : ._fromValue(_terminal, raw.anchor!),
     );
   }
 

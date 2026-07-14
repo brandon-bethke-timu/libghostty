@@ -97,35 +97,22 @@ final class RenderState {
   /// viewport, [Cursor.position] defaults to zero and [Cursor.wideTail]
   /// defaults to false.
   Cursor get cursor {
-    final inViewport = check(bindings.renderStateGetCursorInViewport(_handle));
-    final visible = check(bindings.renderStateGetCursorVisible(_handle));
-    final blinking = check(bindings.renderStateGetCursorBlinking(_handle));
-    final passwordInput = check(
-      bindings.renderStateGetCursorPasswordInput(_handle),
-    );
-    final visualStyle = check(
-      bindings.renderStateGetCursorVisualStyle(_handle),
-    );
-    if (!inViewport) {
+    final raw = check(bindings.renderStateGetCursor(_handle));
+    if (!raw.inViewport) {
       return Cursor(
-        visible: visible,
-        blinking: blinking,
-        passwordInput: passwordInput,
-        shape: visualStyle,
+        visible: raw.visible,
+        blinking: raw.blinking,
+        passwordInput: raw.passwordInput,
+        shape: raw.visualStyle,
       );
     }
-    final col = check(bindings.renderStateGetCursorViewportX(_handle));
-    final row = check(bindings.renderStateGetCursorViewportY(_handle));
-    final wideTail = check(
-      bindings.renderStateGetCursorViewportWideTail(_handle),
-    );
     return Cursor(
-      position: Position(row: row, col: col),
-      visible: visible,
-      blinking: blinking,
-      wideTail: wideTail,
-      passwordInput: passwordInput,
-      shape: visualStyle,
+      position: Position(row: raw.viewportY, col: raw.viewportX),
+      visible: raw.visible,
+      blinking: raw.blinking,
+      wideTail: raw.viewportWideTail,
+      passwordInput: raw.passwordInput,
+      shape: raw.visualStyle,
     );
   }
 
@@ -177,9 +164,10 @@ final class RenderState {
   /// that allocation fails.
   DirtyState update(Terminal terminal) {
     checkCode(bindings.renderStateUpdate(_handle, terminal._handle));
-    _dirty = DirtyState._fromRaw(check(bindings.renderStateGetDirty(_handle)));
-    _cols = check(bindings.renderStateGetCols(_handle));
-    _rows = check(bindings.renderStateGetRows(_handle));
+    final summary = check(bindings.renderStateGetSummary(_handle));
+    _dirty = DirtyState._fromRaw(summary.dirty);
+    _cols = summary.cols;
+    _rows = summary.rows;
     return _dirty;
   }
 }

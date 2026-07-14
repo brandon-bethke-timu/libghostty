@@ -140,6 +140,7 @@ abstract interface class GhosttyBindings {
   CResult<int> terminalGetScrollbackRows(int handle);
   CResult<int> terminalGetWidthPx(int handle);
   CResult<int> terminalGetHeightPx(int handle);
+  CResult<TerminalGeometry> terminalGetGeometry(int handle);
   CResult<bool> terminalGetViewportActive(int handle);
   Result terminalSetTitle(int handle, String? title);
   Result terminalSetPwd(int handle, String? pwd);
@@ -259,6 +260,7 @@ abstract interface class GhosttyBindings {
   CResult<int> renderStateGetCols(int state);
   CResult<int> renderStateGetRows(int state);
   CResult<RenderStateDirty> renderStateGetDirty(int state);
+  CResult<RawRenderStateSummary> renderStateGetSummary(int state);
   Result renderStateSetDirty(int state, RenderStateDirty dirty);
   CResult<TerminalColors> renderStateGetColors(int state);
   CResult<RenderStateCursorVisualStyle> renderStateGetCursorVisualStyle(
@@ -271,6 +273,7 @@ abstract interface class GhosttyBindings {
   CResult<int> renderStateGetCursorViewportX(int state);
   CResult<int> renderStateGetCursorViewportY(int state);
   CResult<bool> renderStateGetCursorViewportWideTail(int state);
+  CResult<RawRenderStateCursor> renderStateGetCursor(int state);
 
   CResult<int> rowIteratorNew();
   void rowIteratorFree(int handle);
@@ -279,6 +282,7 @@ abstract interface class GhosttyBindings {
   Result rowIteratorInit(int iterator, int renderState);
   bool rowIteratorNext(int iterator);
   CResult<bool> rowIteratorGetDirty(int iterator);
+  CResult<RawRowIteratorSummary> rowIteratorGetSummary(int iterator);
   Result rowIteratorSetDirty(int iterator, {required bool dirty});
   CResult<int> rowIteratorGetRawRow(int iterator);
   CResult<({int startCol, int endCol})> rowIteratorGetSelection(int iterator);
@@ -291,6 +295,7 @@ abstract interface class GhosttyBindings {
   bool rowCellsNext(int cells);
   Result rowCellsSelect(int cells, int x);
   CResult<int> rowCellsGetRawCell(int cells);
+  CResult<RawRowCellsSummary> rowCellsGetSummary(int cells);
   CResult<Style> rowCellsGetStyle(int cells);
   CResult<int> rowCellsGetGraphemeLen(int cells);
   CResult<List<int>> rowCellsGetGraphemes(int cells, int len);
@@ -303,6 +308,7 @@ abstract interface class GhosttyBindings {
   CResult<int> rowCellsGetFgColorArgb(int cells);
 
   CResult<int> cellGetCodepoint(int cell);
+  CResult<RawCellSummary> cellGetSummary(int cell);
   CResult<CellContentTag> cellGetContentTag(int cell);
   CResult<CellWide> cellGetWide(int cell);
   CResult<bool> cellGetHasText(int cell);
@@ -322,6 +328,7 @@ abstract interface class GhosttyBindings {
   CResult<RowSemanticPrompt> rowGetSemanticPrompt(int row);
   CResult<bool> rowGetKittyVirtualPlaceholder(int row);
   CResult<bool> rowGetDirty(int row);
+  CResult<RawRowSummary> rowGetSummary(int row);
 
   CResult<String> focusEncode(FocusEvent event);
 
@@ -479,6 +486,10 @@ abstract interface class GhosttyBindings {
     int terminal,
   );
   CResult<RawGridRef> selectionGestureGetAnchor(int gesture, int terminal);
+  CResult<RawSelectionGestureState> selectionGestureGetState(
+    int gesture,
+    int terminal,
+  );
 
   CResult<int> formatterTerminalNew(
     int terminal,

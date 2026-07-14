@@ -35,6 +35,16 @@ void main() {
       });
     });
 
+    group('geometry', () {
+      test('returns cell and pixel dimensions', () {
+        terminal.resize(cols: 40, rows: 10, cellWidthPx: 8, cellHeightPx: 16);
+
+        final result = terminal.geometry;
+
+        expect(result, (cols: 40, rows: 10, widthPx: 320, heightPx: 160));
+      });
+    });
+
     group('write', () {
       test('updates screen cells', () {
         terminal.write(Uint8List.fromList('Hello'.codeUnits));

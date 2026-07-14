@@ -153,6 +153,119 @@ void main() {
       });
     });
 
+    group('renderStateGetSummary', () {
+      test('returns the current render state snapshot', () {
+        checkCode(bindings.renderStateUpdate(renderState, terminal));
+
+        final summary = check(bindings.renderStateGetSummary(renderState));
+        const RawRenderStateSummary expected = (
+          cols: 80,
+          rows: 24,
+          dirty: .full,
+        );
+
+        expect(summary, expected);
+      });
+
+      test('rejects an invalid handle', () {
+        final result = bindings.renderStateGetSummary(0);
+
+        expect(result, (
+          Result.invalidValue,
+          (cols: 0, rows: 0, dirty: RenderStateDirty.false$),
+        ));
+      });
+    });
+
+    group('renderStateGetCursor', () {
+      test('returns the current cursor snapshot', () {
+        bindings.terminalVtWrite(terminal, Uint8List.fromList('ABC'.codeUnits));
+        checkCode(bindings.renderStateUpdate(renderState, terminal));
+
+        final cursor = check(bindings.renderStateGetCursor(renderState));
+        const RawRenderStateCursor expected = (
+          visualStyle: .block,
+          visible: true,
+          blinking: false,
+          passwordInput: false,
+          inViewport: true,
+          viewportX: 3,
+          viewportY: 0,
+          viewportWideTail: false,
+        );
+
+        expect(cursor, expected);
+      });
+
+      test('omits viewport coordinates for an offscreen cursor', () {
+        final scrolledTerminal = check(bindings.terminalNew(5, 2, 100));
+        addTearDown(() => bindings.terminalFree(scrolledTerminal));
+        final scrolledRenderState = check(bindings.renderStateNew());
+        addTearDown(() => bindings.renderStateFree(scrolledRenderState));
+        bindings.terminalVtWrite(
+          scrolledTerminal,
+          Uint8List.fromList('one\r\ntwo\r\nthree'.codeUnits),
+        );
+        bindings.terminalScrollViewport(scrolledTerminal, .delta, -1);
+        checkCode(
+          bindings.renderStateUpdate(scrolledRenderState, scrolledTerminal),
+        );
+
+        final cursor = check(
+          bindings.renderStateGetCursor(scrolledRenderState),
+        );
+        const RawRenderStateCursor expected = (
+          visualStyle: .block,
+          visible: true,
+          blinking: false,
+          passwordInput: false,
+          inViewport: false,
+          viewportX: 0,
+          viewportY: 0,
+          viewportWideTail: false,
+        );
+
+        expect(cursor, expected);
+      });
+
+      test('rejects an invalid handle', () {
+        final result = bindings.renderStateGetCursor(0);
+
+        expect(result, (
+          Result.invalidValue,
+          (
+            visualStyle: RenderStateCursorVisualStyle.block,
+            visible: false,
+            blinking: false,
+            passwordInput: false,
+            inViewport: false,
+            viewportX: 0,
+            viewportY: 0,
+            viewportWideTail: false,
+          ),
+        ));
+      });
+    });
+
+    group('terminalGetGeometry', () {
+      test('returns the current terminal geometry', () {
+        checkCode(bindings.terminalResize(terminal, 40, 10, 8, 16));
+
+        final geometry = check(bindings.terminalGetGeometry(terminal));
+
+        expect(geometry, (cols: 40, rows: 10, widthPx: 320, heightPx: 160));
+      });
+
+      test('rejects an invalid handle', () {
+        final result = bindings.terminalGetGeometry(0);
+
+        expect(result, (
+          Result.invalidValue,
+          (cols: 0, rows: 0, widthPx: 0, heightPx: 0),
+        ));
+      });
+    });
+
     group('terminalModeGet', () {
       test('reflects terminalModeSet value', () {
         expect(
@@ -660,6 +773,64 @@ void main() {
   });
 
   group('row iterator data', () {
+    int firstRowIterator(String text) {
+      final terminal = check(bindings.terminalNew(10, 3, 0));
+      final renderState = check(bindings.renderStateNew());
+      final iterator = check(bindings.rowIteratorNew());
+      addTearDown(() => bindings.rowIteratorFree(iterator));
+      addTearDown(() => bindings.renderStateFree(renderState));
+      addTearDown(() => bindings.terminalFree(terminal));
+      bindings.terminalVtWrite(terminal, Uint8List.fromList(utf8.encode(text)));
+      checkCode(bindings.renderStateUpdate(renderState, terminal));
+      checkCode(bindings.rowIteratorInit(iterator, renderState));
+      expect(bindings.rowIteratorNext(iterator), isTrue);
+      return iterator;
+    }
+
+    group('rowIteratorGetSummary', () {
+      test('returns the current render row snapshot', () {
+        final iterator = _selectedRowIterator(0);
+
+        final summary = check(bindings.rowIteratorGetSummary(iterator));
+
+        expect((summary.dirty, summary.rawRow != 0), (true, true));
+      });
+
+      test('rejects an invalid handle', () {
+        final (code, _) = bindings.rowIteratorGetSummary(0);
+
+        expect(code, Result.invalidValue);
+      });
+
+      test('preserves packed row bits above 32 bits', () {
+        final iterator = firstRowIterator('\x1b[1mA');
+
+        final summary = check(bindings.rowIteratorGetSummary(iterator));
+
+        expect(summary.rawRow, greaterThan(0xFFFFFFFF));
+      });
+    });
+
+    group('rowGetSummary', () {
+      test('returns the current row metadata', () {
+        final iterator = _selectedRowIterator(0);
+        final rawRow = check(bindings.rowIteratorGetRawRow(iterator));
+
+        final summary = check(bindings.rowGetSummary(rawRow));
+        const RawRowSummary expected = (
+          wrap: false,
+          wrapContinuation: false,
+          grapheme: false,
+          styled: false,
+          hyperlink: false,
+          semanticPrompt: .none,
+          kittyVirtualPlaceholder: false,
+        );
+
+        expect(summary, expected);
+      });
+    });
+
     group('rowIteratorGetSelection', () {
       test('returns noValue for an unselected row', () {
         final iterator = _selectedRowIterator(0);
@@ -681,6 +852,48 @@ void main() {
   });
 
   group('row cells data', () {
+    group('rowCellsGetSummary', () {
+      test('returns the current render cell snapshot', () {
+        final cells = _firstCellCells('A');
+
+        final summary = check(bindings.rowCellsGetSummary(cells));
+
+        expect(
+          (
+            rawCellPresent: summary.rawCell != 0,
+            graphemeLen: summary.graphemeLen,
+            selected: summary.selected,
+          ),
+          (rawCellPresent: true, graphemeLen: 1, selected: false),
+        );
+      });
+
+      test('rejects an invalid handle', () {
+        final (code, _) = bindings.rowCellsGetSummary(0);
+
+        expect(code, Result.invalidValue);
+      });
+    });
+
+    group('cellGetSummary', () {
+      test('returns cell metadata', () {
+        final cells = _firstCellCells('A');
+        final rawCell = check(bindings.rowCellsGetRawCell(cells));
+
+        final summary = check(bindings.cellGetSummary(rawCell));
+
+        expect(summary, (codepoint: 0x41, styleId: 0, wide: CellWide.narrow));
+      });
+
+      test('preserves packed cell bits above 32 bits', () {
+        final cells = _firstCellCells('\u754C');
+
+        final summary = check(bindings.rowCellsGetSummary(cells));
+
+        expect(summary.rawCell, greaterThan(0xFFFFFFFF));
+      });
+    });
+
     group('rowCellsGetSelected', () {
       test('returns true for a selected cell', () {
         final cells = _selectedRowCells(2);
@@ -729,6 +942,48 @@ void main() {
 
         expect(code, Result.success);
         expect(value, isTrue);
+      });
+    });
+  });
+
+  group('selection gesture data', () {
+    group('selectionGestureGetState', () {
+      test('returns the initial gesture state', () {
+        final terminal = check(bindings.terminalNew(80, 24, 0));
+        addTearDown(() => bindings.terminalFree(terminal));
+        final gesture = check(bindings.selectionGestureNew());
+        addTearDown(() => bindings.selectionGestureFree(gesture, terminal));
+
+        final state = check(
+          bindings.selectionGestureGetState(gesture, terminal),
+        );
+        const RawSelectionGestureState expected = (
+          clickCount: 0,
+          dragged: false,
+          autoscroll: .none,
+          behavior: .cell,
+          anchor: null,
+        );
+
+        expect(state, expected);
+      });
+
+      test('rejects an invalid gesture handle', () {
+        final terminal = check(bindings.terminalNew(80, 24, 0));
+        addTearDown(() => bindings.terminalFree(terminal));
+
+        final result = bindings.selectionGestureGetState(0, terminal);
+
+        expect(result, (
+          Result.invalidValue,
+          (
+            clickCount: 0,
+            dragged: false,
+            autoscroll: SelectionGestureAutoscroll.none,
+            behavior: SelectionGestureBehavior.cell,
+            anchor: null,
+          ),
+        ));
       });
     });
   });
@@ -858,6 +1113,66 @@ void main() {
     tearDown(() => bindings.terminalFree(terminal));
 
     group('formatterFormat', () {
+      ({int terminal, String expected}) largeContentFixture() {
+        final terminal = check(bindings.terminalNew(6000, 1, 0));
+        addTearDown(() => bindings.terminalFree(terminal));
+        final expected = String.fromCharCodes(List<int>.filled(5000, 0x41));
+        bindings.terminalVtWrite(
+          terminal,
+          Uint8List.fromList(expected.codeUnits),
+        );
+        return (terminal: terminal, expected: expected);
+      }
+
+      int plainFormatter(int terminal) {
+        final formatter = check(
+          bindings.formatterTerminalNew(terminal, .plain, trim: true),
+        );
+        addTearDown(() => bindings.formatterFree(formatter));
+        return formatter;
+      }
+
+      test('rejects an invalid formatter handle', () {
+        final (code, _) = bindings.formatterFormat(0);
+
+        expect(code, Result.invalidValue);
+      });
+
+      test('returns content beyond the initial buffer capacity', () {
+        final (:terminal, :expected) = largeContentFixture();
+        final formatter = plainFormatter(terminal);
+
+        final text = check(bindings.formatterFormat(formatter));
+
+        expect(text, expected);
+      });
+
+      test('returns content after reusing a grown buffer', () {
+        final (:terminal, :expected) = largeContentFixture();
+        final formatter = plainFormatter(terminal);
+        check(bindings.formatterFormat(formatter));
+
+        final text = check(bindings.formatterFormat(formatter));
+
+        expect(text, expected);
+      });
+
+      test('formats selected content beyond the initial buffer capacity', () {
+        final (:terminal, :expected) = largeContentFixture();
+        final selection = check(bindings.terminalSelectAll(terminal));
+
+        final text = check(
+          bindings.terminalSelectionFormat(
+            terminal,
+            .plain,
+            trim: true,
+            selection: selection,
+          ),
+        );
+
+        expect(text, expected);
+      });
+
       test('returns terminal content for plain format', () {
         final (_, formatter) = bindings.formatterTerminalNew(
           terminal,

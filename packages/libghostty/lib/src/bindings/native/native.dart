@@ -48,6 +48,84 @@ const RawPlacementRenderInfo _emptyRenderInfo = (
 );
 
 const RawGridRef _emptyGridRef = (node: 0, x: 0, y: 0);
+const TerminalGeometry _emptyTerminalGeometry = (
+  cols: 0,
+  rows: 0,
+  widthPx: 0,
+  heightPx: 0,
+);
+const RawRenderStateSummary _emptyRenderStateSummary = (
+  cols: 0,
+  rows: 0,
+  dirty: .false$,
+);
+const RawRenderStateCursor _emptyRenderStateCursor = (
+  visualStyle: .block,
+  visible: false,
+  blinking: false,
+  passwordInput: false,
+  inViewport: false,
+  viewportX: 0,
+  viewportY: 0,
+  viewportWideTail: false,
+);
+const RawSelectionGestureState _emptySelectionGestureState = (
+  clickCount: 0,
+  dragged: false,
+  autoscroll: .none,
+  behavior: .cell,
+  anchor: null,
+);
+
+const _rowIteratorSummaryKeys = <RenderStateRowData>[.dirty, .raw];
+const _rowCellsSummaryKeys = <RenderStateRowCellsData>[
+  .raw,
+  .graphemesLen,
+  .selected,
+];
+const _cellSummaryKeys = <CellData>[.codepoint, .styleId, .wide];
+const _rowSummaryKeys = <RowData>[
+  .wrap,
+  .wrapContinuation,
+  .grapheme,
+  .styled,
+  .hyperlink,
+  .semanticPrompt,
+  .kittyVirtualPlaceholder,
+];
+const _selectionGestureStateKeys = <SelectionGestureData>[
+  .clickCount,
+  .dragged,
+  .autoscroll,
+  .behavior,
+  .anchor,
+];
+const _kittyImagePixelDataKeys = <KittyGraphicsImageData>[.dataPtr, .dataLen];
+const _kittyPlacementKeys = <KittyGraphicsPlacementData>[
+  .imageId,
+  .placementId,
+  .isVirtual,
+  .xOffset,
+  .yOffset,
+  .sourceX,
+  .sourceY,
+  .sourceWidth,
+  .sourceHeight,
+  .columns,
+  .rows,
+  .z,
+];
+const _cursorStateKeys = <RenderStateData>[
+  .cursorVisualStyle,
+  .cursorVisible,
+  .cursorBlinking,
+  .cursorPasswordInput,
+  .cursorViewportHasValue,
+  .cursorViewportX,
+  .cursorViewportY,
+  .cursorViewportWideTail,
+];
+const _renderStateSummaryKeys = <RenderStateData>[.cols, .rows, .dirty];
 
 class NativeBindings implements GhosttyBindings {
   final _utf8Ptrs = <int, Pointer<Char>>{};
@@ -71,10 +149,54 @@ class NativeBindings implements GhosttyBindings {
   final _outColorRgb = calloc<ColorRgb>();
   final _graphemeBuf = calloc<Uint32>(32);
   final _outOpaque = calloc<Pointer<Void>>();
+  final _multiKeys = calloc<UnsignedInt>(12);
+  final _multiValues = calloc<Pointer<Void>>(12);
+  final _multiOut = calloc<Uint64>(12);
+  final _multiGridRef = calloc<GridRef>();
+  final _renderStateSummaryMultiKeys = calloc<UnsignedInt>(
+    _renderStateSummaryKeys.length,
+  );
+  final _renderStateSummaryMultiValues = calloc<Pointer<Void>>(
+    _renderStateSummaryKeys.length,
+  );
+  final _renderStateSummaryMultiOut = calloc<Uint64>(
+    _renderStateSummaryKeys.length,
+  );
+  final _cursorMultiKeys = calloc<UnsignedInt>(_cursorStateKeys.length);
+  final _cursorMultiValues = calloc<Pointer<Void>>(_cursorStateKeys.length);
+  final _cursorMultiOut = calloc<Uint64>(_cursorStateKeys.length);
+  final _rowCellsMultiKeys = calloc<UnsignedInt>(_rowCellsSummaryKeys.length);
+  final _rowCellsMultiValues = calloc<Pointer<Void>>(
+    _rowCellsSummaryKeys.length,
+  );
+  final _rowCellsMultiOut = calloc<Uint64>(_rowCellsSummaryKeys.length);
+  final _cellMultiKeys = calloc<UnsignedInt>(_cellSummaryKeys.length);
+  final _cellMultiValues = calloc<Pointer<Void>>(_cellSummaryKeys.length);
+  final _cellMultiOut = calloc<Uint64>(_cellSummaryKeys.length);
+  Pointer<Uint8> _formatBuffer = calloc<Uint8>(4096);
+  late int _formatBufferCapacity;
 
   NativeBindings() {
+    _formatBufferCapacity = 4096;
     _outColors.ref.size = sizeOf<RenderStateColors>();
     _outStyle.ref.size = sizeOf<native.Style>();
+    for (var i = 0; i < _renderStateSummaryKeys.length; i++) {
+      _renderStateSummaryMultiKeys[i] = _renderStateSummaryKeys[i].value;
+      _renderStateSummaryMultiValues[i] = (_renderStateSummaryMultiOut + i)
+          .cast();
+    }
+    for (var i = 0; i < _cursorStateKeys.length; i++) {
+      _cursorMultiKeys[i] = _cursorStateKeys[i].value;
+      _cursorMultiValues[i] = (_cursorMultiOut + i).cast();
+    }
+    for (var i = 0; i < _rowCellsSummaryKeys.length; i++) {
+      _rowCellsMultiKeys[i] = _rowCellsSummaryKeys[i].value;
+      _rowCellsMultiValues[i] = (_rowCellsMultiOut + i).cast();
+    }
+    for (var i = 0; i < _cellSummaryKeys.length; i++) {
+      _cellMultiKeys[i] = _cellSummaryKeys[i].value;
+      _cellMultiValues[i] = (_cellMultiOut + i).cast();
+    }
   }
 
   @override
@@ -943,6 +1065,22 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<TerminalGeometry> terminalGetGeometry(int handle) {
+    const keys = <TerminalData>[.cols, .rows, .widthPx, .heightPx];
+    final result = _terminalGetMulti(handle, keys);
+    if (result != .success) return (result, _emptyTerminalGeometry);
+    return (
+      result,
+      (
+        cols: (_multiOut + 0).cast<Uint16>().value,
+        rows: (_multiOut + 1).cast<Uint16>().value,
+        widthPx: (_multiOut + 2).cast<Uint32>().value,
+        heightPx: (_multiOut + 3).cast<Uint32>().value,
+      ),
+    );
+  }
+
+  @override
   CResult<bool> terminalGetViewportActive(int handle) {
     return _terminalGetBool(handle, .viewportActive);
   }
@@ -1210,6 +1348,28 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<RawRenderStateSummary> renderStateGetSummary(int state) {
+    final result = ghostty_render_state_get_multi(
+      Pointer.fromAddress(state),
+      _renderStateSummaryKeys.length,
+      _renderStateSummaryMultiKeys,
+      _renderStateSummaryMultiValues,
+      _outSize,
+    );
+    if (result != .success) return (result, _emptyRenderStateSummary);
+    return (
+      result,
+      (
+        cols: (_renderStateSummaryMultiOut + 0).cast<Uint16>().value,
+        rows: (_renderStateSummaryMultiOut + 1).cast<Uint16>().value,
+        dirty: .fromValue(
+          (_renderStateSummaryMultiOut + 2).cast<Int32>().value,
+        ),
+      ),
+    );
+  }
+
+  @override
   Result renderStateSetDirty(int state, RenderStateDirty dirty) {
     _outI32.value = dirty.value;
     return ghostty_render_state_set(
@@ -1299,6 +1459,58 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<RawRenderStateCursor> renderStateGetCursor(int state) {
+    final result = ghostty_render_state_get_multi(
+      Pointer.fromAddress(state),
+      _cursorStateKeys.length,
+      _cursorMultiKeys,
+      _cursorMultiValues,
+      _outSize,
+    );
+    final written = _outSize.value;
+    final cursorOffscreen = result == .invalidValue && written == 5;
+    if (result != .success && !cursorOffscreen) {
+      return (result, _emptyRenderStateCursor);
+    }
+    final visualStyle = RenderStateCursorVisualStyle.fromValue(
+      (_cursorMultiOut + 0).cast<Int32>().value,
+    );
+    final visible = (_cursorMultiOut + 1).cast<Bool>().value;
+    final blinking = (_cursorMultiOut + 2).cast<Bool>().value;
+    final passwordInput = (_cursorMultiOut + 3).cast<Bool>().value;
+    final inViewport = (_cursorMultiOut + 4).cast<Bool>().value;
+    if (!inViewport) {
+      return (
+        .success,
+        (
+          visualStyle: visualStyle,
+          visible: visible,
+          blinking: blinking,
+          passwordInput: passwordInput,
+          inViewport: false,
+          viewportX: 0,
+          viewportY: 0,
+          viewportWideTail: false,
+        ),
+      );
+    }
+
+    return (
+      result,
+      (
+        visualStyle: visualStyle,
+        visible: visible,
+        blinking: blinking,
+        passwordInput: passwordInput,
+        inViewport: true,
+        viewportX: (_cursorMultiOut + 5).cast<Uint16>().value,
+        viewportY: (_cursorMultiOut + 6).cast<Uint16>().value,
+        viewportWideTail: (_cursorMultiOut + 7).cast<Bool>().value,
+      ),
+    );
+  }
+
+  @override
   CResult<int> rowIteratorNew() {
     return using((arena) {
       final ptr = arena<Pointer<RenderStateRowIteratorImpl>>();
@@ -1340,6 +1552,29 @@ class NativeBindings implements GhosttyBindings {
       _outBool.cast(),
     );
     return (result, _outBool.value);
+  }
+
+  @override
+  CResult<RawRowIteratorSummary> rowIteratorGetSummary(int iterator) {
+    const keys = _rowIteratorSummaryKeys;
+    for (var i = 0; i < keys.length; i++) {
+      _multiKeys[i] = keys[i].value;
+      _multiValues[i] = (_multiOut + i).cast();
+    }
+    final result = ghostty_render_state_row_get_multi(
+      Pointer.fromAddress(iterator),
+      keys.length,
+      _multiKeys,
+      _multiValues,
+      _outSize,
+    );
+    return (
+      result,
+      (
+        dirty: (_multiOut + 0).cast<Bool>().value,
+        rawRow: (_multiOut + 1).value,
+      ),
+    );
   }
 
   @override
@@ -1427,6 +1662,25 @@ class NativeBindings implements GhosttyBindings {
       _outU64.cast(),
     );
     return (result, _outU64.value);
+  }
+
+  @override
+  CResult<RawRowCellsSummary> rowCellsGetSummary(int cells) {
+    final result = ghostty_render_state_row_cells_get_multi(
+      Pointer.fromAddress(cells),
+      _rowCellsSummaryKeys.length,
+      _rowCellsMultiKeys,
+      _rowCellsMultiValues,
+      _outSize,
+    );
+    return (
+      result,
+      (
+        rawCell: (_rowCellsMultiOut + 0).value,
+        graphemeLen: (_rowCellsMultiOut + 1).cast<Uint32>().value,
+        selected: (_rowCellsMultiOut + 2).cast<Bool>().value,
+      ),
+    );
   }
 
   @override
@@ -1571,6 +1825,25 @@ class NativeBindings implements GhosttyBindings {
   CResult<int> cellGetCodepoint(int cell) => _cellGetU32(cell, .codepoint);
 
   @override
+  CResult<RawCellSummary> cellGetSummary(int cell) {
+    final result = ghostty_cell_get_multi(
+      cell,
+      _cellSummaryKeys.length,
+      _cellMultiKeys,
+      _cellMultiValues,
+      _outSize,
+    );
+    return (
+      result,
+      (
+        codepoint: (_cellMultiOut + 0).cast<Uint32>().value,
+        styleId: (_cellMultiOut + 1).cast<Uint16>().value,
+        wide: .fromValue((_cellMultiOut + 2).cast<Int32>().value),
+      ),
+    );
+  }
+
+  @override
   CResult<CellContentTag> cellGetContentTag(int cell) {
     final raw = _cellGetI32(cell, .contentTag);
     return (raw.$1, CellContentTag.fromValue(raw.$2));
@@ -1653,6 +1926,34 @@ class NativeBindings implements GhosttyBindings {
 
   @override
   CResult<bool> rowGetDirty(int row) => _rowGetBool(row, .dirty);
+
+  @override
+  CResult<RawRowSummary> rowGetSummary(int row) {
+    const keys = _rowSummaryKeys;
+    for (var i = 0; i < keys.length; i++) {
+      _multiKeys[i] = keys[i].value;
+      _multiValues[i] = (_multiOut + i).cast();
+    }
+    final result = ghostty_row_get_multi(
+      row,
+      keys.length,
+      _multiKeys,
+      _multiValues,
+      _outSize,
+    );
+    return (
+      result,
+      (
+        wrap: (_multiOut + 0).cast<Bool>().value,
+        wrapContinuation: (_multiOut + 1).cast<Bool>().value,
+        grapheme: (_multiOut + 2).cast<Bool>().value,
+        styled: (_multiOut + 3).cast<Bool>().value,
+        hyperlink: (_multiOut + 4).cast<Bool>().value,
+        semanticPrompt: .fromValue((_multiOut + 5).cast<Int32>().value),
+        kittyVirtualPlaceholder: (_multiOut + 6).cast<Bool>().value,
+      ),
+    );
+  }
 
   @override
   CResult<String> focusEncode(FocusEvent event) {
@@ -1863,6 +2164,28 @@ class NativeBindings implements GhosttyBindings {
       _outBool.cast(),
     );
     return (result, _outBool.value);
+  }
+
+  Result _terminalGetMulti(int handle, List<TerminalData> keys) {
+    for (var i = 0; i < keys.length; i++) {
+      _multiKeys[i] = keys[i].value;
+      _multiValues[i] = (_multiOut + i).cast();
+    }
+    return ghostty_terminal_get_multi(
+      Pointer.fromAddress(handle),
+      keys.length,
+      _multiKeys,
+      _multiValues,
+      _outSize,
+    );
+  }
+
+  void _growFormatBuffer(int capacity) {
+    if (capacity <= _formatBufferCapacity) return;
+    final replacement = calloc<Uint8>(capacity);
+    calloc.free(_formatBuffer);
+    _formatBuffer = replacement;
+    _formatBufferCapacity = capacity;
   }
 
   CResult<int> _cellGetU32(int cell, CellData data) {
@@ -2623,8 +2946,6 @@ class NativeBindings implements GhosttyBindings {
   }) {
     return using((arena) {
       final opts = arena<TerminalSelectionFormatOptions>();
-      final outPtr = arena<Pointer<Uint8>>();
-      final outLen = arena<Size>();
       opts.ref
         ..size = sizeOf<TerminalSelectionFormatOptions>()
         ..emitAsInt = format.value
@@ -2637,21 +2958,26 @@ class NativeBindings implements GhosttyBindings {
         _writeSelection(sel.ref, selection);
         opts.ref.selection = sel;
       }
-      final result = ghostty_terminal_selection_format_alloc(
+      var result = ghostty_terminal_selection_format_buf(
         Pointer.fromAddress(terminal),
-        nullptr,
         opts.ref,
-        outPtr,
-        outLen,
+        _formatBuffer,
+        _formatBufferCapacity,
+        _outSize,
       );
-      final len = outLen.value;
-      final buf = outPtr.value;
-      if (result != .success || len == 0 || buf == nullptr) {
-        return (result, '');
+      if (result == .outOfSpace) {
+        _growFormatBuffer(_outSize.value);
+        result = ghostty_terminal_selection_format_buf(
+          Pointer.fromAddress(terminal),
+          opts.ref,
+          _formatBuffer,
+          _formatBufferCapacity,
+          _outSize,
+        );
       }
-      final encoded = utf8.decode(buf.asTypedList(len));
-      ghostty_free(nullptr, buf, len);
-      return (result, encoded);
+      final len = _outSize.value;
+      if (result != .success || len == 0) return (result, '');
+      return (result, utf8.decode(_formatBuffer.asTypedList(len)));
     });
   }
 
@@ -2967,6 +3293,42 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<RawSelectionGestureState> selectionGestureGetState(
+    int gesture,
+    int terminal,
+  ) {
+    const keys = _selectionGestureStateKeys;
+    for (var i = 0; i < keys.length; i++) {
+      _multiKeys[i] = keys[i].value;
+      _multiValues[i] = (_multiOut + i).cast();
+    }
+    _multiGridRef.ref.size = sizeOf<GridRef>();
+    _multiValues[4] = _multiGridRef.cast();
+    final result = ghostty_selection_gesture_get_multi(
+      Pointer.fromAddress(gesture),
+      Pointer.fromAddress(terminal),
+      keys.length,
+      _multiKeys,
+      _multiValues,
+      _outSize,
+    );
+    final anchorAbsent = result == .noValue && _outSize.value == 4;
+    if (result != .success && !anchorAbsent) {
+      return (result, _emptySelectionGestureState);
+    }
+    return (
+      anchorAbsent ? .success : result,
+      (
+        clickCount: (_multiOut + 0).cast<Uint8>().value,
+        dragged: (_multiOut + 1).cast<Bool>().value,
+        autoscroll: .fromValue((_multiOut + 2).cast<Int32>().value),
+        behavior: .fromValue((_multiOut + 3).cast<Int32>().value),
+        anchor: anchorAbsent ? null : _readGridRef(_multiGridRef.ref),
+      ),
+    );
+  }
+
+  @override
   CResult<int> formatterTerminalNew(
     int terminal,
     FormatterFormat format, {
@@ -3030,22 +3392,24 @@ class NativeBindings implements GhosttyBindings {
 
   @override
   CResult<String> formatterFormat(int formatter) {
-    return using((arena) {
-      final outPtr = arena<Pointer<Uint8>>();
-      final outLen = arena<Size>();
-      final result = ghostty_formatter_format_alloc(
+    var result = ghostty_formatter_format_buf(
+      Pointer.fromAddress(formatter),
+      _formatBuffer,
+      _formatBufferCapacity,
+      _outSize,
+    );
+    if (result == .outOfSpace) {
+      _growFormatBuffer(_outSize.value);
+      result = ghostty_formatter_format_buf(
         Pointer.fromAddress(formatter),
-        nullptr,
-        outPtr,
-        outLen,
+        _formatBuffer,
+        _formatBufferCapacity,
+        _outSize,
       );
-      final len = outLen.value;
-      final buf = outPtr.value;
-      if (len == 0 || buf == nullptr) return (result, '');
-      final encoded = utf8.decode(buf.cast<Uint8>().asTypedList(len));
-      ghostty_free(nullptr, buf, len);
-      return (result, encoded);
-    });
+    }
+    final len = _outSize.value;
+    if (result != .success || len == 0) return (result, '');
+    return (result, utf8.decode(_formatBuffer.asTypedList(len)));
   }
 
   @override
@@ -3601,29 +3965,23 @@ class NativeBindings implements GhosttyBindings {
   @override
   CResult<Uint8List> kittyGraphicsImageGetPixelData(int image) {
     if (image == 0) return (Result.invalidValue, Uint8List(0));
-    final ptrOut = calloc<Pointer<Uint8>>();
-    final lenOut = calloc<Size>();
-    try {
-      final ptrCode = ghostty_kitty_graphics_image_get(
-        Pointer.fromAddress(image),
-        KittyGraphicsImageData.dataPtr,
-        ptrOut.cast(),
-      );
-      if (ptrCode != Result.success) return (ptrCode, Uint8List(0));
-      final lenCode = ghostty_kitty_graphics_image_get(
-        Pointer.fromAddress(image),
-        KittyGraphicsImageData.dataLen,
-        lenOut.cast(),
-      );
-      if (lenCode != Result.success) return (lenCode, Uint8List(0));
-      final ptr = ptrOut.value;
-      final len = lenOut.value;
-      if (ptr == nullptr || len == 0) return (Result.success, Uint8List(0));
-      return (Result.success, Uint8List.fromList(ptr.asTypedList(len)));
-    } finally {
-      calloc.free(ptrOut);
-      calloc.free(lenOut);
+    const keys = _kittyImagePixelDataKeys;
+    for (var i = 0; i < keys.length; i++) {
+      _multiKeys[i] = keys[i].value;
+      _multiValues[i] = (_multiOut + i).cast();
     }
+    final result = ghostty_kitty_graphics_image_get_multi(
+      Pointer.fromAddress(image),
+      keys.length,
+      _multiKeys,
+      _multiValues,
+      _outSize,
+    );
+    if (result != .success) return (result, Uint8List(0));
+    final ptr = (_multiOut + 0).cast<Pointer<Uint8>>().value;
+    final len = (_multiOut + 1).cast<Size>().value;
+    if (ptr == nullptr || len == 0) return (Result.success, Uint8List(0));
+    return (Result.success, Uint8List.fromList(ptr.asTypedList(len)));
   }
 
   CResult<int> _kittyImageGetU32(int image, KittyGraphicsImageData data) {
@@ -3706,39 +4064,34 @@ class NativeBindings implements GhosttyBindings {
   @override
   CResult<RawPlacement> kittyGraphicsPlacementGet(int iterator) {
     if (iterator == 0) return (Result.invalidValue, _emptyPlacement);
-    final iter = Pointer<KittyGraphicsPlacementIteratorImpl>.fromAddress(
-      iterator,
+    const keys = _kittyPlacementKeys;
+    for (var i = 0; i < keys.length; i++) {
+      _multiKeys[i] = keys[i].value;
+      _multiValues[i] = (_multiOut + i).cast();
+    }
+    final result = ghostty_kitty_graphics_placement_get_multi(
+      Pointer.fromAddress(iterator),
+      keys.length,
+      _multiKeys,
+      _multiValues,
+      _outSize,
     );
-    int readU32(KittyGraphicsPlacementData tag) {
-      ghostty_kitty_graphics_placement_get(iter, tag, _outU32.cast());
-      return _outU32.value;
-    }
-
-    int readI32(KittyGraphicsPlacementData tag) {
-      ghostty_kitty_graphics_placement_get(iter, tag, _outI32.cast());
-      return _outI32.value;
-    }
-
-    bool readBool(KittyGraphicsPlacementData tag) {
-      ghostty_kitty_graphics_placement_get(iter, tag, _outBool.cast());
-      return _outBool.value;
-    }
-
+    if (result != .success) return (result, _emptyPlacement);
     return (
-      Result.success,
+      result,
       (
-        imageId: readU32(KittyGraphicsPlacementData.imageId),
-        placementId: readU32(KittyGraphicsPlacementData.placementId),
-        isVirtual: readBool(KittyGraphicsPlacementData.isVirtual),
-        xOffset: readU32(KittyGraphicsPlacementData.xOffset),
-        yOffset: readU32(KittyGraphicsPlacementData.yOffset),
-        sourceX: readU32(KittyGraphicsPlacementData.sourceX),
-        sourceY: readU32(KittyGraphicsPlacementData.sourceY),
-        sourceWidth: readU32(KittyGraphicsPlacementData.sourceWidth),
-        sourceHeight: readU32(KittyGraphicsPlacementData.sourceHeight),
-        columns: readU32(KittyGraphicsPlacementData.columns),
-        rows: readU32(KittyGraphicsPlacementData.rows),
-        z: readI32(KittyGraphicsPlacementData.z),
+        imageId: (_multiOut + 0).cast<Uint32>().value,
+        placementId: (_multiOut + 1).cast<Uint32>().value,
+        isVirtual: (_multiOut + 2).cast<Bool>().value,
+        xOffset: (_multiOut + 3).cast<Uint32>().value,
+        yOffset: (_multiOut + 4).cast<Uint32>().value,
+        sourceX: (_multiOut + 5).cast<Uint32>().value,
+        sourceY: (_multiOut + 6).cast<Uint32>().value,
+        sourceWidth: (_multiOut + 7).cast<Uint32>().value,
+        sourceHeight: (_multiOut + 8).cast<Uint32>().value,
+        columns: (_multiOut + 9).cast<Uint32>().value,
+        rows: (_multiOut + 10).cast<Uint32>().value,
+        z: (_multiOut + 11).cast<Int32>().value,
       ),
     );
   }

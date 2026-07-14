@@ -190,6 +190,16 @@ final class Terminal with Listenable {
     return _optionalColor(bindings.terminalGetColorForegroundDefault(_handle));
   }
 
+  /// Current terminal dimensions in cells and pixels.
+  ///
+  /// Pixel dimensions are zero when no cell pixel size has been configured.
+  ///
+  /// ```dart
+  /// final geometry = terminal.geometry;
+  /// final cellWidth = geometry.widthPx ~/ geometry.cols;
+  /// ```
+  TerminalGeometry get geometry => check(bindings.terminalGetGeometry(_handle));
+
   /// Total terminal height in pixels (rows * cell height).
   int get heightPx => check(bindings.terminalGetHeightPx(_handle));
 
@@ -502,9 +512,6 @@ final class Terminal with Listenable {
   /// Scrolls the viewport to the bottom (active area).
   void scrollToBottom() => bindings.terminalScrollViewport(_handle, .bottom, 0);
 
-  /// Scrolls the viewport to the top of the scrollback history.
-  void scrollToTop() => bindings.terminalScrollViewport(_handle, .top, 0);
-
   /// Scrolls the viewport to an absolute row in the scrollable area.
   ///
   /// Row zero is the top of scrollback. The requested row becomes the first
@@ -518,6 +525,9 @@ final class Terminal with Listenable {
     RangeError.checkNotNegative(row, 'row');
     bindings.terminalScrollViewport(_handle, .row, row);
   }
+
+  /// Scrolls the viewport to the top of the scrollback history.
+  void scrollToTop() => bindings.terminalScrollViewport(_handle, .top, 0);
 
   /// Scrolls the viewport by [delta] rows. Positive values scroll down
   /// (toward the active area), negative values scroll up (toward history).
