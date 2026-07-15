@@ -337,6 +337,7 @@ class _TerminalViewState extends State<TerminalView> {
                         blinkVisible: _blinkVisible,
                         linkSnapshot: _links.snapshot(),
                         onResize: _handleResize,
+                        onViewportChanged: _binding.handleViewportChanged,
                       ),
                     ),
                   ),

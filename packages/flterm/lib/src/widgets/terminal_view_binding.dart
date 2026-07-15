@@ -79,6 +79,10 @@ abstract interface class TerminalViewBinding {
   /// Applies a release selection gesture.
   void handleSelectionRelease(Position cell);
 
+  /// Reports primary-screen viewport movement that bypasses [Terminal]
+  /// listeners and may change [Terminal.compressionActivity].
+  void handleViewportChanged();
+
   /// Requests keyboard focus for the attached view.
   void requestFocus();
 

@@ -3,10 +3,13 @@ library;
 
 import 'dart:convert';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flterm/src/foundation.dart';
 import 'package:flterm/src/widgets/terminal_controller_impl.dart';
 import 'package:flterm/src/widgets/terminal_view_binding.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart'
+    show FocusNode, ScrollController, ScrollPosition;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libghostty/libghostty.dart' hide KeyEvent;
 
@@ -313,6 +316,163 @@ void main() {
           expect(custom.terminal.scrollbar.offset, offset);
         },
       );
+    });
+
+    group('scrollback compression', () {
+      _CompressionScrollController replaceControllerWithCompressionQueue(
+        _CompressionIdleQueue idle, {
+        bool viewportAttached = true,
+      }) {
+        controller.dispose();
+        controller = TerminalControllerImpl(
+          scheduleCompressionIdle: idle.schedule,
+        );
+        final focusNode = FocusNode();
+        final scrollController = _CompressionScrollController(
+          isAttached: viewportAttached,
+        );
+        addTearDown(focusNode.dispose);
+        addTearDown(scrollController.dispose);
+        controller.attach(focusNode, scrollController);
+        return scrollController;
+      }
+
+      void createScrollback() {
+        controller.write(
+          Uint8List.fromList(
+            List.filled(
+              4000,
+              'compressible terminal history\r\n',
+            ).join().codeUnits,
+          ),
+        );
+      }
+
+      test('schedules compression after terminal activity', () {
+        fakeAsync((async) {
+          final idle = _CompressionIdleQueue();
+          replaceControllerWithCompressionQueue(idle);
+
+          createScrollback();
+          async.elapse(const Duration(milliseconds: 250));
+
+          expect(idle.length, 1);
+        });
+      });
+
+      test('postpones compression throughout active-screen writes', () {
+        fakeAsync((async) {
+          final idle = _CompressionIdleQueue();
+          replaceControllerWithCompressionQueue(idle);
+          createScrollback();
+          async.elapse(const Duration(milliseconds: 200));
+
+          controller.write(Uint8List.fromList('frame one'.codeUnits));
+          async.elapse(const Duration(milliseconds: 200));
+          controller.write(Uint8List.fromList('frame two'.codeUnits));
+          async.elapse(const Duration(milliseconds: 249));
+
+          expect(idle.length, 0);
+        });
+      });
+
+      test('postpones compression after scrolling to the top', () {
+        fakeAsync((async) {
+          final idle = _CompressionIdleQueue();
+          replaceControllerWithCompressionQueue(idle);
+          createScrollback();
+          async.elapse(const Duration(milliseconds: 200));
+
+          controller.scrollToTop();
+          async.elapse(const Duration(milliseconds: 50));
+
+          expect(idle.length, 0);
+        });
+      });
+
+      test('postpones compression after scrolling to the bottom', () {
+        fakeAsync((async) {
+          final idle = _CompressionIdleQueue();
+          replaceControllerWithCompressionQueue(idle);
+          createScrollback();
+          controller.scrollToTop();
+          async.elapse(const Duration(milliseconds: 200));
+
+          controller.scrollToBottom();
+          async.elapse(const Duration(milliseconds: 50));
+
+          expect(idle.length, 0);
+        });
+      });
+
+      test('cancels pending compression when detached', () {
+        fakeAsync((async) {
+          final idle = _CompressionIdleQueue();
+          replaceControllerWithCompressionQueue(idle);
+          createScrollback();
+
+          controller.detach();
+          async.elapse(const Duration(milliseconds: 250));
+
+          expect(idle.length, 0);
+        });
+      });
+
+      test('ignores terminal activity while detached', () {
+        fakeAsync((async) {
+          final idle = _CompressionIdleQueue();
+          replaceControllerWithCompressionQueue(idle);
+          controller.detach();
+
+          createScrollback();
+          async.elapse(const Duration(milliseconds: 250));
+
+          expect(idle.length, 0);
+        });
+      });
+
+      testWidgets('waits for the viewport to attach', (tester) async {
+        final idle = _CompressionIdleQueue();
+        replaceControllerWithCompressionQueue(idle, viewportAttached: false);
+
+        await tester.pump(const Duration(milliseconds: 250));
+
+        expect(idle.length, 0);
+      });
+
+      testWidgets('schedules compression after the viewport attaches', (
+        tester,
+      ) async {
+        final idle = _CompressionIdleQueue();
+        final scrollController = replaceControllerWithCompressionQueue(
+          idle,
+          viewportAttached: false,
+        );
+
+        scrollController.isAttached = true;
+        createScrollback();
+        await tester.pump(const Duration(milliseconds: 250));
+
+        expect(idle.length, 1);
+      });
+
+      test('schedules compression when reattached', () {
+        fakeAsync((async) {
+          final idle = _CompressionIdleQueue();
+          replaceControllerWithCompressionQueue(idle);
+          createScrollback();
+          controller.detach();
+          final focusNode = FocusNode();
+          final scrollController = _CompressionScrollController();
+          addTearDown(focusNode.dispose);
+          addTearDown(scrollController.dispose);
+
+          controller.attach(focusNode, scrollController);
+          async.elapse(const Duration(milliseconds: 250));
+
+          expect(idle.length, 1);
+        });
+      });
     });
 
     group('selectAll', () {
@@ -844,4 +1004,36 @@ void main() {
       });
     });
   });
+}
+
+final class _CompressionIdleQueue {
+  final List<VoidCallback> _callbacks = [];
+
+  int get length => _callbacks.length;
+
+  void schedule(VoidCallback callback) => _callbacks.add(callback);
+}
+
+final class _CompressionScrollController extends ScrollController {
+  final ScrollPosition _position = _CompressionScrollPosition();
+  bool isAttached;
+
+  _CompressionScrollController({this.isAttached = true});
+
+  @override
+  bool get hasClients => isAttached;
+
+  @override
+  ScrollPosition get position => _position;
+
+  @override
+  void jumpTo(double value) {}
+}
+
+final class _CompressionScrollPosition implements ScrollPosition {
+  @override
+  double get maxScrollExtent => 0;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

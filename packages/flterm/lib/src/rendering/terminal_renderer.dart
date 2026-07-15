@@ -82,6 +82,12 @@ class TerminalRenderer extends LeafRenderObjectWidget {
   /// Internal render cache used to share compatible atlas state.
   final TerminalRenderCache renderCache;
 
+  /// Reports viewport movement that bypasses [Terminal] listeners.
+  ///
+  /// Scrolling may change [Terminal.compressionActivity] by making previously
+  /// visible scrollback eligible for compression.
+  final VoidCallback? onViewportChanged;
+
   const TerminalRenderer({
     super.key,
     required this.terminal,
@@ -94,6 +100,7 @@ class TerminalRenderer extends LeafRenderObjectWidget {
     this.preeditText = '',
     this.linkSnapshot = .empty,
     this.onResize,
+    this.onViewportChanged,
   });
 
   @override
@@ -105,6 +112,7 @@ class TerminalRenderer extends LeafRenderObjectWidget {
       terminal: terminal,
       renderCache: renderCache,
       onResize: onResize,
+      onViewportChanged: onViewportChanged,
       blinkVisible: blinkVisible,
       preeditText: preeditText,
       linkSnapshot: linkSnapshot,
@@ -142,6 +150,7 @@ class TerminalRenderer extends LeafRenderObjectWidget {
       ..offset = offset
       ..metrics = metrics
       ..onResize = onResize
+      ..onViewportChanged = onViewportChanged
       ..renderObserver = renderObserver
       ..blinkVisible = blinkVisible
       ..preeditText = preeditText
@@ -172,6 +181,7 @@ class TerminalRenderBox extends RenderBox {
   ViewportOffset _offset;
   TerminalRenderObserver _renderObserver;
   OnResize? _onResize;
+  VoidCallback? _onViewportChanged;
   TerminalRenderCache _renderCache;
   late TerminalAtlasHandle _atlasHandle;
   var _performingLayout = false;
@@ -195,6 +205,7 @@ class TerminalRenderBox extends RenderBox {
     this._linkSnapshot = .empty,
     this._preeditText = '',
     this._onResize,
+    this._onViewportChanged,
   }) : _paintState = TerminalPaintState(theme, metrics)
          ..blinkVisible = blinkVisible
          ..cursorFocused = _renderObserver.hasFocus {
@@ -305,6 +316,8 @@ class TerminalRenderBox extends RenderBox {
   }
 
   set onResize(OnResize? value) => _onResize = value;
+
+  set onViewportChanged(VoidCallback? value) => _onViewportChanged = value;
 
   set renderObserver(TerminalRenderObserver value) {
     if (_renderObserver == value) return;
@@ -551,6 +564,7 @@ class TerminalRenderBox extends RenderBox {
     if (targetRow == scrollbar.offset) return;
 
     _terminal.scrollToRow(targetRow);
+    _onViewportChanged?.call();
     _markFrameDirty();
   }
 
@@ -603,7 +617,10 @@ class TerminalRenderBox extends RenderBox {
     if (_stickToBottom && maxExtent > 0) {
       final correction = maxExtent - _offset.pixels;
       if (correction.abs() > 0.01) _offset.correctBy(correction);
-      if (scrollbar.offset < scrollbackLen) _terminal.scrollToBottom();
+      if (scrollbar.offset < scrollbackLen) {
+        _terminal.scrollToBottom();
+        _onViewportChanged?.call();
+      }
     }
     _offset.applyContentDimensions(0, maxExtent);
     _lastScrollbackRows = scrollbackLen;

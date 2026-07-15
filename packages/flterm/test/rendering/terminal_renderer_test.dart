@@ -44,7 +44,9 @@ void main() {
     bool focused = true,
     bool blinkVisible = true,
     OnResize? onResize,
+    VoidCallback? onViewportChanged,
     TerminalRenderCache? renderCache,
+    ViewportOffset? offset,
   }) {
     selection?.applyTo(terminal);
     renderCache ??= createRenderCache();
@@ -60,11 +62,12 @@ void main() {
             terminal: terminal,
             theme: theme ?? TerminalTheme.dark(),
             metrics: metrics,
-            offset: ViewportOffset.zero(),
+            offset: offset ?? ViewportOffset.zero(),
             renderCache: renderCache,
             renderObserver: _TestRenderObserver(hasFocus: focused),
             blinkVisible: blinkVisible,
             onResize: onResize,
+            onViewportChanged: onViewportChanged,
           ),
         ),
       ),
@@ -216,6 +219,34 @@ void main() {
       expect(find.byType(TerminalRenderer), findsOneWidget);
     });
   });
+
+  group('TerminalRenderBox viewport', () {
+    testWidgets('notifies after scrolling to another row', (tester) async {
+      final terminal = Terminal(cols: defaultCols, rows: defaultRows);
+      final offset = _TestViewportOffset();
+      addTearDown(terminal.dispose);
+      addTearDown(offset.dispose);
+      terminal.write(
+        Uint8List.fromList(
+          List.filled(20, 'scrollback row\r\n').join().codeUnits,
+        ),
+      );
+      var notifications = 0;
+      await tester.pumpWidget(
+        wrap(
+          terminal,
+          offset: offset,
+          onViewportChanged: () => notifications++,
+        ),
+      );
+      notifications = 0;
+
+      offset.jumpTo(0);
+      await tester.pump();
+
+      expect(notifications, 1);
+    });
+  });
 }
 
 class _TrackingRenderCache extends TerminalRenderCache {
@@ -239,4 +270,46 @@ class _TestRenderObserver implements TerminalRenderObserver {
 
   @override
   void removeListener(VoidCallback listener) {}
+}
+
+class _TestViewportOffset extends ViewportOffset {
+  double _pixels = 0;
+
+  @override
+  bool get allowImplicitScrolling => false;
+
+  @override
+  bool get hasPixels => true;
+
+  @override
+  double get pixels => _pixels;
+
+  @override
+  ScrollDirection get userScrollDirection => .idle;
+
+  @override
+  Future<void> animateTo(
+    double to, {
+    required Duration duration,
+    required Curve curve,
+  }) async {
+    jumpTo(to);
+  }
+
+  @override
+  bool applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
+    return true;
+  }
+
+  @override
+  bool applyViewportDimension(double viewportDimension) => true;
+
+  @override
+  void correctBy(double correction) => _pixels += correction;
+
+  @override
+  void jumpTo(double pixels) {
+    _pixels = pixels;
+    notifyListeners();
+  }
 }
