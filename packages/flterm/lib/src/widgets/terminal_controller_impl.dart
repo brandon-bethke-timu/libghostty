@@ -48,6 +48,7 @@ class TerminalControllerImpl extends TerminalController
   MouseTracking _mouseTracking = .none;
   KeyboardState _keyboardState = .hidden;
   Mods _virtualMods = const .none();
+  ClipboardWriteCallback? _onClipboardWrite;
   var _preeditText = '';
   var _cursorKeyApplication = false;
   Brightness _brightness = .dark;
@@ -137,6 +138,13 @@ class TerminalControllerImpl extends TerminalController
 
   @override
   MouseTracking get mouseTracking => _mouseTracking;
+
+  @override
+  set onClipboardWrite(ClipboardWriteCallback? value) {
+    if (identical(_onClipboardWrite, value)) return;
+    _onClipboardWrite = value;
+    terminal.onClipboardWrite = value;
+  }
 
   @override
   String get preeditText => _preeditText;

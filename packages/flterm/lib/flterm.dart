@@ -7,6 +7,11 @@ library;
 
 export 'package:libghostty/libghostty.dart'
     show
+        ClipboardContent,
+        ClipboardLocation,
+        ClipboardWrite,
+        ClipboardWriteCallback,
+        ClipboardWriteResult,
         CursorShape,
         DeviceAttributesResponse,
         Formatter,

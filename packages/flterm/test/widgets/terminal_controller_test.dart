@@ -84,6 +84,116 @@ void main() {
       });
     });
 
+    group('onClipboardWrite', () {
+      test('forwards binary clipboard requests', () {
+        ClipboardWrite? received;
+        controller.onClipboardWrite = (write) {
+          received = write;
+          return .success;
+        };
+
+        writeControllerUtf8(controller, '\x1b]52;c;aGVsbG8Ad29ybGQ=\x07');
+
+        expect(
+          received,
+          isA<ClipboardWrite>()
+              .having(
+                (write) => write.location,
+                'location',
+                ClipboardLocation.standard,
+              )
+              .having(
+                (write) => write.contents.single.mime,
+                'MIME type',
+                'text/plain',
+              )
+              .having((write) => write.contents.single.data, 'data', [
+                104,
+                101,
+                108,
+                108,
+                111,
+                0,
+                119,
+                111,
+                114,
+                108,
+                100,
+              ]),
+        );
+      });
+
+      test('ignores clipboard requests without a handler', () {
+        expect(
+          () => writeControllerUtf8(controller, '\x1b]52;c;aGVsbG8=\x07'),
+          returnsNormally,
+        );
+      });
+
+      test('delivers clear requests without content', () {
+        ClipboardWrite? received;
+        controller.onClipboardWrite = (write) {
+          received = write;
+          return .success;
+        };
+
+        writeControllerUtf8(controller, '\x1b]52;s;\x07');
+
+        expect(received?.contents, isEmpty);
+      });
+
+      test('ignores clipboard read queries', () {
+        var count = 0;
+        controller.onClipboardWrite = (_) {
+          count++;
+          return .success;
+        };
+
+        writeControllerUtf8(controller, '\x1b]52;c;?\x07');
+
+        expect(count, 0);
+      });
+
+      test('uses the replacement callback', () {
+        var first = 0;
+        var second = 0;
+        controller.onClipboardWrite = (_) {
+          first++;
+          return .success;
+        };
+        controller.onClipboardWrite = (_) {
+          second++;
+          return .success;
+        };
+
+        writeControllerUtf8(controller, '\x1b]52;c;aGVsbG8=\x07');
+
+        expect((first: first, second: second), (first: 0, second: 1));
+      });
+
+      test('stops delivery after callback removal', () {
+        var count = 0;
+        controller.onClipboardWrite = (_) {
+          count++;
+          return .success;
+        };
+        controller.onClipboardWrite = null;
+
+        writeControllerUtf8(controller, '\x1b]52;c;aGVsbG8=\x07');
+
+        expect(count, 0);
+      });
+
+      test('contains callback exceptions', () {
+        controller.onClipboardWrite = (_) => throw StateError('failure');
+
+        expect(
+          () => writeControllerUtf8(controller, '\x1b]52;c;aGVsbG8=\x07'),
+          returnsNormally,
+        );
+      });
+    });
+
     group('selection', () {
       test('selectRange notifies listeners and installs selection', () {
         var notified = false;

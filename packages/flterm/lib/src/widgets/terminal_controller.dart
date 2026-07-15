@@ -80,6 +80,21 @@ abstract class TerminalController extends ChangeNotifier
   /// instead of performing selection. Hold Shift to bypass.
   MouseTracking get mouseTracking;
 
+  /// Handles a clipboard write requested by terminal content.
+  ///
+  /// Requests are ignored when this is null. The callback receives every binary
+  /// representation and destination so applications can apply their own
+  /// security and platform policy without losing protocol capabilities. It
+  /// fires synchronously during [write].
+  ///
+  /// ```dart
+  /// controller.onClipboardWrite = (write) {
+  ///   if (write.location != .standard) return .denied;
+  ///   return appClipboard.write(write);
+  /// };
+  /// ```
+  set onClipboardWrite(ClipboardWriteCallback? callback);
+
   /// Working directory reported by the shell (OSC 7). Empty if unset.
   String get pwd;
 
