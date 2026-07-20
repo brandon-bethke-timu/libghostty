@@ -7,6 +7,7 @@ const _lcSegment64 = 0x19;
 const _machoHeaderSize64 = 32;
 const _machoMagic64 = 0xFEEDFACF;
 const _encryptionInfo64CommandSize = 24;
+const _iosPageSize = 16384;
 
 /// Adds the iOS App Store encryption-info load command if it is missing.
 ///
@@ -33,6 +34,8 @@ bool fixIosAppStoreLoadCommands(File libFile) {
 
   var offset = _machoHeaderSize64;
   int? firstDataOffset;
+  int? textFileOffset;
+  int? textFileSize;
   for (var i = 0; i < ncmds; i++) {
     if (offset + 8 > commandEnd) {
       throw const FormatException('Malformed Mach-O load command table.');
@@ -48,10 +51,15 @@ bool fixIosAppStoreLoadCommands(File libFile) {
     }
 
     if (cmd == _lcSegment64) {
-      firstDataOffset = _minPositive(
-        firstDataOffset,
-        data.getUint64(offset + 40, Endian.little),
-      );
+      final segmentName = _fixedString(bytes, offset + 8, 16);
+      final fileOffset = data.getUint64(offset + 40, Endian.little);
+      final fileSize = data.getUint64(offset + 48, Endian.little);
+      if (segmentName == '__TEXT') {
+        textFileOffset = fileOffset;
+        textFileSize = fileSize;
+      }
+
+      firstDataOffset = _minPositive(firstDataOffset, fileOffset);
 
       final nsects = data.getUint32(offset + 64, Endian.little);
       var sectionOffset = offset + 72;
@@ -76,6 +84,16 @@ bool fixIosAppStoreLoadCommands(File libFile) {
     );
   }
 
+  if (textFileOffset != 0 || textFileSize == null) {
+    throw const FormatException('Mach-O file is missing a __TEXT segment.');
+  }
+
+  if (textFileSize <= _iosPageSize) {
+    throw const FormatException(
+      'Mach-O __TEXT segment is too small for iOS encryption extents.',
+    );
+  }
+
   final availablePadding = (firstDataOffset ?? bytes.length) - commandEnd;
   if (availablePadding < _encryptionInfo64CommandSize) {
     throw StateError(
@@ -85,8 +103,12 @@ bool fixIosAppStoreLoadCommands(File libFile) {
 
   data.setUint32(commandEnd, _lcEncryptionInfo64, Endian.little);
   data.setUint32(commandEnd + 4, _encryptionInfo64CommandSize, Endian.little);
-  data.setUint32(commandEnd + 8, 0, Endian.little); // cryptoff
-  data.setUint32(commandEnd + 12, 0, Endian.little); // cryptsize
+  data.setUint32(commandEnd + 8, _iosPageSize, Endian.little); // cryptoff
+  data.setUint32(
+    commandEnd + 12,
+    textFileSize - _iosPageSize,
+    Endian.little,
+  ); // cryptsize
   data.setUint32(commandEnd + 16, 0, Endian.little); // cryptid
   data.setUint32(commandEnd + 20, 0, Endian.little); // pad
   data.setUint32(16, ncmds + 1, Endian.little);
@@ -94,6 +116,14 @@ bool fixIosAppStoreLoadCommands(File libFile) {
 
   libFile.writeAsBytesSync(bytes);
   return true;
+}
+
+String _fixedString(Uint8List bytes, int offset, int length) {
+  final valueBytes = bytes.sublist(offset, offset + length);
+  final nullIndex = valueBytes.indexOf(0);
+  return String.fromCharCodes(
+    nullIndex >= 0 ? valueBytes.sublist(0, nullIndex) : valueBytes,
+  );
 }
 
 int? _minPositive(int? current, int value) {
