@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:code_assets/code_assets.dart';
 import 'package:hooks/hooks.dart';
+import 'package:libghostty/src/hook/fix_ios_app_store_load_commands.dart';
 import 'package:libghostty/src/hook/fix_ios_page_alignment.dart';
 import 'package:libghostty/src/hook/library_provider.dart';
 
@@ -33,7 +34,12 @@ Future<void> _build(BuildInput input, BuildOutputBuilder output) async {
     );
   }
 
-  if (targetOS == OS.iOS) fixIosPageAlignment(libFile);
+  if (targetOS == OS.iOS) {
+    fixIosPageAlignment(libFile);
+    if (input.config.code.iOS.targetSdk != IOSSdk.iPhoneSimulator) {
+      fixIosAppStoreLoadCommands(libFile);
+    }
+  }
 
   output.assets.code.add(
     CodeAsset(

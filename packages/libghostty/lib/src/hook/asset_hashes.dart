@@ -15,7 +15,7 @@ const releaseTag = 'libghostty-v0.0.11';
 /// filenames.
 const assetHashes = <String, String>{
   'libghostty-aarch64-ios-simulator.dylib': 'a48d21d2a7ff0649276621d4d4aa6a433d73175d80dd59a3036758ed026e9acf',
-  'libghostty-aarch64-ios.dylib': '567fc3dce3916d84416ee58efef824e6b702f65ca3ce6c84bfde7f8c07fcc080',
+  'libghostty-aarch64-ios.dylib': '14f497fcc478b5a2ff735f41b928fb5ef4703cf5af7a3290d3a7059d9404b55f',
   'libghostty-aarch64-linux-android.so': '867bfec3b1e19836e00c686d3c1204e49be20c3fd93ecb38f33725a9d39b28c3',
   'libghostty-aarch64-linux-gnu.so': 'b73e1e5e6ed4d60278a60aef5e0b07877f1902febc36df57cb5e85dffae150b0',
   'libghostty-aarch64-macos.dylib': '2dabdc1f968394f5edeece23988828ea3f18374907ed0eabf3228f12a6de60cc',
