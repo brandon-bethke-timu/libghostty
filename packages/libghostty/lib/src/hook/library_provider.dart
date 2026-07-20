@@ -154,6 +154,8 @@ final class CompileFromSource extends LibraryProvider {
         '        lib.headerpad_max_install_names = true;\n'
         '\n'
         '        if (target.result.os.tag == .ios and kind == .shared) {\n'
+        '            lib.linkLibC();\n'
+        '\n'
         '            // App Store encryption validation expects iOS dylib text\n'
         '            // to start at the 16KB page boundary.\n'
         '            lib.headerpad_size = 0x38d0;\n'
