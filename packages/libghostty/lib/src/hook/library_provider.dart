@@ -43,8 +43,14 @@ sealed class LibraryProvider {
   ///     will be downloaded based on `downloadMethod`.
   static LibraryProvider resolve(BuildInput input) {
     final source = input.userDefines['source'];
+    final sourceIosDevice = input.userDefines['source_ios_device'];
+    final targetOS = input.config.code.targetOS;
+    final iOSSdk = targetOS == OS.iOS ? input.config.code.iOS.targetSdk : null;
 
-    if (source == 'compile') {
+    if (source == 'compile' ||
+        (sourceIosDevice == 'compile' &&
+            targetOS == OS.iOS &&
+            iOSSdk != IOSSdk.iPhoneSimulator)) {
       final sourcePath = Platform.environment[ghosttySrcEnvKey];
 
       return CompileFromSource(
@@ -99,6 +105,9 @@ final class CompileFromSource extends LibraryProvider {
 
     final installDir = target.parent.parent.uri;
     final zig = zigTarget(os, arch, iOSSdk: ios);
+    if (os == OS.iOS && ios != IOSSdk.iPhoneSimulator) {
+      _patchIosDeviceHeaderPadding(sourceDir);
+    }
 
     final zigArgs = [
       'build',
@@ -129,6 +138,34 @@ final class CompileFromSource extends LibraryProvider {
     final srcFileName = os.dylibFileName('ghostty-vt');
     final srcFile = File('${installDir.toFilePath()}/$srcDir/$srcFileName');
     if (srcFile.existsSync()) srcFile.renameSync(target.path);
+  }
+
+  void _patchIosDeviceHeaderPadding(Directory sourceDir) {
+    final file = File('${sourceDir.path}/src/build/GhosttyLibVt.zig');
+    if (!file.existsSync()) {
+      throw StateError('Ghostty build file not found at ${file.path}.');
+    }
+
+    final original = file.readAsStringSync();
+    if (original.contains('lib.headerpad_size = 0x38d0;')) return;
+
+    const needle = '        lib.headerpad_max_install_names = true;\n';
+    const replacement =
+        '        lib.headerpad_max_install_names = true;\n'
+        '\n'
+        '        if (target.result.os.tag == .ios and kind == .shared) {\n'
+        '            // App Store encryption validation expects iOS dylib text\n'
+        '            // to start at the 16KB page boundary.\n'
+        '            lib.headerpad_size = 0x38d0;\n'
+        '        }\n';
+    if (!original.contains(needle)) {
+      throw StateError(
+        'Could not patch Ghostty iOS header padding; expected linker '
+        'configuration was not found in ${file.path}.',
+      );
+    }
+
+    file.writeAsStringSync(original.replaceFirst(needle, replacement));
   }
 
   String _zigCacheDir(Directory sourceDir) {
